@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { useAppStore, Habit } from '@/lib/store'
+import { useAppStore } from '@/lib/store'
+import type { Habit } from '@/lib/types'
 import { useHabitStats, useLast30Days } from '@/lib/hooks'
 import { toast } from 'sonner'
 import { useShallow } from 'zustand/react/shallow'

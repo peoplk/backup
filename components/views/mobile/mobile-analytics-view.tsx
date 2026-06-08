@@ -4,14 +4,16 @@ import { useState, useMemo } from 'react'
 import { useAppStore } from '@/lib/store'
 import { useShallow } from 'zustand/react/shallow'
 import { cn } from '@/lib/utils'
+import { APP_COLORS } from '@/lib/config'
 import { MobileStatCard } from '@/components/mobile/mobile-stat-card'
-import { Timer, CheckCircle2, Flame, Activity, Clock, Calendar, Target, Award, Zap, TrendingUp, Brain, Trophy, BarChart3, PieChart, LineChart } from 'lucide-react'
+import { Timer, CheckCircle2, Flame, Activity, Clock, Calendar, Target, Award, Zap, TrendingUp, Brain, Trophy, BarChart3, PieChart, LineChart, Layers } from 'lucide-react'
 
 type TimeRange = 'week' | 'month' | 'year'
 type ChartType = 'bar' | 'line' | 'pie'
 const RANGE_LABELS: Record<TimeRange, string> = { week: '周', month: '月', year: '年' }
 const WEEK_DAYS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 const WEEK_DAYS_FULL = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+const HEATMAP_DAYS = ['一', '二', '三', '四', '五', '六', '日']
 
 function getRangeStart(range: TimeRange): Date {
   const d = new Date()
@@ -19,6 +21,14 @@ function getRangeStart(range: TimeRange): Date {
   else if (range === 'month') { d.setDate(d.getDate() - 30) }
   else { d.setDate(d.getDate() - 365) }
   d.setHours(0, 0, 0, 0)
+  return d
+}
+
+function getPrevRangeStart(range: TimeRange): Date {
+  const d = getRangeStart(range)
+  if (range === 'week') d.setDate(d.getDate() - 7)
+  else if (range === 'month') d.setDate(d.getDate() - 30)
+  else d.setFullYear(d.getFullYear() - 1)
   return d
 }
 
@@ -36,6 +46,7 @@ function calcStreak(allWorkSessions: { completedAt: Date | string }[]): number {
 }
 
 const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6']
+const HEATMAP_LEVELS = ['bg-muted/30', 'bg-emerald-500/20', 'bg-emerald-500/40', 'bg-emerald-500/65', 'bg-emerald-500/90']
 
 export function MobileAnalyticsView() {
   const { pomodoroSessions, tasks, habits, habitCheckIns, projects, achievements, userLevel } = useAppStore(
@@ -48,11 +59,13 @@ export function MobileAnalyticsView() {
   const [timeRange, setTimeRange] = useState<TimeRange>('week')
   const [chartType, setChartType] = useState<ChartType>('bar')
   const rangeStart = useMemo(() => getRangeStart(timeRange), [timeRange])
+  const prevRangeStart = useMemo(() => getPrevRangeStart(timeRange), [timeRange])
 
   const summaryStats = useMemo(() => {
     const workInRange = pomodoroSessions.filter(s => s.type === 'work' && new Date(s.completedAt) >= rangeStart)
     const totalFocusSeconds = workInRange.reduce((a, s) => a + s.duration, 0)
     const completedTasks = tasks.filter(t => t.completedAt && new Date(t.completedAt) >= rangeStart && t.status === 'done').length
+    const deepWorkSessions = workInRange.filter(s => s.duration >= 45 * 60).length
     const streak = calcStreak(pomodoroSessions.filter(s => s.type === 'work'))
     const focusScore = Math.min(100, (totalFocusSeconds / 60 / 480) * 100)
     const taskScore = Math.min(100, (completedTasks / 35) * 100)
@@ -61,19 +74,30 @@ export function MobileAnalyticsView() {
     const habitCheckInsCount = habitCheckIns.filter(c => new Date(c.date) >= rangeStart && c.completed).length
     const daysInRange = Math.max(1, Math.ceil((Date.now() - rangeStart.getTime()) / 86400000))
     const habitScore = activeHabits > 0 ? Math.min(100, (habitCheckInsCount / (activeHabits * daysInRange)) * 100) : 0
-    return { totalFocusHours: (totalFocusSeconds / 3600).toFixed(1), completedTasks, streak, efficiencyScore: Math.round((focusScore + taskScore + streakScore + habitScore) / 4) }
+    return {
+      totalFocusHours: (totalFocusSeconds / 3600).toFixed(1),
+      completedTasks,
+      deepWorkSessions,
+      streak,
+      efficiencyScore: Math.round((focusScore + taskScore + streakScore + habitScore) / 4),
+    }
   }, [pomodoroSessions, tasks, habits, habitCheckIns, rangeStart])
 
   const focusTrendData = useMemo(() => {
     const workInRange = pomodoroSessions.filter(s => s.type === 'work' && new Date(s.completedAt) >= rangeStart)
-    const result: { label: string; minutes: number; isToday?: boolean }[] = []
+    const result: { label: string; minutes: number; prevMinutes: number; isToday?: boolean }[] = []
+
+    const prevWork = pomodoroSessions.filter(s => {
+      const d = new Date(s.completedAt)
+      return s.type === 'work' && d >= prevRangeStart && d < rangeStart
+    })
 
     if (timeRange === 'year') {
       const months = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月']
-      const yr = new Date().getFullYear()
       months.forEach((label, mi) => {
         const mins = Math.round(workInRange.filter(s => new Date(s.completedAt).getMonth() === mi).reduce((a, s) => a + s.duration, 0) / 60)
-        result.push({ label, minutes: mins })
+        const prevMins = Math.round(prevWork.filter(s => new Date(s.completedAt).getMonth() === mi).reduce((a, s) => a + s.duration, 0) / 60)
+        result.push({ label, minutes: mins, prevMinutes: prevMins })
       })
     } else {
       const days = timeRange === 'week' ? 7 : 30
@@ -81,12 +105,15 @@ export function MobileAnalyticsView() {
         const d = new Date(); d.setDate(d.getDate() - i); d.setHours(0, 0, 0, 0)
         const dStr = d.toDateString()
         const mins = Math.round(workInRange.filter(s => new Date(s.completedAt).toDateString() === dStr).reduce((a, s) => a + s.duration, 0) / 60)
+        const pd = new Date(d); pd.setDate(pd.getDate() - days)
+        const pdStr = pd.toDateString()
+        const prevMins = Math.round(prevWork.filter(s => new Date(s.completedAt).toDateString() === pdStr).reduce((a, s) => a + s.duration, 0) / 60)
         const label = timeRange === 'week' ? WEEK_DAYS[d.getDay() === 0 ? 6 : d.getDay() - 1] : `${d.getMonth() + 1}/${d.getDate()}`
-        result.push({ label, minutes: mins, isToday: i === 0 })
+        result.push({ label, minutes: mins, prevMinutes: prevMins, isToday: i === 0 })
       }
     }
     return result
-  }, [pomodoroSessions, timeRange, rangeStart])
+  }, [pomodoroSessions, timeRange, rangeStart, prevRangeStart])
 
   const focusPieData = useMemo(() => {
     const workInRange = pomodoroSessions.filter(s => s.type === 'work' && new Date(s.completedAt) >= rangeStart)
@@ -115,8 +142,7 @@ export function MobileAnalyticsView() {
 
     const toPieItems = (obj: Record<string, number>) =>
       Object.entries(obj).filter(([, v]) => v > 0).map(([name, mins], i) => ({
-        name, minutes: Math.round(mins), color: PIE_COLORS[i % PIE_COLORS.length],
-        percent: 0,
+        name, minutes: Math.round(mins), color: PIE_COLORS[i % PIE_COLORS.length], percent: 0,
       }))
 
     const dayItems = toPieItems(byDayType)
@@ -135,12 +161,24 @@ export function MobileAnalyticsView() {
     }
   }, [pomodoroSessions, tasks, rangeStart])
 
-  const hourlyDistribution = useMemo(() => {
-    const hc: Record<number, number> = {}
-    for (let i = 0; i < 24; i++) hc[i] = 0
-    pomodoroSessions.filter(s => s.type === 'work' && new Date(s.completedAt) >= rangeStart).forEach(s => { hc[new Date(s.completedAt).getHours()] += s.duration / 60 })
-    return Object.entries(hc).map(([h, m]) => ({ hour: parseInt(h), label: h.padStart(2, '0'), minutes: Math.round(m) }))
-  }, [pomodoroSessions, rangeStart])
+  const heatmapData = useMemo(() => {
+    const grid: number[][] = []
+    for (let day = 0; day < 7; day++) grid.push(new Array(24).fill(0))
+    const now = new Date()
+    const sevenDaysAgo = new Date(now); sevenDaysAgo.setDate(now.getDate() - 6); sevenDaysAgo.setHours(0, 0, 0, 0)
+    pomodoroSessions
+      .filter(s => s.type === 'work' && new Date(s.completedAt) >= sevenDaysAgo)
+      .forEach(s => {
+        const d = new Date(s.completedAt)
+        let dayIdx = d.getDay() - 1
+        if (dayIdx < 0) dayIdx = 6
+        const hourIdx = d.getHours()
+        grid[dayIdx][hourIdx] += s.duration / 60
+      })
+    const allVals = grid.flat().filter(v => v > 0)
+    const maxVal = allVals.length > 0 ? Math.max(...allVals) : 1
+    return { grid, maxVal }
+  }, [pomodoroSessions])
 
   const projectBreakdown = useMemo(() => {
     if (!projects.length) return []
@@ -158,9 +196,15 @@ export function MobileAnalyticsView() {
     const activeHabits = habits.filter(h => !h.archived).length
     const habitCount = habitCheckIns.filter(c => new Date(c.date) >= rangeStart && c.completed).length
     const daysInRange = Math.max(1, Math.ceil((Date.now() - rangeStart.getTime()) / 86400000))
+    const shortSessions = workInRange.filter(s => s.duration < 15 * 60).length
+    const totalSessions = workInRange.length
+    const fragRatio = totalSessions > 0 ? shortSessions / totalSessions : 0
+    const fragLabel = fragRatio < 0.2 ? '低' : fragRatio < 0.5 ? '中' : '高'
     return {
       bestHour: bestHour ? `${parseInt(bestHour[0]).toString().padStart(2, '0')}:00` : '-',
       bestDay: Object.entries(dc).sort((a, b) => b[1] - a[1])[0]?.[0] || '-',
+      fragLabel,
+      fragRatio: Math.round(fragRatio * 100),
       habitRate: activeHabits > 0 ? Math.min(100, Math.round((habitCount / (activeHabits * daysInRange)) * 100)) : 0,
     }
   }, [pomodoroSessions, habits, habitCheckIns, rangeStart])
@@ -185,8 +229,7 @@ export function MobileAnalyticsView() {
     return badges
   }, [pomodoroSessions, tasks, achievements])
 
-  const maxTrend = Math.max(1, ...focusTrendData.map(d => d.minutes))
-  const maxHourly = Math.max(1, ...hourlyDistribution.map(d => d.minutes))
+  const maxTrend = Math.max(1, ...focusTrendData.map(d => Math.max(d.minutes, d.prevMinutes)))
 
   const renderBarChart = () => (
     <div className="flex items-end gap-1.5 h-32">
@@ -194,7 +237,10 @@ export function MobileAnalyticsView() {
         <div key={i} className="flex-1 flex flex-col items-center gap-1 min-w-0">
           <span className="text-[9px] text-muted-foreground tabular-nums">{d.minutes > 0 ? d.minutes : ''}</span>
           <div className="w-full relative" style={{ height: '80px' }}>
-            <div className={cn('absolute bottom-0 w-full rounded-lg transition-all duration-500', d.isToday ? 'bg-primary shadow-sm shadow-primary/30' : 'bg-primary/30')} style={{ height: `${Math.max((d.minutes / maxTrend) * 100, 3)}%` }} />
+            {d.prevMinutes > 0 && (
+              <div className="absolute bottom-0 w-full rounded-lg bg-primary/10" style={{ height: `${Math.max((d.prevMinutes / maxTrend) * 100, 3)}%` }} />
+            )}
+            <div className={cn('absolute bottom-0 w-full rounded-lg transition-all duration-500', d.isToday ? 'bg-primary shadow-sm shadow-primary/30' : 'bg-primary/40')} style={{ height: `${Math.max((d.minutes / maxTrend) * 100, 3)}%` }} />
           </div>
           <span className={cn('text-[9px] truncate w-full text-center', d.isToday ? 'text-primary font-semibold' : 'text-muted-foreground')}>{d.label}</span>
         </div>
@@ -203,23 +249,23 @@ export function MobileAnalyticsView() {
   )
 
   const renderLineChart = () => {
-    const chartH = 120
-    const chartW = 300
-    const padL = 30
-    const padR = 10
-    const padT = 10
-    const padB = 20
-    const plotW = chartW - padL - padR
-    const plotH = chartH - padT - padB
+    const chartH = 120, chartW = 300, padL = 30, padR = 10, padT = 10, padB = 20
+    const plotW = chartW - padL - padR, plotH = chartH - padT - padB
     const data = focusTrendData
-    const maxVal = Math.max(1, ...data.map(d => d.minutes))
+    const maxVal = Math.max(1, ...data.map(d => Math.max(d.minutes, d.prevMinutes)))
     const points = data.map((d, i) => {
       const x = padL + (data.length > 1 ? (i / (data.length - 1)) * plotW : plotW / 2)
       const y = padT + plotH - (d.minutes / maxVal) * plotH
       return { x, y, ...d }
     })
+    const prevPoints = data.map((d, i) => {
+      const x = padL + (data.length > 1 ? (i / (data.length - 1)) * plotW : plotW / 2)
+      const y = padT + plotH - (d.prevMinutes / maxVal) * plotH
+      return { x, y }
+    })
     const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
     const areaPath = `${linePath} L ${points[points.length - 1].x} ${padT + plotH} L ${points[0].x} ${padT + plotH} Z`
+    const prevLinePath = prevPoints.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
 
     return (
       <svg viewBox={`0 0 ${chartW} ${chartH}`} className="w-full h-36">
@@ -240,13 +286,12 @@ export function MobileAnalyticsView() {
             <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.02} />
           </linearGradient>
         </defs>
+        <path d={prevLinePath} fill="none" stroke="hsl(var(--primary))" strokeOpacity={0.25} strokeWidth={1.5} strokeDasharray="4 3" />
         <path d={linePath} fill="none" stroke="hsl(var(--primary))" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
         {points.map((p, i) => (
           <g key={i}>
             <circle cx={p.x} cy={p.y} r={p.isToday ? 4 : 2.5} fill={p.isToday ? 'hsl(var(--primary))' : 'hsl(var(--primary) / 0.6)'} stroke="hsl(var(--background))" strokeWidth={1.5} />
-            {p.minutes > 0 && (
-              <text x={p.x} y={p.y - 7} textAnchor="middle" className="fill-muted-foreground" fontSize={7}>{p.minutes}</text>
-            )}
+            {p.minutes > 0 && <text x={p.x} y={p.y - 7} textAnchor="middle" className="fill-muted-foreground" fontSize={7}>{p.minutes}</text>}
           </g>
         ))}
         {points.filter((_, i) => {
@@ -280,10 +325,8 @@ export function MobileAnalyticsView() {
             cumulativePercent += item.percent
             const startRad = (startAngle - 90) * Math.PI / 180
             const endRad = (startAngle + sweepAngle - 90) * Math.PI / 180
-            const x1 = cx + r * Math.cos(startRad)
-            const y1 = cy + r * Math.sin(startRad)
-            const x2 = cx + r * Math.cos(endRad)
-            const y2 = cy + r * Math.sin(endRad)
+            const x1 = cx + r * Math.cos(startRad), y1 = cy + r * Math.sin(startRad)
+            const x2 = cx + r * Math.cos(endRad), y2 = cy + r * Math.sin(endRad)
             const largeArc = sweepAngle > 180 ? 1 : 0
             const d = items.length === 1
               ? `M ${cx} ${cy - r} A ${r} ${r} 0 1 1 ${cx - 0.01} ${cy - r} Z`
@@ -295,9 +338,7 @@ export function MobileAnalyticsView() {
               <p className="text-xs font-medium text-muted-foreground mb-2">{cat.title}</p>
               <div className="flex items-center gap-4">
                 <svg viewBox="0 0 120 120" className="w-28 h-28 shrink-0">
-                  {arcs.map((arc, i) => (
-                    <path key={i} d={arc.d} fill={arc.color} stroke="hsl(var(--background))" strokeWidth={1.5} />
-                  ))}
+                  {arcs.map((arc, i) => <path key={i} d={arc.d} fill={arc.color} stroke="hsl(var(--background))" strokeWidth={1.5} />)}
                   <circle cx={cx} cy={cy} r={28} fill="hsl(var(--background))" />
                   <text x={cx} y={cy - 4} textAnchor="middle" className="fill-foreground" fontSize={12} fontWeight={700}>{total}</text>
                   <text x={cx} y={cy + 8} textAnchor="middle" className="fill-muted-foreground" fontSize={7}>分钟</text>
@@ -322,8 +363,45 @@ export function MobileAnalyticsView() {
     )
   }
 
+  const renderHeatmap = () => {
+    const { grid, maxVal } = heatmapData
+    const getLevel = (val: number) => {
+      if (val <= 0) return 0
+      const ratio = val / maxVal
+      if (ratio <= 0.2) return 1
+      if (ratio <= 0.4) return 2
+      if (ratio <= 0.7) return 3
+      return 4
+    }
+    return (
+      <div className="space-y-1">
+        <div className="flex gap-0.5 pl-6">
+          {Array.from({ length: 24 }, (_, h) => (
+            h % 3 === 0 ? <div key={h} className="flex-1 text-center text-[8px] text-muted-foreground tabular-nums">{h.toString().padStart(2, '0')}</div> : <div key={h} className="flex-1" />
+          ))}
+        </div>
+        {grid.map((row, dayIdx) => (
+          <div key={dayIdx} className="flex items-center gap-0.5">
+            <span className="w-5 text-[9px] text-muted-foreground text-right shrink-0">{HEATMAP_DAYS[dayIdx]}</span>
+            <div className="flex gap-0.5 flex-1">
+              {row.map((val, hourIdx) => (
+                <div key={hourIdx} className={cn('flex-1 aspect-square rounded-[2px] transition-colors', HEATMAP_LEVELS[getLevel(val)])} title={`${HEATMAP_DAYS[dayIdx]} ${hourIdx.toString().padStart(2, '0')}:00 - ${Math.round(val)}分钟`} />
+              ))}
+            </div>
+          </div>
+        ))}
+        <div className="flex items-center justify-end gap-1 pt-1">
+          <span className="text-[8px] text-muted-foreground">少</span>
+          {HEATMAP_LEVELS.map((cls, i) => <div key={i} className={cn('h-2.5 w-2.5 rounded-[1px]', cls)} />)}
+          <span className="text-[8px] text-muted-foreground">多</span>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4 px-4 pt-4 pb-24">
+      {/* Section 1: Time Range */}
       <div className="flex items-center gap-1 p-1 rounded-2xl bg-muted/60">
         {(['week', 'month', 'year'] as TimeRange[]).map(r => (
           <button key={r} className={cn('flex-1 py-2 text-sm font-semibold rounded-xl transition-all active:scale-95', timeRange === r ? 'bg-primary text-primary-foreground shadow-md shadow-primary/25' : 'text-muted-foreground hover:text-foreground')} onClick={() => setTimeRange(r)}>
@@ -332,13 +410,18 @@ export function MobileAnalyticsView() {
         ))}
       </div>
 
+      {/* Section 2: 5 Key Metrics (2+3 grid) */}
       <div className="grid grid-cols-2 gap-3">
         <MobileStatCard icon={Timer} iconBg="bg-blue-500/15" iconColor="text-blue-500" label="专注时长" value={summaryStats.totalFocusHours} suffix="h" />
         <MobileStatCard icon={CheckCircle2} iconBg="bg-emerald-500/15" iconColor="text-emerald-500" label="完成任务" value={summaryStats.completedTasks} suffix="个" />
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        <MobileStatCard icon={Layers} iconBg="bg-cyan-500/15" iconColor="text-cyan-500" label="深度工作" value={summaryStats.deepWorkSessions} suffix="次" />
         <MobileStatCard icon={Flame} iconBg="bg-amber-500/15" iconColor="text-amber-500" label="连续专注" value={summaryStats.streak} suffix="天" />
         <MobileStatCard icon={Activity} iconBg="bg-violet-500/15" iconColor="text-violet-500" label="效率评分" value={summaryStats.efficiencyScore} suffix="%" progress={summaryStats.efficiencyScore} />
       </div>
 
+      {/* Section 3: Focus Trend */}
       <div className="rounded-2xl glass-card p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold">专注趋势</h3>
@@ -348,39 +431,32 @@ export function MobileAnalyticsView() {
               { type: 'line' as ChartType, icon: LineChart, label: '折线图' },
               { type: 'pie' as ChartType, icon: PieChart, label: '饼状图' },
             ]).map(opt => (
-              <button
-                key={opt.type}
-                className={cn(
-                  'h-7 w-7 rounded-md flex items-center justify-center transition-all active:scale-90',
-                  chartType === opt.type ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                )}
-                onClick={() => setChartType(opt.type)}
-                title={opt.label}
-              >
+              <button key={opt.type} className={cn('h-7 w-7 rounded-md flex items-center justify-center transition-all active:scale-90', chartType === opt.type ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')} onClick={() => setChartType(opt.type)} title={opt.label}>
                 <opt.icon className="h-3.5 w-3.5" />
               </button>
             ))}
           </div>
         </div>
-        {chartType === 'bar' && renderBarChart()}
+        {chartType === 'bar' && (
+          <div>
+            {renderBarChart()}
+            <div className="flex items-center justify-center gap-4 mt-2">
+              <div className="flex items-center gap-1.5"><div className="h-2 w-3 rounded-sm bg-primary/10" /><span className="text-[9px] text-muted-foreground">上期</span></div>
+              <div className="flex items-center gap-1.5"><div className="h-2 w-3 rounded-sm bg-primary/60" /><span className="text-[9px] text-muted-foreground">本期</span></div>
+            </div>
+          </div>
+        )}
         {chartType === 'line' && renderLineChart()}
         {chartType === 'pie' && renderPieChart()}
       </div>
 
+      {/* Section 4: 24h Heatmap */}
       <div className="rounded-2xl glass-card p-4">
-        <h3 className="text-sm font-semibold mb-3">时段分布</h3>
-        <div className="flex items-end gap-px h-20">
-          {hourlyDistribution.map(d => (
-            <div key={d.hour} className="flex-1 flex flex-col items-center min-w-0">
-              <div className="w-full relative" style={{ height: '56px' }}>
-                <div className="absolute bottom-0 w-full rounded-t-sm bg-blue-500/40 transition-all duration-300" style={{ height: `${Math.max((d.minutes / maxHourly) * 100, 2)}%` }} />
-              </div>
-              {d.hour % 3 === 0 && <span className="text-[8px] text-muted-foreground mt-0.5">{d.label}</span>}
-            </div>
-          ))}
-        </div>
+        <h3 className="text-sm font-semibold mb-3">24h 时段热力图</h3>
+        {renderHeatmap()}
       </div>
 
+      {/* Section 5: Project Breakdown */}
       {projectBreakdown.length > 0 && (
         <div className="rounded-2xl glass-card p-4">
           <h3 className="text-sm font-semibold mb-3">项目时间分布</h3>
@@ -397,8 +473,9 @@ export function MobileAnalyticsView() {
                     <span className="text-[10px] font-medium tabular-nums">{p.percent}%</span>
                   </div>
                 </div>
-                <div className="h-1.5 rounded-full bg-muted/50 overflow-hidden">
+                <div className="h-2 rounded-full bg-muted/50 overflow-hidden relative">
                   <div className="h-full rounded-full transition-all duration-500" style={{ width: `${p.percent}%`, backgroundColor: p.color }} />
+                  {p.percent >= 15 && <span className="absolute inset-0 flex items-center justify-center text-[8px] font-semibold text-white/90 mix-blend-difference">{p.percent}%</span>}
                 </div>
               </div>
             ))}
@@ -406,24 +483,30 @@ export function MobileAnalyticsView() {
         </div>
       )}
 
+      {/* Section 6: Smart Insights (4 items) */}
       <div className="rounded-2xl glass-card p-4">
         <h3 className="text-sm font-semibold flex items-center gap-2 mb-3"><Brain className="h-4 w-4 text-violet-500" />智能洞察</h3>
         <div className="space-y-2">
           <div className="flex items-center gap-3 rounded-xl bg-blue-500/5 border border-blue-500/10 p-3">
             <div className="h-9 w-9 rounded-xl bg-blue-500/10 flex items-center justify-center shrink-0"><Clock className="h-4 w-4 text-blue-500" /></div>
-            <div className="flex-1 min-w-0"><p className="text-[10px] text-muted-foreground">最佳专注时段</p><p className="text-sm font-semibold">{insights.bestHour}</p></div>
+            <div className="flex-1 min-w-0"><p className="text-[10px] text-muted-foreground">黄金专注时段</p><p className="text-sm font-semibold">{insights.bestHour}</p></div>
           </div>
           <div className="flex items-center gap-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10 p-3">
             <div className="h-9 w-9 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0"><Calendar className="h-4 w-4 text-emerald-500" /></div>
             <div className="flex-1 min-w-0"><p className="text-[10px] text-muted-foreground">最佳工作日</p><p className="text-sm font-semibold">{insights.bestDay}</p></div>
           </div>
+          <div className="flex items-center gap-3 rounded-xl bg-orange-500/5 border border-orange-500/10 p-3">
+            <div className="h-9 w-9 rounded-xl bg-orange-500/10 flex items-center justify-center shrink-0"><Target className="h-4 w-4 text-orange-500" /></div>
+            <div className="flex-1 min-w-0"><p className="text-[10px] text-muted-foreground">碎片化指数</p><p className="text-sm font-semibold">{insights.fragLabel}<span className="text-[10px] text-muted-foreground ml-1">({insights.fragRatio}%)</span></p></div>
+          </div>
           <div className="flex items-center gap-3 rounded-xl bg-amber-500/5 border border-amber-500/10 p-3">
-            <div className="h-9 w-9 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0"><Target className="h-4 w-4 text-amber-500" /></div>
+            <div className="h-9 w-9 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0"><Activity className="h-4 w-4 text-amber-500" /></div>
             <div className="flex-1 min-w-0"><p className="text-[10px] text-muted-foreground">习惯完成率</p><p className="text-sm font-semibold">{insights.habitRate}%</p></div>
           </div>
         </div>
       </div>
 
+      {/* Section 7: Achievement Badges */}
       <div className="rounded-2xl glass-card p-4">
         <h3 className="text-sm font-semibold flex items-center gap-2 mb-3"><Trophy className="h-4 w-4 text-amber-500" />成就徽章</h3>
         <div className="grid grid-cols-3 gap-2">
@@ -444,6 +527,7 @@ export function MobileAnalyticsView() {
         </div>
       </div>
 
+      {/* Section 8: User Level */}
       {userLevel && (
         <div className="rounded-2xl glass-card p-4">
           <div className="flex items-center justify-between mb-2">

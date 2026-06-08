@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
 import { useShallow } from 'zustand/react/shallow'
@@ -169,18 +169,24 @@ export function MobileTaskDetailSheet({ open, onClose, taskId, projects, tags, t
         <div>
           <label className="text-xs text-muted-foreground mb-2 block flex items-center gap-1">
             <ListChecks className="h-3 w-3" /> 子任务
-            {detailTask?.subTasks?.length ? <span className="text-muted-foreground/50">({detailTask.subTasks.filter(s => s.completed).length}/{detailTask.subTasks.length})</span> : null}
+            {detailTask?.subTasks?.length ? (
+              <>
+                <span className="text-muted-foreground/50">({detailTask.subTasks.filter(s => s.completed).length}/{detailTask.subTasks.length})</span>
+                {detailTask.subTasks.length > 0 && (
+                  <div className="flex-1 h-1.5 rounded-full bg-muted/50 ml-2 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all"
+                      style={{ width: `${(detailTask.subTasks.filter(s => s.completed).length / detailTask.subTasks.length) * 100}%` }}
+                    />
+                  </div>
+                )}
+              </>
+            ) : null}
           </label>
           {detailTask?.subTasks?.length ? (
             <div className="space-y-1 mb-2">
               {detailTask.subTasks.map(st => (
-                <div key={st.id} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-muted/30">
-                  <button className="shrink-0 active:scale-90 transition-transform" onClick={() => taskId && toggleSubTask(taskId, st.id)}>
-                    {st.completed ? <CheckCircle2 className="h-4 w-4 text-primary" /> : <Circle className="h-4 w-4 text-muted-foreground/40" />}
-                  </button>
-                  <span className={cn('flex-1 text-sm', st.completed && 'line-through text-muted-foreground')}>{st.title}</span>
-                  <button className="shrink-0 h-6 w-6 rounded-full flex items-center justify-center active:scale-90 transition-transform" onClick={() => taskId && deleteSubTask(taskId, st.id)}><X className="h-3 w-3 text-muted-foreground/40" /></button>
-                </div>
+                <SubTaskItem key={st.id} subTask={st} taskId={taskId} onToggle={toggleSubTask} onDelete={deleteSubTask} />
               ))}
             </div>
           ) : null}
@@ -228,5 +234,88 @@ export function MobileTaskDetailSheet({ open, onClose, taskId, projects, tags, t
         </div>
       </div>
     </MobileBottomSheet>
+  )
+}
+
+interface SubTask {
+  id: string
+  title: string
+  completed: boolean
+}
+
+interface SubTaskItemProps {
+  subTask: SubTask
+  taskId: string | null
+  onToggle: (taskId: string, subTaskId: string) => void
+  onDelete: (taskId: string, subTaskId: string) => void
+}
+
+function SubTaskItem({ subTask, taskId, onToggle, onDelete }: SubTaskItemProps) {
+  const [offsetX, setOffsetX] = useState(0)
+  const touchStartX = useRef(0)
+  const touchCurrentX = useRef(0)
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX
+    touchCurrentX.current = e.touches[0].clientX
+    longPressTimer.current = setTimeout(() => {
+      if (taskId) onDelete(taskId, subTask.id)
+    }, 600)
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchCurrentX.current = e.touches[0].clientX
+    const diff = touchCurrentX.current - touchStartX.current
+    if (longPressTimer.current && Math.abs(diff) > 10) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+    if (diff < 0) {
+      setOffsetX(Math.max(diff, -80))
+    } else {
+      setOffsetX(Math.min(diff, 0))
+    }
+  }
+
+  const handleTouchEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+    if (offsetX < -40) {
+      setOffsetX(-80)
+    } else {
+      setOffsetX(0)
+    }
+  }
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault()
+    if (taskId) onDelete(taskId, subTask.id)
+  }
+
+  return (
+    <div className="relative overflow-hidden rounded-xl">
+      <div
+        className="absolute right-0 top-0 bottom-0 w-20 flex items-center justify-center bg-red-500 rounded-r-xl"
+        onClick={() => { if (taskId) onDelete(taskId, subTask.id) }}
+      >
+        <Trash2 className="h-4 w-4 text-white" />
+      </div>
+      <div
+        className="flex items-center gap-2 px-3 py-2 bg-muted/30 relative transition-transform"
+        style={{ transform: `translateX(${offsetX}px)` }}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onContextMenu={handleContextMenu}
+      >
+        <button className="shrink-0 active:scale-90 transition-transform" onClick={() => taskId && onToggle(taskId, subTask.id)}>
+          {subTask.completed ? <CheckCircle2 className="h-4 w-4 text-primary" /> : <Circle className="h-4 w-4 text-muted-foreground/40" />}
+        </button>
+        <span className={cn('flex-1 text-sm', subTask.completed && 'line-through text-muted-foreground')}>{subTask.title}</span>
+      </div>
+    </div>
   )
 }

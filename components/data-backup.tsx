@@ -1,6 +1,8 @@
 'use client'
 
 import { useAppStore } from '@/lib/store'
+import { restoreDataToStore } from '@/lib/data-restore'
+import { useShallow } from 'zustand/react/shallow'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -26,7 +28,19 @@ const BACKUP_STORAGE_KEY = 'focusflow-backups'
 const MAX_BACKUPS = 10
 
 export function DataBackup() {
-  const store = useAppStore()
+  const { tasks, habits, habitCheckIns, timeEntries, pomodoroSessions, pomodoroSettings, projects, anniversaries, goals, tags, reminders } = useAppStore(useShallow((s) => ({
+    tasks: s.tasks,
+    habits: s.habits,
+    habitCheckIns: s.habitCheckIns,
+    timeEntries: s.timeEntries,
+    pomodoroSessions: s.pomodoroSessions,
+    pomodoroSettings: s.pomodoroSettings,
+    projects: s.projects,
+    anniversaries: s.anniversaries,
+    goals: s.goals,
+    tags: s.tags,
+    reminders: s.reminders,
+  })))
   const [backups, setBackups] = useState<BackupData[]>([])
   const [open, setOpen] = useState(false)
 
@@ -52,17 +66,17 @@ export function DataBackup() {
 
   const createBackup = () => {
     const data = JSON.stringify({
-      tasks: store.tasks,
-      habits: store.habits,
-      habitCheckIns: store.habitCheckIns,
-      timeEntries: store.timeEntries,
-      pomodoroSessions: store.pomodoroSessions,
-      pomodoroSettings: store.pomodoroSettings,
-      projects: store.projects,
-      anniversaries: store.anniversaries,
-      goals: store.goals,
-      tags: store.tags,
-      reminders: store.reminders,
+      tasks,
+      habits,
+      habitCheckIns,
+      timeEntries,
+      pomodoroSessions,
+      pomodoroSettings,
+      projects,
+      anniversaries,
+      goals,
+      tags,
+      reminders,
     })
 
     const backup: BackupData = {
@@ -80,20 +94,17 @@ export function DataBackup() {
   const restoreBackup = (backup: BackupData) => {
     try {
       const data = JSON.parse(backup.data)
-      
-      if (data.tasks) {
-        data.tasks.forEach((t: Record<string, unknown>) => {
-          store.addTask({
-            title: (t.title as string) || '未命名任务',
-            description: t.description as string | undefined,
-            type: (t.type as 'task' | 'event' | 'reminder') || 'task',
-            priority: (t.priority as 'urgent' | 'high' | 'medium' | 'low') || 'medium',
-            status: (t.status as 'todo' | 'in-progress' | 'done') || 'todo',
-            project: t.project as string | undefined,
-            tags: Array.isArray(t.tags) ? t.tags as string[] : [],
-            dueDate: t.dueDate ? new Date(t.dueDate as string) : undefined,
-            starred: t.starred as boolean | undefined,
-          })
+      const store = useAppStore.getState()
+
+      restoreDataToStore(data)
+
+      // 恢复番茄钟设置
+      if (data.pomodoroSettings) {
+        store.updatePomodoroSettings({
+          workDuration: (data.pomodoroSettings as Record<string, unknown>).workDuration as number,
+          shortBreakDuration: (data.pomodoroSettings as Record<string, unknown>).shortBreakDuration as number,
+          longBreakDuration: (data.pomodoroSettings as Record<string, unknown>).longBreakDuration as number,
+          sessionsBeforeLongBreak: (data.pomodoroSettings as Record<string, unknown>).sessionsBeforeLongBreak as number,
         })
       }
 

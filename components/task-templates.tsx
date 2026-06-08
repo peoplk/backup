@@ -1,7 +1,8 @@
 'use client'
 
-import { useState } from 'react'
-import { useAppStore, Task } from '@/lib/store'
+import { useState, useEffect } from 'react'
+import { useAppStore } from '@/lib/store'
+import type { Task } from '@/lib/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -136,6 +137,24 @@ export function TaskTemplates({ onSelectTemplate }: TaskTemplatesProps) {
   })
   const [newTag, setNewTag] = useState('')
 
+  // 从 localStorage 加载自定义模板
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('focusflow-custom-templates')
+      if (stored) {
+        setCustomTemplates(JSON.parse(stored))
+      }
+    } catch {}
+  }, [])
+
+  // 保存自定义模板到 localStorage
+  const saveCustomTemplates = (templates: TaskTemplate[]) => {
+    setCustomTemplates(templates)
+    try {
+      localStorage.setItem('focusflow-custom-templates', JSON.stringify(templates))
+    } catch {}
+  }
+
   const allTemplates = [...DEFAULT_TEMPLATES, ...customTemplates]
 
   const handleCreateTemplate = () => {
@@ -151,7 +170,7 @@ export function TaskTemplates({ onSelectTemplate }: TaskTemplatesProps) {
       estimatedPomodoros: newTemplate.estimatedPomodoros || 1,
     }
 
-    setCustomTemplates([...customTemplates, template])
+    saveCustomTemplates([...customTemplates, template])
     setNewTemplate({
       name: '',
       title: '',
@@ -164,7 +183,7 @@ export function TaskTemplates({ onSelectTemplate }: TaskTemplatesProps) {
   }
 
   const handleDeleteTemplate = (id: string) => {
-    setCustomTemplates(customTemplates.filter((t) => t.id !== id))
+    saveCustomTemplates(customTemplates.filter((t) => t.id !== id))
   }
 
   const handleAddTag = () => {

@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { useAppStore, Task } from '@/lib/store'
+import { useAppStore } from '@/lib/store'
+import type { Task } from '@/lib/types'
 import {
   Dialog,
   DialogContent,
@@ -27,7 +28,9 @@ interface TaskDependencyManagerProps {
 }
 
 export function TaskDependencyManager({ taskId, trigger }: TaskDependencyManagerProps) {
-  const { tasks, addTaskDependency, removeTaskDependency } = useAppStore()
+  const tasks = useAppStore((s) => s.tasks)
+  const addTaskDependency = useAppStore((s) => s.addTaskDependency)
+  const removeTaskDependency = useAppStore((s) => s.removeTaskDependency)
   const [isOpen, setIsOpen] = useState(false)
   const [selectedDependency, setSelectedDependency] = useState<string>('')
 
@@ -217,7 +220,7 @@ export function TaskDependencyManager({ taskId, trigger }: TaskDependencyManager
 }
 
 export function TaskDependencyBadge({ taskId }: { taskId: string }) {
-  const { tasks } = useAppStore()
+  const tasks = useAppStore((s) => s.tasks)
   const task = tasks.find(t => t.id === taskId)
   
   if (!task || !task.dependsOn || task.dependsOn.length === 0) return null

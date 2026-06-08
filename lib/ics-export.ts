@@ -1,4 +1,4 @@
-import type { Task, Anniversary } from './store'
+import type { Task, Anniversary } from '@/lib/types'
 
 function formatDateToICS(date: Date | string): string {
   const dateObj = date instanceof Date ? date : new Date(date)

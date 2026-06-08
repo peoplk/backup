@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react'
 import { useAppStore } from '@/lib/store'
 import { useShallow } from 'zustand/react/shallow'
 import { cn } from '@/lib/utils'
-import { CheckCircle2, Flame, Plus, X, TrendingUp, Trash2, Edit3, Calendar, BarChart3, ChevronRight } from 'lucide-react'
+import { CheckCircle2, Flame, Plus, X, TrendingUp, Trash2, Edit3, Calendar, BarChart3, ChevronRight, RotateCcw } from 'lucide-react'
 
 const ICONS = ['📋', '💪', '📚', '🏃', '🧘', '💧', '🍎', '😴', '✍️', '🎵', '💊', '🧹', '💰', '🎯', '🌅', '🚶']
 const CATEGORIES = ['生活', '健康', '学习', '工作', '运动', '其他']
@@ -217,9 +217,15 @@ export function MobileHabitsView() {
 
       <div className="space-y-2">
         {activeHabits.length > 0 ? activeHabits.map(habit => {
-          const checkedToday = todayCheckIns.some(c => c.habitId === habit.id)
+          const todayCheckIn = todayCheckIns.find(c => c.habitId === habit.id)
+          const checkedToday = !!todayCheckIn
           const streak = getStreak(habit.id)
           const last7 = getLast7Days()
+          const isQuantity = habit.trackingType === 'quantity'
+          const targetValue = habit.targetValue ?? 0
+          const unit = habit.unit ?? ''
+          const currentValue = todayCheckIn?.value ?? 0
+          const progressPercent = targetValue > 0 ? Math.min(Math.round((currentValue / targetValue) * 100), 100) : 0
 
           return (
             <div
@@ -235,7 +241,13 @@ export function MobileHabitsView() {
                     'shrink-0 h-11 w-11 rounded-xl flex items-center justify-center text-xl transition-all active:scale-90',
                     checkedToday ? 'bg-primary/15' : 'bg-muted/50'
                   )}
-                  onClick={() => { if (!checkedToday) checkInHabit(habit.id, new Date(), true) }}
+                  onClick={() => {
+                    if (checkedToday) {
+                      checkInHabit(habit.id, new Date(), false)
+                    } else if (!isQuantity) {
+                      checkInHabit(habit.id, new Date(), true)
+                    }
+                  }}
                 >
                   {habit.icon || '📋'}
                 </button>
@@ -251,22 +263,80 @@ export function MobileHabitsView() {
                       </span>
                     )}
                     <span className="text-[10px] text-muted-foreground">{habit.category}</span>
+                    {isQuantity && targetValue > 0 && (
+                      <span className="text-[10px] text-muted-foreground">
+                        {checkedToday ? `${currentValue}/${targetValue}` : targetValue} {unit}
+                      </span>
+                    )}
                     <ChevronRight className="h-3 w-3 text-muted-foreground/40" />
                   </div>
                 </div>
 
-                <button
-                  className={cn(
-                    'shrink-0 h-8 w-8 rounded-full flex items-center justify-center transition-all active:scale-90',
-                    checkedToday
-                      ? 'bg-primary text-primary-foreground'
-                      : 'border-2 border-muted-foreground/20'
-                  )}
-                  onClick={() => { if (!checkedToday) checkInHabit(habit.id, new Date(), true) }}
-                >
-                  {checkedToday && <CheckCircle2 className="h-4 w-4" />}
-                </button>
+                {isQuantity && !checkedToday ? (
+                  <div className="shrink-0 flex items-center gap-1.5">
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      className="h-8 w-16 rounded-lg bg-muted/50 text-sm text-center outline-none focus:ring-2 focus:ring-primary/30 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      placeholder="0"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const val = parseFloat((e.target as HTMLInputElement).value)
+                          if (!isNaN(val)) {
+                            checkInHabit(habit.id, new Date(), val >= targetValue, undefined, val)
+                          }
+                        }
+                      }}
+                      onBlur={(e) => {
+                        const val = parseFloat(e.target.value)
+                        if (!isNaN(val) && val > 0) {
+                          checkInHabit(habit.id, new Date(), val >= targetValue, undefined, val)
+                        }
+                      }}
+                    />
+                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">{unit}</span>
+                  </div>
+                ) : (
+                  <button
+                    className={cn(
+                      'shrink-0 h-8 px-2.5 rounded-full flex items-center justify-center gap-1 transition-all active:scale-90',
+                      checkedToday
+                        ? 'bg-primary text-primary-foreground'
+                        : 'border-2 border-muted-foreground/20'
+                    )}
+                    onClick={() => {
+                      if (checkedToday) {
+                        checkInHabit(habit.id, new Date(), false)
+                      } else {
+                        checkInHabit(habit.id, new Date(), true)
+                      }
+                    }}
+                  >
+                    {checkedToday ? (
+                      <>
+                        <RotateCcw className="h-3 w-3" />
+                        <span className="text-[10px]">撤销</span>
+                      </>
+                    ) : (
+                      <CheckCircle2 className="h-4 w-4" />
+                    )}
+                  </button>
+                )}
               </div>
+
+              {isQuantity && checkedToday && targetValue > 0 && (
+                <div className="mt-2">
+                  <div className="h-1.5 rounded-full bg-primary/10 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-primary transition-all duration-500"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1 text-right">
+                    {currentValue}/{targetValue} {unit}
+                  </p>
+                </div>
+              )}
 
               <div className="flex items-center gap-1 mt-3">
                 {last7.map(day => {

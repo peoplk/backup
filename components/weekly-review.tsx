@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react'
 import { useAppStore } from '@/lib/store'
+import { useShallow } from 'zustand/react/shallow'
 import { formatDuration } from '@/lib/hooks'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -24,7 +25,14 @@ import {
 import { cn } from '@/lib/utils'
 
 export function WeeklyReview() {
-  const { tasks, pomodoroSessions, timeEntries, habits, habitCheckIns, focusGoals } = useAppStore()
+  const { tasks, pomodoroSessions, timeEntries, habits, habitCheckIns, focusGoals } = useAppStore(useShallow((s) => ({
+    tasks: s.tasks,
+    pomodoroSessions: s.pomodoroSessions,
+    timeEntries: s.timeEntries,
+    habits: s.habits,
+    habitCheckIns: s.habitCheckIns,
+    focusGoals: s.focusGoals,
+  })))
 
   const review = useMemo(() => {
     const today = new Date()

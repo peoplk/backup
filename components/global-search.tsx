@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { useAppStore } from '@/lib/store'
+import { useShallow } from 'zustand/react/shallow'
 import {
   Dialog,
   DialogContent,
@@ -17,7 +18,13 @@ interface GlobalSearchProps {
 }
 
 export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
-  const { tasks, habits, anniversaries, timeEntries, setActiveView } = useAppStore()
+  const { tasks, habits, anniversaries, timeEntries, setActiveView } = useAppStore(useShallow((s) => ({
+    tasks: s.tasks,
+    habits: s.habits,
+    anniversaries: s.anniversaries,
+    timeEntries: s.timeEntries,
+    setActiveView: s.setActiveView,
+  })))
   const [query, setQuery] = useState('')
 
   const results = useMemo(() => {
@@ -46,7 +53,10 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
 
   const totalResults = results.tasks.length + results.habits.length + results.anniversaries.length + results.timeEntries.length
 
-  const handleSelect = (type: string) => {
+  const handleSelect = (type: string, itemId?: string) => {
+    if (itemId) {
+      localStorage.setItem('focusflow-selected-item', itemId)
+    }
     switch (type) {
       case 'tasks':
         setActiveView('tasks')
@@ -98,7 +108,7 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
                       <button
                         key={task.id}
                         className="w-full px-4 py-2 flex items-center gap-3 hover:bg-muted/50 transition-colors text-left"
-                        onClick={() => handleSelect('tasks')}
+                        onClick={() => handleSelect('tasks', task.id)}
                       >
                         <div className={cn(
                           'h-2 w-2 rounded-full shrink-0',
@@ -128,7 +138,7 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
                       <button
                         key={habit.id}
                         className="w-full px-4 py-2 flex items-center gap-3 hover:bg-muted/50 transition-colors text-left"
-                        onClick={() => handleSelect('habits')}
+                        onClick={() => handleSelect('habits', habit.id)}
                       >
                         <span className="text-lg">{habit.icon}</span>
                         <div className="flex-1 min-w-0">
@@ -153,7 +163,7 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
                       <button
                         key={anniversary.id}
                         className="w-full px-4 py-2 flex items-center gap-3 hover:bg-muted/50 transition-colors text-left"
-                        onClick={() => handleSelect('anniversaries')}
+                        onClick={() => handleSelect('anniversaries', anniversary.id)}
                       >
                         <span className="text-lg">{anniversary.icon}</span>
                         <div className="flex-1 min-w-0">
@@ -178,7 +188,7 @@ export function GlobalSearch({ open, onOpenChange }: GlobalSearchProps) {
                       <button
                         key={entry.id}
                         className="w-full px-4 py-2 flex items-center gap-3 hover:bg-muted/50 transition-colors text-left"
-                        onClick={() => handleSelect('time-tracking')}
+                        onClick={() => handleSelect('time-tracking', entry.id)}
                       >
                         <Clock className="h-4 w-4 text-muted-foreground" />
                         <div className="flex-1 min-w-0">

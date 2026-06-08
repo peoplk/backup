@@ -340,6 +340,7 @@ export interface PomodoroStrictMode {
   lockUntilSessionEnd: boolean
 }
 
+/** @deprecated 未使用，将在未来版本中移除 */
 export interface ProductivityInsight {
   peakHours: { hour: number; score: number }[]
   mostProductiveDay: string

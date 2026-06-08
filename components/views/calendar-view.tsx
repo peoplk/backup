@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useMemo, useEffect, useRef } from 'react'
-import { useAppStore, TimeBlock } from '@/lib/store'
+import { useAppStore } from '@/lib/store'
+import type { TimeBlock } from '@/lib/types'
+import { useShallow } from 'zustand/react/shallow'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -68,7 +70,20 @@ export function CalendarView() {
     tasks, timeEntries, pomodoroSessions, habits, habitCheckIns, anniversaries,
     completeTask, uncompleteTask,
     timeBlocks, addTimeBlock, updateTimeBlock, deleteTimeBlock,
-  } = useAppStore()
+  } = useAppStore(useShallow((s) => ({
+    tasks: s.tasks,
+    timeEntries: s.timeEntries,
+    pomodoroSessions: s.pomodoroSessions,
+    habits: s.habits,
+    habitCheckIns: s.habitCheckIns,
+    anniversaries: s.anniversaries,
+    completeTask: s.completeTask,
+    uncompleteTask: s.uncompleteTask,
+    timeBlocks: s.timeBlocks,
+    addTimeBlock: s.addTimeBlock,
+    updateTimeBlock: s.updateTimeBlock,
+    deleteTimeBlock: s.deleteTimeBlock,
+  })))
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month')

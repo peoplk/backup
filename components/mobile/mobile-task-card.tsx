@@ -1,5 +1,6 @@
 'use client'
 
+import { memo } from 'react'
 import { cn } from '@/lib/utils'
 import type { Task } from '@/lib/types'
 import {
@@ -26,7 +27,7 @@ interface MobileTaskCardProps {
   onMore?: () => void
 }
 
-export function MobileTaskCard({
+export const MobileTaskCard = memo(function MobileTaskCard({
   task,
   projectColor,
   projectName,
@@ -121,4 +122,4 @@ export function MobileTaskCard({
       </div>
     </div>
   )
-}
+})

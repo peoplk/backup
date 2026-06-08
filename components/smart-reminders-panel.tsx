@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { X, Clock, Target, Coffee, CheckCircle2, AlertTriangle } from 'lucide-react'
 import { useAppStore } from '@/lib/store'
+import { useShallow } from 'zustand/react/shallow'
 import { useDataLink } from '@/lib/data-link-service'
 import { completePomodoroSession } from '@/lib/pomodoro-completion'
 import { recommendTasksForFocus } from '@/lib/smart-recommendation'
@@ -23,7 +24,13 @@ interface Reminder {
 export function SmartRemindersPanel() {
   const [dismissed, setDismissed] = useState<Set<string>>(new Set())
   const [reminders, setReminders] = useState<Reminder[]>([])
-  const { tasks, habits, habitCheckIns, pomodoroSessions, setActiveView } = useAppStore()
+  const { tasks, habits, habitCheckIns, pomodoroSessions, setActiveView } = useAppStore(useShallow((s) => ({
+    tasks: s.tasks,
+    habits: s.habits,
+    habitCheckIns: s.habitCheckIns,
+    pomodoroSessions: s.pomodoroSessions,
+    setActiveView: s.setActiveView,
+  })))
   const dataLink = useDataLink()
 
   useEffect(() => {

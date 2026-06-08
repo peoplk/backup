@@ -13,6 +13,7 @@ export function useAutoNotifications() {
     notifications,
     repeatCompletions,
     markReminderTriggered,
+    pomodoroSessions,
   } = useAppStore()
   const notifiedRef = useRef<Set<string>>(new Set())
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
@@ -172,6 +173,49 @@ export function useAutoNotifications() {
         }
       })
 
+      // 黄金专注时间建议
+      const currentHour = now.getHours()
+      const bestFocusHours = [9, 10, 14, 15, 19, 20]
+      const todayWorkSessions = pomodoroSessions
+        ? pomodoroSessions.filter(
+            (s: { completedAt: string | number | Date; type: string }) =>
+              new Date(s.completedAt).toDateString() === today.toDateString() && s.type === 'work'
+          )
+        : []
+
+      if (todayWorkSessions.length === 0 && bestFocusHours.includes(currentHour)) {
+        const focusKey = `focus-suggest-${today.toDateString()}-${currentHour}`
+        if (!existingKeys.has(focusKey) && !notifiedRef.current.has(focusKey)) {
+          notifiedRef.current.add(focusKey)
+          addNotification({
+            type: 'pomodoro',
+            title: '🎯 黄金专注时间',
+            message: '现在是你的黄金专注时间，开始今天的第一个番茄钟吧！🍅',
+            actionUrl: 'focus',
+          })
+        }
+      }
+
+      // 3个番茄钟后休息提醒
+      if (todayWorkSessions.length >= 3) {
+        const lastSession = todayWorkSessions[todayWorkSessions.length - 1]
+        const lastSessionTime = new Date(lastSession.completedAt)
+        const hoursSinceLastSession = (now.getTime() - lastSessionTime.getTime()) / (1000 * 60 * 60)
+
+        if (hoursSinceLastSession >= 0.5) {
+          const breakKey = `break-reminder-${today.toDateString()}`
+          if (!existingKeys.has(breakKey) && !notifiedRef.current.has(breakKey)) {
+            notifiedRef.current.add(breakKey)
+            addNotification({
+              type: 'pomodoro',
+              title: '☕ 休息提醒',
+              message: '你已经专注了3个番茄钟，该休息一下了！喝杯水，活动活动',
+              actionUrl: 'focus',
+            })
+          }
+        }
+      }
+
       anniversaries.forEach(anniversary => {
         const annivDate = new Date(anniversary.date)
         const thisYearDate = new Date(today.getFullYear(), annivDate.getMonth(), annivDate.getDate())
@@ -189,6 +233,11 @@ export function useAutoNotifications() {
               message: `${dayText} 是 "${anniversary.title}"`,
               actionUrl: 'anniversaries',
             })
+            sendBrowserNotification(`🎂 ${anniversary.title}`, {
+              body: `${dayText} 是 "${anniversary.title}"`,
+              tag: anniversaryKey,
+              data: { anniversaryId: anniversary.id },
+            })
           }
         }
       })
@@ -203,5 +252,5 @@ export function useAutoNotifications() {
         clearInterval(intervalRef.current)
       }
     }
-  }, [tasks, habits, anniversaries, addNotification, notifications, repeatCompletions, markReminderTriggered])
+  }, [tasks, habits, anniversaries, addNotification, notifications, repeatCompletions, markReminderTriggered, pomodoroSessions])
 }

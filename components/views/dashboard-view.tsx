@@ -8,6 +8,7 @@ import {
   useStreak,
   formatDuration,
   useTodayTasks,
+  type TodayTask,
   useUrgentTasks,
 } from '@/lib/hooks'
 import { Card, CardContent } from '@/components/ui/card'
@@ -42,7 +43,7 @@ import { SmartQuickAddTask } from '@/components/smart-quick-add-task'
 import { GoalCelebration } from '@/components/goal-celebration'
 import { useDailyGoalWatcher } from '@/lib/hooks/use-daily-goal'
 import { cn } from '@/lib/utils'
-import { useIsMobile } from '@/hooks/use-mobile'
+import { useIsMobile } from '@/components/ui/use-mobile'
 
 const GREETINGS = [
   { start: 0, end: 6, text: '夜深了', subtext: '注意休息，明天继续', icon: Moon, accent: 'from-indigo-500/20 to-purple-500/10' },
@@ -94,8 +95,8 @@ export function DashboardView() {
   const greeting = useMemo(() => GREETINGS.find(g => hour >= g.start && hour < g.end) || GREETINGS[0], [hour])
   const GreetingIcon = useMemo(() => greeting.icon, [greeting])
 
-  const todayMinutes = Math.round(stats.todayFocusSeconds / 60)
-  const dailyGoalProgress = Math.min((todayMinutes / focusGoals.dailyMinutes) * 100, 100)
+  const todayMinutes = useMemo(() => Math.round(stats.todayFocusSeconds / 60), [stats.todayFocusSeconds])
+  const dailyGoalProgress = useMemo(() => Math.min((todayMinutes / focusGoals.dailyMinutes) * 100, 100), [todayMinutes, focusGoals.dailyMinutes])
   const isMobile = useIsMobile()
 
   const todayHabits = useMemo(() => {
@@ -125,11 +126,11 @@ export function DashboardView() {
   }, [tasks, today, todayStr])
 
   const completedTodayCount = useMemo(() => {
-    return todayTasks.filter(t => (t as any).completedToday).length
+    return todayTasks.filter((t: TodayTask) => t.completedToday).length
   }, [todayTasks])
 
   const upcomingTask = useMemo(() => {
-    return todayTasks.find(t => !(t as any).completedToday)
+    return todayTasks.find((t: TodayTask) => !t.completedToday)
   }, [todayTasks])
 
   const quickActions = useMemo(() => [
@@ -419,9 +420,9 @@ export function DashboardView() {
                     <Badge variant="destructive" className="text-[10px] h-4 shrink-0 px-1.5">紧急</Badge>
                   </div>
                 ))}
-                {todayTasks.slice(0, urgentTasks.length > 0 ? 5 : 8).map(task => {
-                  const isOverdue = (task as any).isOverdue
-                  const completedToday = (task as any).completedToday
+                {todayTasks.slice(0, urgentTasks.length > 0 ? 5 : 8).map((task: TodayTask) => {
+                  const isOverdue = task.isOverdue
+                  const completedToday = task.completedToday
                   return (
                     <div
                       key={task.id}

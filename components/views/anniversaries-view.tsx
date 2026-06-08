@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { useAppStore, Anniversary } from '@/lib/store'
+import { useAppStore } from '@/lib/store'
+import type { Anniversary } from '@/lib/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -33,9 +34,10 @@ import {
   Bell,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { APP_COLORS } from '@/lib/config'
 
 const anniversaryIcons = ['🎂', '💍', '📅', '🎉', '❤️', '🎓', '🏆', '🌟', '🎄', '🎃']
-const anniversaryColors = ['#E91E63', '#FF5722', '#4A90E2', '#7ED321', '#9B59B6', '#F5A623', '#00CED1', '#607D8B']
+const anniversaryColors = [APP_COLORS.pink, '#FF5722', APP_COLORS.blue, APP_COLORS.green, APP_COLORS.purple, APP_COLORS.orange, '#00CED1', APP_COLORS.gray]
 
 const typeLabels: Record<Anniversary['type'], string> = {
   birthday: '生日',
@@ -54,7 +56,10 @@ const typeIcons: Record<Anniversary['type'], typeof Heart> = {
 }
 
 export function AnniversariesView() {
-  const { anniversaries, addAnniversary, updateAnniversary, deleteAnniversary } = useAppStore()
+  const anniversaries = useAppStore((s) => s.anniversaries)
+  const addAnniversary = useAppStore((s) => s.addAnniversary)
+  const updateAnniversary = useAppStore((s) => s.updateAnniversary)
+  const deleteAnniversary = useAppStore((s) => s.deleteAnniversary)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [editingAnniversary, setEditingAnniversary] = useState<Anniversary | null>(null)
   const [newAnniversary, setNewAnniversary] = useState({
@@ -63,7 +68,7 @@ export function AnniversariesView() {
     type: 'countdown' as Anniversary['type'],
     repeat: false,
     remindDays: 7,
-    color: '#4A90E2',
+    color: APP_COLORS.blue as string,
     icon: '📅',
     note: '',
   })
@@ -131,7 +136,7 @@ export function AnniversariesView() {
       type: 'countdown',
       repeat: false,
       remindDays: 7,
-      color: '#4A90E2',
+      color: APP_COLORS.blue,
       icon: '📅',
       note: '',
     })
@@ -151,7 +156,7 @@ export function AnniversariesView() {
       type: 'countdown',
       repeat: false,
       remindDays: 7,
-      color: '#4A90E2',
+      color: APP_COLORS.blue,
       icon: '📅',
       note: '',
     })
@@ -223,6 +228,7 @@ export function AnniversariesView() {
                     <SelectItem value="anniversary">纪念日</SelectItem>
                     <SelectItem value="countdown">倒数日</SelectItem>
                     <SelectItem value="festival">节日</SelectItem>
+                    <SelectItem value="custom">自定义</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

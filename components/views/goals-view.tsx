@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { useAppStore, Goal, Milestone } from '@/lib/store'
+import { useAppStore } from '@/lib/store'
+import type { Goal, Milestone } from '@/lib/types'
 import { toast } from 'sonner'
 import { useShallow } from 'zustand/react/shallow'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'

@@ -1,20 +1,29 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useAppStore } from '@/lib/store'
 import { useStats, useStreak, useTodayTasks, useUrgentTasks } from '@/lib/hooks'
-import { CheckCircle2, Clock, Flame, Target, ChevronRight, Timer, Plus, Brain, Sparkles, Calendar, ListChecks, BarChart3 } from 'lucide-react'
+import { CheckCircle2, Clock, Flame, Target, ChevronRight, Timer, Plus, Brain, Sparkles, Calendar, ListChecks, BarChart3, Moon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MobileStatCard } from '@/components/mobile/mobile-stat-card'
 import { MobileSectionHeader } from '@/components/mobile/mobile-section-header'
 import { MobileEmptyState } from '@/components/mobile/mobile-empty-state'
+import { DailyReviewDialog } from '@/components/daily-review-dialog'
+
+const QUICK_ACTIONS = [
+  { id: 'add-task', label: '新建任务', icon: Plus, color: 'text-blue-500', bg: 'bg-blue-500/10', view: 'tasks' },
+  { id: 'focus', label: '开始专注', icon: Brain, color: 'text-violet-500', bg: 'bg-violet-500/10', view: 'focus' },
+  { id: 'calendar', label: '日历', icon: Calendar, color: 'text-green-500', bg: 'bg-green-500/10', view: 'calendar' },
+  { id: 'stats', label: '统计', icon: BarChart3, color: 'text-orange-500', bg: 'bg-orange-500/10', view: 'stats' },
+]
 
 export function MobileDashboardView({ onNavigate }: { onNavigate?: (view: string) => void }) {
-  const { tasks, habits, habitCheckIns, completeTask, pomodoroTimerState, focusGoals, pomodoroSessions } = useAppStore()
+  const { tasks, habits, habitCheckIns, completeTask, pomodoroTimerState, focusGoals, pomodoroSessions, dailyReviewSettings } = useAppStore()
   const stats = useStats()
   const streak = useStreak()
   const todayTasks = useTodayTasks()
   const urgentTasks = useUrgentTasks()
+  const [dailyReviewOpen, setDailyReviewOpen] = useState(false)
 
   const today = new Date()
   const hour = today.getHours()
@@ -42,13 +51,6 @@ export function MobileDashboardView({ onNavigate }: { onNavigate?: (view: string
 
   const circumference = 2 * Math.PI * 44
   const focusStrokeDashoffset = circumference - (focusPercent / 100) * circumference
-
-  const QUICK_ACTIONS = [
-    { id: 'add-task', label: '新建任务', icon: Plus, color: 'text-blue-500', bg: 'bg-blue-500/10', action: () => onNavigate?.('tasks') },
-    { id: 'focus', label: '开始专注', icon: Brain, color: 'text-violet-500', bg: 'bg-violet-500/10', action: () => onNavigate?.('focus') },
-    { id: 'calendar', label: '日历', icon: Calendar, color: 'text-green-500', bg: 'bg-green-500/10', action: () => onNavigate?.('calendar') },
-    { id: 'stats', label: '统计', icon: BarChart3, color: 'text-orange-500', bg: 'bg-orange-500/10', action: () => onNavigate?.('stats') },
-  ]
 
   return (
     <div className="space-y-5 px-4 pt-4 pb-24">
@@ -119,7 +121,7 @@ export function MobileDashboardView({ onNavigate }: { onNavigate?: (view: string
           <button
             key={action.id}
             className={cn('flex-1 flex flex-col items-center gap-1.5 py-3 rounded-2xl glass-card active:scale-95 transition-all')}
-            onClick={action.action}
+            onClick={() => onNavigate?.(action.view)}
           >
             <div className={cn('h-9 w-9 rounded-xl flex items-center justify-center', action.bg)}>
               <action.icon className={cn('h-4 w-4', action.color)} />
@@ -260,6 +262,40 @@ export function MobileDashboardView({ onNavigate }: { onNavigate?: (view: string
           </div>
         </div>
       )}
+
+      {(() => {
+        const reviewTime = dailyReviewSettings?.reviewTime || '21:00'
+        const [rh, rm] = reviewTime.split(':').map(Number)
+        const now = new Date()
+        const isAfterReviewTime = now.getHours() > rh || (now.getHours() === rh && now.getMinutes() >= rm)
+        const todayStr = now.toISOString().slice(0, 10)
+        const alreadyReviewed = dailyReviewSettings?.lastReviewDate === todayStr
+        if (!isAfterReviewTime) return null
+        return (
+          <>
+            <button
+              className="w-full rounded-2xl bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border border-indigo-500/20 p-4 flex items-center justify-between active:scale-[0.98] transition-transform"
+              onClick={() => !alreadyReviewed && setDailyReviewOpen(true)}
+            >
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-full bg-indigo-500/15 flex items-center justify-center">
+                  <Moon className="h-5 w-5 text-indigo-500" />
+                </div>
+                <div className="text-left">
+                  <p className="font-semibold text-sm">每日回顾</p>
+                  <p className="text-xs text-muted-foreground">回顾今天的收获与成长</p>
+                </div>
+              </div>
+              {alreadyReviewed ? (
+                <span className="text-xs font-medium text-green-500 bg-green-500/10 px-2.5 py-1 rounded-full">已完成</span>
+              ) : (
+                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+              )}
+            </button>
+            <DailyReviewDialog open={dailyReviewOpen} onOpenChange={setDailyReviewOpen} />
+          </>
+        )
+      })()}
     </div>
   )
 }

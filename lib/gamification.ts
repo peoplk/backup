@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
-import { useAppStore } from './store'
-import type { PomodoroSession, Habit, Task, HabitCheckIn } from './types'
+import { useAppStore } from '@/lib/store'
+import type { PomodoroSession, Habit, Task, HabitCheckIn } from '@/lib/types'
 
 export interface GameProgress {
   level: number
@@ -402,7 +402,138 @@ export function useGamification() {
 
 // 顶层导出：触发成就检查（供外部动态 import 调用）
 export function checkAchievementsNow(): { newlyUnlocked: Achievement[]; newPoints: number } {
-  return { newlyUnlocked: [], newPoints: 0 }
+  const { pomodoroSessions, tasks, habits, habitCheckIns, achievements } = useAppStore.getState()
+
+  const workSessions = pomodoroSessions.filter((s) => s.type === 'work')
+  const completedTasks = tasks.filter((t) => t.status === 'done')
+  const maxStreak = Math.max(
+    ...habits.map((h) => calculateHabitStreakStandalone(h.id, habitCheckIns)),
+    0
+  )
+  const focusStreak = calculateStreak(workSessions)
+
+  const newAchievements: Achievement[] = []
+  const unlockedMap = new Map(achievements.map((a) => [a.id, a]))
+
+  ACHIEVEMENTS.forEach((achievement) => {
+    if (unlockedMap.has(achievement.id)) return
+    let unlocked = false
+    switch (achievement.category) {
+      case 'focus':
+        if (achievement.id === 'time-traveler') {
+          const totalMinutes = workSessions.reduce((acc, s) => acc + s.duration / 60, 0)
+          unlocked = totalMinutes >= 6000
+        } else if (achievement.id === 'tree-planter') {
+          unlocked = workSessions.length >= 100
+        } else {
+          unlocked = workSessions.length >= achievement.requirement
+        }
+        break
+      case 'tasks':
+        if (achievement.id === 'project-master') {
+          const projects = new Set(completedTasks.filter((t) => !!t.project).map((t) => t.project as string))
+          unlocked = projects.size >= 5
+        } else if (achievement.id === 'task-terminator') {
+          const weekAgo = Date.now() - 7 * 86400_000
+          unlocked = completedTasks.filter((t) => t.completedAt && new Date(t.completedAt).getTime() >= weekAgo).length >= 20
+        } else {
+          unlocked = completedTasks.length >= achievement.requirement
+        }
+        break
+      case 'habits':
+        unlocked = maxStreak >= achievement.requirement
+        break
+      case 'streak':
+        unlocked = focusStreak >= achievement.requirement
+        break
+      case 'special':
+        if (achievement.id === 'night-owl') {
+          unlocked = workSessions.some((s) => {
+            const h = new Date(s.completedAt).getHours()
+            return h >= 23 || h < 5
+          })
+        } else if (achievement.id === 'early-bird') {
+          unlocked = workSessions.some((s) => {
+            const h = new Date(s.completedAt).getHours()
+            return h >= 5 && h < 7
+          })
+        } else if (achievement.id === 'weekend-warrior') {
+          unlocked =
+            workSessions.filter((s) => {
+              const d = new Date(s.completedAt).getDay()
+              return d === 0 || d === 6
+            }).length >= 10
+        } else if (achievement.id === 'marathon-runner') {
+          const byDate = new Map<string, number>()
+          workSessions.forEach((s) => {
+            const d = new Date(s.completedAt).toDateString()
+            byDate.set(d, (byDate.get(d) || 0) + 1)
+          })
+          unlocked = Array.from(byDate.values()).some((n) => n >= 6)
+        } else if (achievement.id === 'dawn-patrol') {
+          unlocked = workSessions.some((s) => {
+            const h = new Date(s.completedAt).getHours()
+            return h >= 4 && h < 6
+          })
+        } else if (achievement.id === 'multi-tasker') {
+          const ids = new Set(
+            workSessions.map((s) => s.taskId).filter(Boolean) as string[]
+          )
+          unlocked = ids.size >= 3
+        }
+        break
+    }
+
+    if (unlocked) {
+      newAchievements.push({
+        ...achievement,
+        unlocked: true,
+        unlockedAt: new Date(),
+      })
+    }
+  })
+
+  if (newAchievements.length > 0) {
+    const store = useAppStore.getState()
+    const newPoints = newAchievements.reduce((acc, a) => acc + a.reward, 0)
+    const storedAchievements = newAchievements.map((a) => ({
+      id: a.id,
+      name: a.name,
+      description: a.description,
+      icon: a.icon,
+      category: a.category as 'focus' | 'tasks' | 'habits' | 'streak' | 'special',
+      requirement: { type: 'count' as const, value: a.requirement, metric: 'count' },
+      earned: true,
+      earnedAt: a.unlockedAt || new Date(),
+      progress: 100,
+      tier: 'bronze' as const,
+      points: a.reward,
+    }))
+    useAppStore.setState({
+      achievements: [...store.achievements, ...storedAchievements],
+    })
+    store.addPoints(newPoints)
+  }
+
+  return { newlyUnlocked: newAchievements, newPoints: newAchievements.reduce((acc, a) => acc + a.reward, 0) }
+}
+
+function calculateHabitStreakStandalone(habitId: string, checkIns: HabitCheckIn[]): number {
+  let streak = 0
+  const checkDate = new Date()
+  while (true) {
+    const dateStr = checkDate.toDateString()
+    const c = checkIns.find(
+      (x) => x.habitId === habitId && new Date(x.date).toDateString() === dateStr
+    )
+    if (c?.completed) {
+      streak++
+      checkDate.setDate(checkDate.getDate() - 1)
+    } else {
+      break
+    }
+  }
+  return streak
 }
 
 function calculateStreak(sessions: PomodoroSession[]): number {

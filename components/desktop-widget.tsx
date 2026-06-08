@@ -1,7 +1,14 @@
 'use client'
 
+declare module 'react' {
+  interface CSSProperties {
+    WebkitAppRegion?: 'drag' | 'no-drag'
+  }
+}
+
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAppStore } from '@/lib/store'
+import { useShallow } from 'zustand/react/shallow'
 import { isRepeatTaskCompletedToday } from '@/lib/hooks'
 import {
   Play,
@@ -130,7 +137,7 @@ function CircularTimer({
         <button
           onClick={onReset}
           className="w-9 h-9 rounded-xl bg-muted/30 hover:bg-muted/50 flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground"
-          style={{ WebkitAppRegion: 'no-drag' } as any}
+          style={{ WebkitAppRegion: 'no-drag' }}
         >
           <RotateCcw className="w-4 h-4" />
         </button>
@@ -144,7 +151,7 @@ function CircularTimer({
             mode === 'short-break' && 'shadow-chart-2/25',
             mode === 'long-break' && 'shadow-chart-3/25',
           )}
-          style={{ WebkitAppRegion: 'no-drag' } as any}
+          style={{ WebkitAppRegion: 'no-drag' }}
         >
           {isRunning ? <Pause className="w-7 h-7" /> : <Play className="w-7 h-7 ml-0.5" />}
         </button>
@@ -152,7 +159,7 @@ function CircularTimer({
         <button
           onClick={onSkip}
           className="w-9 h-9 rounded-xl bg-muted/30 hover:bg-muted/50 flex items-center justify-center transition-colors text-muted-foreground hover:text-foreground"
-          style={{ WebkitAppRegion: 'no-drag' } as any}
+          style={{ WebkitAppRegion: 'no-drag' }}
         >
           <SkipForward className="w-4 h-4" />
         </button>
@@ -162,7 +169,10 @@ function CircularTimer({
 }
 
 function TimerView() {
-  const { tasks, pomodoroTimerState, updatePomodoroTimerState, pomodoroSettings } = useAppStore()
+  const tasks = useAppStore((s) => s.tasks)
+  const pomodoroTimerState = useAppStore((s) => s.pomodoroTimerState)
+  const updatePomodoroTimerState = useAppStore((s) => s.updatePomodoroTimerState)
+  const pomodoroSettings = useAppStore((s) => s.pomodoroSettings)
   const mode = pomodoroTimerState.mode
   const timeLeft = pomodoroTimerState.timeLeft
   const isRunning = pomodoroTimerState.isRunning
@@ -240,7 +250,7 @@ function TimerView() {
               key={task.id}
               onClick={() => handleSelectTask(task.id)}
               className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-muted/20 transition-colors text-left"
-              style={{ WebkitAppRegion: 'no-drag' } as any}
+              style={{ WebkitAppRegion: 'no-drag' }}
             >
               <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', priorityColors[task.priority] || priorityColors.low)} />
               <span className="text-[11px] text-foreground/80 truncate flex-1">{task.title}</span>
@@ -253,7 +263,13 @@ function TimerView() {
 }
 
 function TasksView() {
-  const { tasks, pomodoroTimerState, updatePomodoroTimerState, completeTask, repeatCompletions } = useAppStore()
+  const { tasks, pomodoroTimerState, updatePomodoroTimerState, completeTask, repeatCompletions } = useAppStore(useShallow((s) => ({
+    tasks: s.tasks,
+    pomodoroTimerState: s.pomodoroTimerState,
+    updatePomodoroTimerState: s.updatePomodoroTimerState,
+    completeTask: s.completeTask,
+    repeatCompletions: s.repeatCompletions,
+  })))
   const selectedTaskId = pomodoroTimerState.selectedTaskId
 
   const today = useMemo(() => {
@@ -341,7 +357,7 @@ function TasksView() {
       <button
         onClick={() => { if (!task.completedToday) handleCompleteTask(task.id) }}
         className="shrink-0"
-        style={{ WebkitAppRegion: 'no-drag' } as any}
+        style={{ WebkitAppRegion: 'no-drag' }}
       >
         {task.completedToday ? (
           <CircleCheck className="w-4 h-4 text-green-500" />
@@ -352,7 +368,7 @@ function TasksView() {
       <button
         onClick={() => handleSelectTask(task.id)}
         className="flex-1 min-w-0 text-left"
-        style={{ WebkitAppRegion: 'no-drag' } as any}
+        style={{ WebkitAppRegion: 'no-drag' }}
       >
         <div className="flex items-center gap-1.5">
           <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', task.completedToday ? 'bg-green-500' : (priorityColors[task.priority] || priorityColors.low))} />
@@ -368,7 +384,7 @@ function TasksView() {
   )
 
   return (
-    <div className="px-3 py-3 space-y-4 h-full overflow-y-auto" style={{ WebkitAppRegion: 'no-drag' } as any}>
+    <div className="px-3 py-3 space-y-4 h-full overflow-y-auto" style={{ WebkitAppRegion: 'no-drag' }}>
       {todayTasks.length > 0 && (
         <div>
           <div className="flex items-center gap-1.5 px-1 mb-2">
@@ -402,7 +418,9 @@ function TasksView() {
 }
 
 function HabitsView() {
-  const { habits, habitCheckIns, checkInHabit } = useAppStore()
+  const habits = useAppStore((s) => s.habits)
+  const habitCheckIns = useAppStore((s) => s.habitCheckIns)
+  const checkInHabit = useAppStore((s) => s.checkInHabit)
 
   const today = useMemo(() => {
     const d = new Date()
@@ -423,7 +441,7 @@ function HabitsView() {
   }, [checkInHabit])
 
   return (
-    <div className="px-3 py-3 space-y-4" style={{ WebkitAppRegion: 'no-drag' } as any}>
+    <div className="px-3 py-3 space-y-4" style={{ WebkitAppRegion: 'no-drag' }}>
       <div className="rounded-xl bg-muted/10 border border-border/15 p-3">
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10px] text-muted-foreground font-medium">今日习惯</span>
@@ -474,7 +492,13 @@ function HabitsView() {
 }
 
 function StatsView() {
-  const { tasks, pomodoroSessions, habits, habitCheckIns, anniversaries } = useAppStore()
+  const { tasks, pomodoroSessions, habits, habitCheckIns, anniversaries } = useAppStore(useShallow((s) => ({
+    tasks: s.tasks,
+    pomodoroSessions: s.pomodoroSessions,
+    habits: s.habits,
+    habitCheckIns: s.habitCheckIns,
+    anniversaries: s.anniversaries,
+  })))
 
   const today = useMemo(() => {
     const d = new Date()
@@ -657,7 +681,7 @@ export function DesktopWidget() {
     >
       <div
         className="shrink-0 flex items-center justify-between px-4 pt-3.5 pb-2.5"
-        style={{ WebkitAppRegion: 'drag' } as any}
+        style={{ WebkitAppRegion: 'drag' }}
       >
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-lg bg-chart-1/15 flex items-center justify-center">
@@ -678,7 +702,7 @@ export function DesktopWidget() {
           <button
             onClick={handleTogglePin}
             className="w-7 h-7 rounded-lg bg-muted/40 hover:bg-muted/60 flex items-center justify-center transition-colors"
-            style={{ WebkitAppRegion: 'no-drag' } as any}
+            style={{ WebkitAppRegion: 'no-drag' }}
             title={isPinned ? '取消置顶' : '置顶'}
           >
             {isPinned ? (
@@ -690,7 +714,7 @@ export function DesktopWidget() {
           <button
             onClick={handleClose}
             className="w-7 h-7 rounded-lg bg-muted/40 hover:bg-destructive/80 flex items-center justify-center transition-colors"
-            style={{ WebkitAppRegion: 'no-drag' } as any}
+            style={{ WebkitAppRegion: 'no-drag' }}
           >
             <X className="w-3 h-3 text-muted-foreground" />
           </button>
@@ -706,7 +730,7 @@ export function DesktopWidget() {
 
       <div
         className="shrink-0 grid grid-cols-4 px-2 py-2 border-t border-border/15"
-        style={{ WebkitAppRegion: 'no-drag' } as any}
+        style={{ WebkitAppRegion: 'no-drag' }}
       >
         {(Object.keys(tabConfig) as WidgetTab[]).map(key => {
           const { icon: Icon, label } = tabConfig[key]

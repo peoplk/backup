@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
-import { useAppStore } from './store'
-import type { Task, Goal, Habit, PomodoroSession, TimeEntry } from './types'
+import { useAppStore } from '@/lib/store'
+import type { Task, Goal, Habit, PomodoroSession, TimeEntry } from '@/lib/types'
 
 export interface DataLinkEvent {
   type: 'task_completed' | 'pomodoro_completed' | 'habit_checked' | 'goal_progress' | 'time_entry_added'

@@ -4,8 +4,8 @@ import { useState, useMemo, useCallback } from 'react'
 import { useAppStore } from '@/lib/store'
 import { useShallow } from 'zustand/react/shallow'
 import { cn } from '@/lib/utils'
-import { ChevronLeft, ChevronRight, Plus, Clock, Calendar, CheckCircle2, Heart, LayoutGrid, List } from 'lucide-react'
-import type { TimeBlockCategory } from '@/lib/types'
+import { ChevronLeft, ChevronRight, Plus, Clock, Calendar, CheckCircle2, Heart, LayoutGrid, List, Trash2 } from 'lucide-react'
+import type { TimeBlockCategory, TimeBlock } from '@/lib/types'
 import { MobileBottomSheet } from '@/components/mobile/mobile-bottom-sheet'
 import { MobileEmptyState } from '@/components/mobile/mobile-empty-state'
 
@@ -27,8 +27,8 @@ function getDaysInMonth(y: number, m: number) { return new Date(y, m + 1, 0).get
 function getFirstDayOfWeek(y: number, m: number) { return new Date(y, m, 1).getDay() }
 
 export function MobileCalendarView() {
-  const { tasks, timeBlocks, addTimeBlock, anniversaries, completeTask } = useAppStore(
-    useShallow((s) => ({ tasks: s.tasks, timeBlocks: s.timeBlocks, addTimeBlock: s.addTimeBlock, anniversaries: s.anniversaries, completeTask: s.completeTask }))
+  const { tasks, timeBlocks, addTimeBlock, updateTimeBlock, deleteTimeBlock, anniversaries, completeTask } = useAppStore(
+    useShallow((s) => ({ tasks: s.tasks, timeBlocks: s.timeBlocks, addTimeBlock: s.addTimeBlock, updateTimeBlock: s.updateTimeBlock, deleteTimeBlock: s.deleteTimeBlock, anniversaries: s.anniversaries, completeTask: s.completeTask }))
   )
   const today = new Date()
   const [viewMode, setViewMode] = useState<'month' | 'week'>('month')
@@ -40,6 +40,8 @@ export function MobileCalendarView() {
   const [newStartTime, setNewStartTime] = useState('09:00')
   const [newEndTime, setNewEndTime] = useState('10:00')
   const [newCategory, setNewCategory] = useState<TimeBlockCategory>('work')
+  const [editingBlock, setEditingBlock] = useState<TimeBlock | null>(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [swipeStartX, setSwipeStartX] = useState<number | null>(null)
 
   const daysInMonth = getDaysInMonth(currentYear, currentMonth)
@@ -125,6 +127,28 @@ export function MobileCalendarView() {
     addTimeBlock({ title: newTitle.trim(), date: selectedDate, startTime: newStartTime, endTime: newEndTime, category: newCategory, color: '' })
     setNewTitle(''); setNewStartTime('09:00'); setNewEndTime('10:00'); setNewCategory('work'); setShowAddSheet(false)
   }, [newTitle, selectedDate, newStartTime, newEndTime, newCategory, addTimeBlock])
+
+  const openEditSheet = useCallback((block: TimeBlock) => {
+    setEditingBlock(block)
+    setNewTitle(block.title)
+    setNewStartTime(block.startTime)
+    setNewEndTime(block.endTime)
+    setNewCategory(block.category)
+    setShowDeleteConfirm(false)
+    setShowAddSheet(true)
+  }, [])
+
+  const handleEditTimeBlock = useCallback(() => {
+    if (!editingBlock || !newTitle.trim()) return
+    updateTimeBlock(editingBlock.id, { title: newTitle.trim(), startTime: newStartTime, endTime: newEndTime, category: newCategory, color: '' })
+    setNewTitle(''); setNewStartTime('09:00'); setNewEndTime('10:00'); setNewCategory('work'); setEditingBlock(null); setShowAddSheet(false)
+  }, [editingBlock, newTitle, newStartTime, newEndTime, newCategory, updateTimeBlock])
+
+  const handleDeleteTimeBlock = useCallback(() => {
+    if (!editingBlock) return
+    deleteTimeBlock(editingBlock.id)
+    setNewTitle(''); setNewStartTime('09:00'); setNewEndTime('10:00'); setNewCategory('work'); setEditingBlock(null); setShowDeleteConfirm(false); setShowAddSheet(false)
+  }, [editingBlock, deleteTimeBlock])
 
   const monthLabel = `${currentYear}年${currentMonth + 1}月`
   const selectedDateLabel = selectedDate.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' })
@@ -293,8 +317,9 @@ export function MobileCalendarView() {
                       {hourEvents.map(event => (
                         <div key={event.id} className={cn(
                           'rounded-lg px-2.5 py-1.5 text-xs',
-                          event.type === 'timeblock' ? 'bg-primary/10 border border-primary/20' : 'bg-muted/30'
-                        )}>
+                          event.type === 'timeblock' ? 'bg-primary/10 border border-primary/20 active:bg-primary/20' : 'bg-muted/30',
+                          event.type === 'timeblock' && 'cursor-pointer active:scale-[0.98] transition-transform'
+                        )} onClick={() => { if (event.type === 'timeblock') openEditSheet(event.data) }}>
                           <div className="flex items-center gap-1.5">
                             <span className="font-medium">{event.startTime}</span>
                             {event.endTime && <span className="text-muted-foreground">- {event.endTime}</span>}
@@ -312,15 +337,15 @@ export function MobileCalendarView() {
         )}
       </div>
 
-      <button className="fixed bottom-24 right-4 z-30 h-12 w-12 rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/25 flex items-center justify-center active:scale-90 transition-transform" onClick={() => setShowAddSheet(true)}>
+      <button className="fixed bottom-24 right-4 z-30 h-12 w-12 rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/25 flex items-center justify-center active:scale-90 transition-transform" onClick={() => { setEditingBlock(null); setNewTitle(''); setNewStartTime('09:00'); setNewEndTime('10:00'); setNewCategory('work'); setShowAddSheet(true) }}>
         <Plus className="h-6 w-6" />
       </button>
 
-      <MobileBottomSheet open={showAddSheet} onClose={() => setShowAddSheet(false)} title="添加时间块" action={{ label: '添加', onClick: handleAddTimeBlock, disabled: !newTitle.trim() }}>
+      <MobileBottomSheet open={showAddSheet} onClose={() => { setShowAddSheet(false); setEditingBlock(null); setShowDeleteConfirm(false) }} title={editingBlock ? '编辑时间块' : '添加时间块'} action={{ label: editingBlock ? '保存' : '添加', onClick: editingBlock ? handleEditTimeBlock : handleAddTimeBlock, disabled: !newTitle.trim() }}>
         <div className="p-4 space-y-4">
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">标题</label>
-            <input type="text" placeholder="时间块名称" className="w-full h-10 px-3 rounded-xl bg-muted/50 text-sm outline-none focus:ring-2 focus:ring-primary/30" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddTimeBlock()} />
+            <input type="text" placeholder="时间块名称" className="w-full h-10 px-3 rounded-xl bg-muted/50 text-sm outline-none focus:ring-2 focus:ring-primary/30" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (editingBlock ? handleEditTimeBlock() : handleAddTimeBlock())} />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -341,6 +366,24 @@ export function MobileCalendarView() {
               })}
             </div>
           </div>
+          {editingBlock && (
+            <div className="pt-2 border-t border-border/30">
+              {showDeleteConfirm ? (
+                <div className="space-y-3">
+                  <p className="text-xs text-muted-foreground text-center">确定删除此时间块？</p>
+                  <div className="flex gap-3">
+                    <button className="flex-1 h-10 rounded-xl bg-muted/50 text-sm font-medium active:scale-95 transition-transform" onClick={() => setShowDeleteConfirm(false)}>取消</button>
+                    <button className="flex-1 h-10 rounded-xl bg-destructive text-destructive-foreground text-sm font-medium active:scale-95 transition-transform" onClick={handleDeleteTimeBlock}>确认删除</button>
+                  </div>
+                </div>
+              ) : (
+                <button className="w-full h-10 rounded-xl border border-destructive/30 text-destructive text-sm font-medium flex items-center justify-center gap-2 active:scale-95 transition-transform" onClick={() => setShowDeleteConfirm(true)}>
+                  <Trash2 className="h-4 w-4" />
+                  删除
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </MobileBottomSheet>
     </div>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useAppStore } from '@/lib/store'
+import { useShallow } from 'zustand/react/shallow'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
@@ -29,7 +30,15 @@ export function TaskQuickActions({ taskId, compact = false }: TaskQuickActionsPr
     startTimeEntry,
     stopTimeEntry,
     setActiveView,
-  } = useAppStore()
+  } = useAppStore(useShallow((s) => ({
+    tasks: s.tasks,
+    pomodoroTimerState: s.pomodoroTimerState,
+    updatePomodoroTimerState: s.updatePomodoroTimerState,
+    activeTimeEntry: s.activeTimeEntry,
+    startTimeEntry: s.startTimeEntry,
+    stopTimeEntry: s.stopTimeEntry,
+    setActiveView: s.setActiveView,
+  })))
 
   const task = tasks.find(t => t.id === taskId)
   if (!task) return null

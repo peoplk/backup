@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { useAppStore, Project } from '@/lib/store'
+import { useAppStore } from '@/lib/store'
+import type { Project } from '@/lib/types'
 import { useShallow } from 'zustand/react/shallow'
 import { useDataLink } from '@/lib/data-link-service'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'

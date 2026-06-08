@@ -133,7 +133,11 @@ export function useAutoCleanup() {
 }
 
 export function useStats() {
-  const { tasks, pomodoroSessions, timeEntries, habits, habitCheckIns } = useAppStore()
+  const tasks = useAppStore((s) => s.tasks)
+  const pomodoroSessions = useAppStore((s) => s.pomodoroSessions)
+  const timeEntries = useAppStore((s) => s.timeEntries)
+  const habits = useAppStore((s) => s.habits)
+  const habitCheckIns = useAppStore((s) => s.habitCheckIns)
 
   const today = useMemo(() => {
     const d = new Date()
@@ -190,7 +194,9 @@ export function useStats() {
 }
 
 export function useWeekStats() {
-  const { tasks, pomodoroSessions, timeEntries } = useAppStore()
+  const tasks = useAppStore((s) => s.tasks)
+  const pomodoroSessions = useAppStore((s) => s.pomodoroSessions)
+  const timeEntries = useAppStore((s) => s.timeEntries)
 
   const weekStats = useMemo(() => {
     const today = new Date()
@@ -223,18 +229,19 @@ export function useWeekStats() {
 }
 
 export function useStreak() {
-  const { pomodoroSessions } = useAppStore()
+  const pomodoroSessions = useAppStore((s) => s.pomodoroSessions)
 
   const streak = useMemo(() => {
     const allWorkSessions = pomodoroSessions.filter((s) => s.type === 'work')
     const dates = [...new Set(allWorkSessions.map((s) => new Date(s.completedAt).toDateString()))]
     dates.sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
+    const dateSet = new Set(dates)
 
     let count = 0
     const checkDate = new Date()
     for (let i = 0; i < dates.length; i++) {
       const dateStr = checkDate.toDateString()
-      if (dates.includes(dateStr)) {
+      if (dateSet.has(dateStr)) {
         count++
         checkDate.setDate(checkDate.getDate() - 1)
       } else if (i === 0) {
@@ -251,7 +258,8 @@ export function useStreak() {
 }
 
 export function useHabitStats() {
-  const { habits, habitCheckIns } = useAppStore()
+  const habits = useAppStore((s) => s.habits)
+  const habitCheckIns = useAppStore((s) => s.habitCheckIns)
 
   const today = useMemo(() => {
     const d = new Date()
@@ -327,7 +335,8 @@ export function useHabitStats() {
 }
 
 export function useWeeklyData() {
-  const { tasks, timeEntries } = useAppStore()
+  const tasks = useAppStore((s) => s.tasks)
+  const timeEntries = useAppStore((s) => s.timeEntries)
 
   const weekDays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 
@@ -364,7 +373,7 @@ export function useWeeklyData() {
 }
 
 export function useProjectData() {
-  const { projects } = useAppStore()
+  const projects = useAppStore((s) => s.projects)
 
   const projectData = useMemo(() => {
     const totalTime = projects.reduce((acc, p) => acc + p.totalTime, 0)
@@ -382,7 +391,7 @@ export function useProjectData() {
 }
 
 export function useFocusData() {
-  const { pomodoroSessions } = useAppStore()
+  const pomodoroSessions = useAppStore((s) => s.pomodoroSessions)
 
   const focusData = useMemo(() => {
     const hourBuckets: Record<string, number> = {}

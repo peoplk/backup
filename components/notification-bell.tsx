@@ -1,6 +1,8 @@
 'use client'
 
-import { useAppStore, Notification } from '@/lib/store'
+import { useAppStore } from '@/lib/store'
+import type { Notification } from '@/lib/types'
+import { useShallow } from 'zustand/react/shallow'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -58,7 +60,13 @@ export function NotificationBell() {
     markAllNotificationsRead,
     clearNotifications,
     setActiveView 
-  } = useAppStore()
+  } = useAppStore(useShallow((s) => ({
+    notifications: s.notifications,
+    markNotificationRead: s.markNotificationRead,
+    markAllNotificationsRead: s.markAllNotificationsRead,
+    clearNotifications: s.clearNotifications,
+    setActiveView: s.setActiveView,
+  })))
 
   const unreadCount = notifications.filter(n => !n.read).length
 

@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useRef, useEffect, useMemo } from 'react'
-import { useAppStore, Task, RepeatRule, SubTask, ScheduleItemType, TaskReminder } from '@/lib/store'
+import { useState, useRef, useEffect, useMemo, memo } from 'react'
+import { useAppStore } from '@/lib/store'
+import type { Task, RepeatRule, SubTask, ScheduleItemType, TaskReminder } from '@/lib/types'
 import { isRepeatTaskCompletedToday } from '@/lib/hooks'
 import { useSmartLists } from '@/lib/smart-lists'
-import { WEEK_DAYS, MONTH_NAMES, PRIORITY_CONFIG, TIME_SLOTS } from '@/lib/config'
+import { WEEK_DAYS, MONTH_NAMES, PRIORITY_CONFIG, TIME_SLOTS, APP_COLORS } from '@/lib/config'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -106,9 +107,9 @@ const priorityConfig = {
 }
 
 const typeConfig = {
-  task: { label: '任务', icon: ListTodo, color: '#4A90E2', bgColor: 'bg-chart-1/20' },
-  event: { label: '日程', icon: CalendarClock, color: '#9B59B6', bgColor: 'bg-purple-100 dark:bg-purple-900/20' },
-  reminder: { label: '提醒', icon: Bell, color: '#F5A623', bgColor: 'bg-orange-100 dark:bg-orange-900/20' },
+  task: { label: '任务', icon: ListTodo, color: APP_COLORS.blue, bgColor: 'bg-chart-1/20' },
+  event: { label: '日程', icon: CalendarClock, color: APP_COLORS.purple, bgColor: 'bg-purple-100 dark:bg-purple-900/20' },
+  reminder: { label: '提醒', icon: Bell, color: APP_COLORS.orange, bgColor: 'bg-orange-100 dark:bg-orange-900/20' },
 }
 
 const repeatLabels: Record<RepeatRule['type'], string> = {
@@ -122,7 +123,7 @@ const repeatLabels: Record<RepeatRule['type'], string> = {
 const weekDays = WEEK_DAYS
 const monthNames = MONTH_NAMES
 
-function SortableKanbanCard({ task, today }: { task: Task; today: Date }) {
+const SortableKanbanCard = memo(function SortableKanbanCard({ task, today }: { task: Task; today: Date }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id })
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -202,7 +203,7 @@ function SortableKanbanCard({ task, today }: { task: Task; today: Date }) {
       </div>
     </div>
   )
-}
+})
 
 const timeSlots = TIME_SLOTS
 
@@ -337,14 +338,14 @@ export function TasksView() {
     repeatEndDate: '',
     repeatEndCount: 10,
     reminders: [] as TaskReminder[],
-    color: '#4A90E2',
+    color: APP_COLORS.blue as string,
     energy: 'medium' as Task['energy'],
   })
   const [newTag, setNewTag] = useState('')
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({})
   const [contextMenu, setContextMenu] = useState<{ taskId: string; x: number; y: number } | null>(null)
 
-  const allTags = [...new Set(tasks.flatMap((t) => t.tags))]
+  const allTags = useMemo(() => [...new Set(tasks.flatMap((t) => t.tags))], [tasks])
   const { smartLists, getSmartListTasks } = useSmartLists()
 
   const today = new Date()
@@ -376,13 +377,14 @@ export function TasksView() {
     return filtered
   }, [tasks, searchQuery, filterPriority, filterStatus, filterTag, filterType, filterDate, activeSmartList, getSmartListTasks])
 
-  const hasAnyFilter = () =>
+  const hasAnyFilter = useMemo(() =>
     !!searchQuery ||
     filterPriority !== 'all' ||
     filterStatus !== 'all' ||
     filterTag !== 'all' ||
     filterType !== 'all' ||
     !!filterDate
+  , [searchQuery, filterPriority, filterStatus, filterTag, filterType, filterDate])
 
   const groupedTasks = useMemo(() => {
     const sortTasks = (taskList: Task[]) => {
@@ -440,11 +442,11 @@ export function TasksView() {
     }
   }, [filteredTasks])
 
-  const kanbanColumns = [
+  const kanbanColumns = useMemo(() => [
     { id: 'todo' as const, label: '待办', icon: ListTodo, color: 'border-t-chart-1', headerBg: 'bg-chart-1/5' },
     { id: 'in-progress' as const, label: '进行中', icon: Play, color: 'border-t-chart-3', headerBg: 'bg-chart-3/5' },
     { id: 'done' as const, label: '已完成', icon: CheckCircle2, color: 'border-t-chart-2', headerBg: 'bg-chart-2/5' },
-  ]
+  ], [])
 
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null)
@@ -662,7 +664,7 @@ export function TasksView() {
       repeatEndDate: '',
       repeatEndCount: 10,
       reminders: [],
-      color: '#4A90E2',
+      color: APP_COLORS.blue,
       energy: 'medium',
     })
     setNewTag('')
@@ -691,7 +693,7 @@ export function TasksView() {
       repeatEndDate: task.repeatRule?.endDate ? new Date(task.repeatRule.endDate).toISOString().split('T')[0] : '',
       repeatEndCount: task.repeatRule?.endAfterCount || 10,
       reminders: task.reminders ? [...task.reminders] : [],
-      color: task.color || '#4A90E2',
+      color: task.color || APP_COLORS.blue,
       energy: task.energy || 'medium',
     })
     setIsAddDialogOpen(true)
@@ -799,7 +801,7 @@ export function TasksView() {
       repeatEndDate: '',
       repeatEndCount: 10,
       reminders: [],
-      color: '#4A90E2',
+      color: APP_COLORS.blue,
       energy: 'medium',
     })
     setIsAddDialogOpen(true)
@@ -836,7 +838,7 @@ export function TasksView() {
     return () => window.removeEventListener('task-context-menu', handleContextMenu)
   }, [])
 
-  const TaskItem = ({ task }: { task: Task }) => {
+  const TaskItem = memo(({ task }: { task: Task }) => {
     const priority = priorityConfig[task.priority]
     const PriorityIcon = priority.icon
     const taskType = typeConfig[task.type || 'task']
@@ -1318,9 +1320,9 @@ export function TasksView() {
         </div>
       </TaskSelectionWrapper>
     )
-  }
+  })
 
-  const SubTaskItem = ({ 
+  const SubTaskItem = memo(({
     subTask, 
     taskId, 
     index,
@@ -1441,7 +1443,7 @@ export function TasksView() {
         </DropdownMenu>
       </div>
     )
-  }
+  })
 
   return (
     <div className="space-y-6 pb-20 animate-fade-in-up">
@@ -1934,7 +1936,7 @@ export function TasksView() {
                   <X className="h-3 w-3" />
                 </Badge>
               )}
-              {savedFilters.length > 0 || hasAnyFilter() ? (
+              {savedFilters.length > 0 || hasAnyFilter ? (
                 <div className="w-full">
                   <SavedFiltersBar
                     criteria={{
@@ -2344,7 +2346,7 @@ export function TasksView() {
                     repeatEndDate: ctxTask.repeatRule?.endDate ? new Date(ctxTask.repeatRule.endDate).toISOString().split('T')[0] : '',
                     repeatEndCount: ctxTask.repeatRule?.endAfterCount || 10,
                     reminders: ctxTask.reminders ? [...ctxTask.reminders] : [],
-                    color: ctxTask.color || '#4A90E2',
+                    color: ctxTask.color || APP_COLORS.blue,
                     energy: ctxTask.energy || 'medium',
                   })
                   setIsAddDialogOpen(true)

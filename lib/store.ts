@@ -30,8 +30,8 @@ import type {
   TaskReminder,
   SavedFilter,
   FilterCriteria,
-} from './types'
-import { CalendarBridge } from './calendar-bridge'
+} from '@/lib/types'
+import { CalendarBridge } from '@/lib/calendar-bridge'
 import { 
   DEFAULT_HABITS, 
   DEFAULT_ANNIVERSARIES, 
@@ -41,40 +41,8 @@ import {
   POMODORO_CONFIG,
   generateDefaultPomodoroSessions,
   generateHabitCheckIns
-} from './config'
-import { pushDataToCloud, resolveConflict, setSyncDataCallback, setSyncDataProvider } from './sync-store'
-
-export type { 
-  Task, 
-  TimeEntry, 
-  PomodoroSession, 
-  PomodoroSettings, 
-  Project, 
-  Habit, 
-  HabitCheckIn, 
-  Anniversary,
-  SubTask,
-  TaskComment,
-  RepeatRule,
-  RepeatTaskCompletion,
-  Notification,
-  Goal,
-  Milestone,
-  Achievement,
-  UserLevel,
-  Tag,
-  Reminder,
-  ScheduleItemType,
-  TimeBlock,
-  DistractionRecord,
-  DailyJournal,
-  TaskTemplate,
-  PomodoroStrictMode,
-  FocusPreset,
-  TaskReminder,
-  SavedFilter,
-  FilterCriteria,
-} from './types'
+} from '@/lib/config'
+import { pushDataToCloud, resolveConflict, setSyncDataCallback, setSyncDataProvider } from '@/lib/sync-store'
 
 interface AppState {
   tasks: Task[]
@@ -300,7 +268,12 @@ interface AppState {
   setActiveSavedFilterId: (id: string | null) => void
 }
 
-const generateId = () => Math.random().toString(36).substring(2, 15)
+const generateId = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID()
+  }
+  return Math.random().toString(36).substring(2, 15)
+}
 
 const defaultHabits: Habit[] = DEFAULT_HABITS.map((h, i) => ({
   ...h,
@@ -1230,13 +1203,13 @@ export const useAppStore = create<AppState>()(
             ],
           }
         }),
-      checkInHabit: (habitId, date, completed, note, value) =>
+      checkInHabit: (habitId, date, completed, note, value) => {
         set((state) => {
           const dateStr = new Date(date).toDateString()
           const existingIndex = state.habitCheckIns.findIndex(
             (c) => c.habitId === habitId && new Date(c.date).toDateString() === dateStr
           )
-          
+
           const habit = state.habits.find(h => h.id === habitId)
           let streak = 0
           if (completed && habit) {
@@ -1257,18 +1230,12 @@ export const useAppStore = create<AppState>()(
 
           const achievements = [7, 14, 21, 30, 60, 100]
           const achievement = completed && achievements.includes(streak)
-          
+
           const notification = achievement && habit ? {
             type: 'achievement' as const,
             title: '连续打卡成就',
             message: `恭喜！"${habit.name}" 已连续打卡 ${streak} 天`,
           } : null
-          
-          if (completed) {
-            import('./habit-goal-integration').then(({ HabitGoalIntegration }) => {
-              HabitGoalIntegration.updateGoalProgressFromHabit(habitId)
-            })
-          }
 
           if (existingIndex >= 0) {
             const newCheckIns = [...state.habitCheckIns]
@@ -1278,7 +1245,7 @@ export const useAppStore = create<AppState>()(
               note,
               value: value ?? newCheckIns[existingIndex].value,
             }
-            return { 
+            return {
               habitCheckIns: newCheckIns,
               notifications: notification ? [
                 {
@@ -1306,7 +1273,13 @@ export const useAppStore = create<AppState>()(
               ...state.notifications,
             ].slice(0, 50) : state.notifications,
           }
-        }),
+        })
+        if (completed) {
+          import('@/lib/habit-goal-integration').then(({ HabitGoalIntegration }) => {
+            HabitGoalIntegration.updateGoalProgressFromHabit(habitId)
+          })
+        }
+      },
       useStreakFreeze: (habitId) =>
         set((state) => {
           const habit = state.habits.find(h => h.id === habitId)

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useAppStore } from '@/lib/store'
+import { useShallow } from 'zustand/react/shallow'
 import {
   Dialog,
   DialogContent,
@@ -60,7 +61,17 @@ export function DailyReviewDialog({ open, onOpenChange, onComplete }: DailyRevie
     markDailyReviewShown,
     addJournal,
     getJournalForDate,
-  } = useAppStore()
+  } = useAppStore(useShallow((s) => ({
+    tasks: s.tasks,
+    pomodoroSessions: s.pomodoroSessions,
+    habits: s.habits,
+    habitCheckIns: s.habitCheckIns,
+    focusGoals: s.focusGoals,
+    dailyReviewSettings: s.dailyReviewSettings,
+    markDailyReviewShown: s.markDailyReviewShown,
+    addJournal: s.addJournal,
+    getJournalForDate: s.getJournalForDate,
+  })))
 
   const [mood, setMood] = useState<'great' | 'good' | 'neutral' | 'bad' | 'terrible' | null>(null)
   const [wins, setWins] = useState<string[]>([])

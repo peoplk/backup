@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAppStore } from '@/lib/store'
+import { useShallow } from 'zustand/react/shallow'
 import {
   Dialog,
   DialogContent,
@@ -49,7 +50,14 @@ export function CommandPalette() {
     addTask,
     updatePomodoroTimerState,
     pomodoroSettings,
-  } = useAppStore()
+  } = useAppStore(useShallow((s) => ({
+    tasks: s.tasks,
+    activeView: s.activeView,
+    setActiveView: s.setActiveView,
+    addTask: s.addTask,
+    updatePomodoroTimerState: s.updatePomodoroTimerState,
+    pomodoroSettings: s.pomodoroSettings,
+  })))
 
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')

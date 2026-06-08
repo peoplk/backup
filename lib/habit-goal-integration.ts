@@ -1,5 +1,5 @@
-import { useAppStore } from './store'
-import type { Habit, Goal, HabitCheckIn } from './types'
+import { useAppStore } from '@/lib/store'
+import type { Habit, Goal, HabitCheckIn } from '@/lib/types'
 
 export interface HabitGoalLink {
   habitId: string
@@ -16,8 +16,35 @@ export interface HabitContribution {
   lastCheckIn?: Date
 }
 
+const HABIT_GOAL_LINKS_KEY = 'focusflow-habit-goal-links'
+
+function loadLinksFromStorage(): HabitGoalLink[] {
+  try {
+    const stored = localStorage.getItem(HABIT_GOAL_LINKS_KEY)
+    return stored ? JSON.parse(stored) : []
+  } catch {
+    return []
+  }
+}
+
+function saveLinksToStorage(links: HabitGoalLink[]) {
+  localStorage.setItem(HABIT_GOAL_LINKS_KEY, JSON.stringify(links))
+}
+
 export class HabitGoalIntegration {
-  private static habitGoalLinks: HabitGoalLink[] = []
+  private static _habitGoalLinks: HabitGoalLink[] | null = null
+
+  private static get habitGoalLinks(): HabitGoalLink[] {
+    if (this._habitGoalLinks === null) {
+      this._habitGoalLinks = loadLinksFromStorage()
+    }
+    return this._habitGoalLinks
+  }
+
+  private static set habitGoalLinks(value: HabitGoalLink[]) {
+    this._habitGoalLinks = value
+    saveLinksToStorage(value)
+  }
   
   static linkHabitToGoal(
     habitId: string,

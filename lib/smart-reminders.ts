@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react'
-import { useAppStore } from './store'
-import type { Task, Habit } from './types'
+import { useAppStore } from '@/lib/store'
+import type { Task, Habit } from '@/lib/types'
 
 export interface SmartReminder {
   id: string
@@ -311,6 +311,7 @@ export function useSmartReminders() {
   }
 }
 
+// @deprecated 建议使用 useAutoNotifications 替代，该 hook 功能更完整
 export function useReminderScheduler() {
   const { getAllReminders, dismissReminder } = useSmartReminders()
   const { addNotification } = useAppStore()

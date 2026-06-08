@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
-import { useAppStore, type Task } from '@/lib/store'
+import { useState, useMemo, useCallback, memo } from 'react'
+import { useAppStore } from '@/lib/store'
+import type { Task } from '@/lib/types'
 import { useShallow } from 'zustand/react/shallow'
 import { cn } from '@/lib/utils'
 import { MobileTaskCard } from '@/components/mobile/mobile-task-card'
@@ -12,7 +13,7 @@ import type { AddTaskData } from '@/components/mobile/mobile-add-task-sheet'
 import { MobileTaskDetailSheet } from '@/components/mobile/mobile-task-detail-sheet'
 import {
   CheckCircle2, Calendar, CalendarDays, Star, Inbox, ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
-  Plus, Flag, FolderOpen, LayoutGrid, List, Play, ClipboardList, Archive
+  Plus, Flag, FolderOpen, LayoutGrid, List, Play, ClipboardList, Archive, Search, X, Trash2, Tag as TagIcon, CheckSquare, Square
 } from 'lucide-react'
 
 type FilterType = 'all' | 'today' | 'week' | 'starred' | 'done'
@@ -54,12 +55,14 @@ const SORT_OPTIONS: { id: SortMode; label: string }[] = [
 ]
 
 export function MobileTasksView() {
-  const { tasks, addTask, deleteTask, completeTask, uncompleteTask, toggleTaskStar, archiveTask, projects, tags, updateTask } = useAppStore(
+  const { tasks, addTask, deleteTask, completeTask, uncompleteTask, toggleTaskStar, archiveTask, projects, tags, updateTask, batchCompleteTasks, batchDeleteTasks, batchUpdateTaskPriority, batchAddTagToTasks } = useAppStore(
     useShallow(state => ({
       tasks: state.tasks, addTask: state.addTask, deleteTask: state.deleteTask,
       completeTask: state.completeTask, uncompleteTask: state.uncompleteTask,
       toggleTaskStar: state.toggleTaskStar, archiveTask: state.archiveTask,
       projects: state.projects, tags: state.tags, updateTask: state.updateTask,
+      batchCompleteTasks: state.batchCompleteTasks, batchDeleteTasks: state.batchDeleteTasks,
+      batchUpdateTaskPriority: state.batchUpdateTaskPriority, batchAddTagToTasks: state.batchAddTagToTasks,
     }))
   )
 
@@ -74,6 +77,12 @@ export function MobileTasksView() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [addTitle, setAddTitle] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>('list')
+  const [showSearch, setShowSearch] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [batchMode, setBatchMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [showBatchPriority, setShowBatchPriority] = useState(false)
+  const [showBatchTag, setShowBatchTag] = useState(false)
 
   const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d }, [])
   const tomorrow = useMemo(() => { const d = new Date(today); d.setDate(d.getDate() + 1); return d }, [today])
@@ -105,8 +114,18 @@ export function MobileTasksView() {
       case 'done': result = tasks.filter(t => t.status === 'done'); break
       default: result = tasks.filter(t => t.status !== 'done')
     }
-    return selectedProjectId !== 'all' ? result.filter(t => t.project === selectedProjectId) : result
-  }, [tasks, activeFilter, selectedProjectId, isTaskForToday, isTaskForWeek])
+    if (selectedProjectId !== 'all') result = result.filter(t => t.project === selectedProjectId)
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase()
+      result = result.filter(t =>
+        t.title?.toLowerCase().includes(q) ||
+        t.description?.toLowerCase().includes(q) ||
+        t.notes?.toLowerCase().includes(q) ||
+        t.tags?.some(tag => tag.toLowerCase().includes(q))
+      )
+    }
+    return result
+  }, [tasks, activeFilter, selectedProjectId, isTaskForToday, isTaskForWeek, searchQuery])
 
   const sortedTasks = useMemo(() => {
     const po: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 }
@@ -237,7 +256,57 @@ export function MobileTasksView() {
     })
   }
 
-  const activeSmartList = SMART_LISTS.find(s => s.id === activeFilter)!
+  const toggleSelectTask = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === sortedTasks.length && sortedTasks.length > 0) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(sortedTasks.map(t => t.id)))
+    }
+  }
+
+  const exitBatchMode = () => {
+    setBatchMode(false)
+    setSelectedIds(new Set())
+    setShowBatchPriority(false)
+    setShowBatchTag(false)
+  }
+
+  const handleBatchComplete = () => {
+    if (selectedIds.size === 0) return
+    batchCompleteTasks(Array.from(selectedIds))
+    exitBatchMode()
+  }
+
+  const handleBatchDelete = () => {
+    if (selectedIds.size === 0) return
+    batchDeleteTasks(Array.from(selectedIds))
+    exitBatchMode()
+  }
+
+  const handleBatchPriority = (priority: PriorityType) => {
+    if (selectedIds.size === 0) return
+    batchUpdateTaskPriority(Array.from(selectedIds), priority)
+    setShowBatchPriority(false)
+    exitBatchMode()
+  }
+
+  const handleBatchAddTag = (tag: string) => {
+    if (selectedIds.size === 0) return
+    batchAddTagToTasks(Array.from(selectedIds), tag)
+    setShowBatchTag(false)
+    exitBatchMode()
+  }
+
+  const activeSmartList = useMemo(() => SMART_LISTS.find(s => s.id === activeFilter)!, [activeFilter])
   const ActiveIcon = activeSmartList.icon
 
   return (
@@ -252,6 +321,24 @@ export function MobileTasksView() {
             <p className="text-[10px] text-muted-foreground">{filterCounts[activeFilter]} 个任务</p>
           </div>
           <div className="flex items-center gap-1">
+            <button
+              className={cn('flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-medium transition-all active:scale-95',
+                showSearch ? 'bg-primary/10 text-primary' : 'bg-muted/50 text-muted-foreground'
+              )}
+              onClick={() => { setShowSearch(!showSearch); if (showSearch) setSearchQuery('') }}
+              title="搜索"
+            >
+              <Search className="h-3.5 w-3.5" />
+            </button>
+            <button
+              className={cn('flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-medium transition-all active:scale-95',
+                batchMode ? 'bg-primary/10 text-primary' : 'bg-muted/50 text-muted-foreground'
+              )}
+              onClick={() => { if (batchMode) exitBatchMode(); else setBatchMode(true) }}
+              title="批量操作"
+            >
+              {batchMode ? '退出选择' : '选择'}
+            </button>
             <button
               className={cn('flex items-center gap-1 px-2 py-1.5 rounded-lg text-[11px] font-medium transition-all active:scale-95',
                 viewMode === 'list' ? 'bg-primary/10 text-primary' : 'bg-muted/50 text-muted-foreground'
@@ -317,6 +404,25 @@ export function MobileTasksView() {
             )
           })}
         </div>
+
+        {showSearch && (
+          <div className="flex items-center gap-2 px-4 py-2 border-b border-border/30">
+            <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+            <input
+              type="text"
+              className="flex-1 h-8 px-2 rounded-lg bg-muted/50 text-sm outline-none focus:ring-2 focus:ring-primary/30 placeholder:text-muted-foreground/50"
+              placeholder="搜索任务..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              autoFocus
+            />
+            {searchQuery && (
+              <button className="shrink-0 h-8 w-8 rounded-lg bg-muted/50 flex items-center justify-center active:scale-90 transition-transform" onClick={() => setSearchQuery('')}>
+                <X className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {showSortMenu && (
@@ -418,17 +524,32 @@ export function MobileTasksView() {
                 </div>
               )}
               {!collapsedGroups.has(group.key) && group.tasks.map(task => (
-                <MobileTaskCard
-                  key={task.id}
-                  task={task}
-                  projectColor={getProjectColor(task.project)}
-                  projectName={getProjectName(task.project)}
-                  isOverdue={isOverdue(task.dueDate)}
-                  formatDate={formatDate}
-                  onToggleComplete={() => task.status === 'done' ? uncompleteTask(task.id) : completeTask(task.id)}
-                  onToggleStar={() => toggleTaskStar(task.id)}
-                  onClick={() => setDetailTaskId(task.id)}
-                />
+                <div key={task.id} className="flex items-center">
+                  {batchMode && (
+                    <button
+                      className="shrink-0 pl-3 active:scale-90 transition-transform"
+                      onClick={(e) => { e.stopPropagation(); toggleSelectTask(task.id) }}
+                    >
+                      {selectedIds.has(task.id) ? (
+                        <CheckSquare className="h-5 w-5 text-primary" />
+                      ) : (
+                        <Square className="h-5 w-5 text-muted-foreground/40" />
+                      )}
+                    </button>
+                  )}
+                  <div className="flex-1">
+                    <MobileTaskCard
+                      task={task}
+                      projectColor={getProjectColor(task.project)}
+                      projectName={getProjectName(task.project)}
+                      isOverdue={isOverdue(task.dueDate)}
+                      formatDate={formatDate}
+                      onToggleComplete={() => task.status === 'done' ? uncompleteTask(task.id) : completeTask(task.id)}
+                      onToggleStar={() => toggleTaskStar(task.id)}
+                      onClick={() => batchMode ? toggleSelectTask(task.id) : setDetailTaskId(task.id)}
+                    />
+                  </div>
+                </div>
               ))}
             </div>
           ))
@@ -436,6 +557,70 @@ export function MobileTasksView() {
           <MobileEmptyState icon={CheckCircle2} title={activeFilter === 'done' ? '还没有已完成的任务' : '没有任务'} />
         )}
       </div>
+
+      {batchMode && (
+        <div className="fixed bottom-[56px] left-0 right-0 z-30 bg-background border-t border-border/40 px-4 py-2 space-y-2">
+          <div className="flex items-center justify-between">
+            <button
+              className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-muted/50 text-muted-foreground active:scale-95 transition-all"
+              onClick={toggleSelectAll}
+            >
+              {selectedIds.size === sortedTasks.length && sortedTasks.length > 0 ? '取消全选' : '全选'}
+            </button>
+            <span className="text-[11px] text-muted-foreground">已选 {selectedIds.size} 项</span>
+            <button
+              className="px-3 py-1.5 rounded-lg text-[11px] font-medium bg-muted/50 text-muted-foreground active:scale-95 transition-all"
+              onClick={exitBatchMode}
+            >
+              退出选择
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              className="flex-1 h-9 rounded-xl bg-primary/10 text-primary text-[11px] font-medium flex items-center justify-center gap-1 active:scale-95 transition-all disabled:opacity-40"
+              onClick={handleBatchComplete} disabled={selectedIds.size === 0}
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" /> 完成
+            </button>
+            <button
+              className="flex-1 h-9 rounded-xl bg-red-500/10 text-red-500 text-[11px] font-medium flex items-center justify-center gap-1 active:scale-95 transition-all disabled:opacity-40"
+              onClick={handleBatchDelete} disabled={selectedIds.size === 0}
+            >
+              <Trash2 className="h-3.5 w-3.5" /> 删除
+            </button>
+            <button
+              className="flex-1 h-9 rounded-xl bg-amber-500/10 text-amber-600 text-[11px] font-medium flex items-center justify-center gap-1 active:scale-95 transition-all disabled:opacity-40"
+              onClick={() => setShowBatchPriority(!showBatchPriority)} disabled={selectedIds.size === 0}
+            >
+              <Flag className="h-3.5 w-3.5" /> 改优先级
+            </button>
+            <button
+              className="flex-1 h-9 rounded-xl bg-violet-500/10 text-violet-600 text-[11px] font-medium flex items-center justify-center gap-1 active:scale-95 transition-all disabled:opacity-40"
+              onClick={() => setShowBatchTag(!showBatchTag)} disabled={selectedIds.size === 0}
+            >
+              <TagIcon className="h-3.5 w-3.5" /> 添加标签
+            </button>
+          </div>
+          {showBatchPriority && (
+            <div className="flex gap-1.5 pt-1">
+              {PRIORITY_OPTIONS.map(p => (
+                <button key={p} className="flex-1 px-2 py-1.5 rounded-lg bg-muted/50 text-[11px] font-medium active:scale-95 transition-all" onClick={() => handleBatchPriority(p)}>
+                  {p === 'urgent' ? '紧急' : p === 'high' ? '高' : p === 'medium' ? '中' : '低'}
+                </button>
+              ))}
+            </div>
+          )}
+          {showBatchTag && (
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {tags.map(tag => (
+                <button key={tag.id} className="flex items-center gap-1 px-2 py-1.5 rounded-full bg-muted/50 text-[11px] font-medium active:scale-95 transition-all" onClick={() => handleBatchAddTag(tag.name)}>
+                  <span className="h-2 w-2 rounded-full" style={{ backgroundColor: tag.color }} />{tag.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="fixed bottom-[56px] right-4 z-30">
         <button
@@ -475,7 +660,7 @@ const PRIORITY_DOT_COLORS: Record<string, string> = {
   low: 'bg-gray-400',
 }
 
-function KanbanTaskCard({ task, projectColor, projectName, isOverdue, formatDate, onClick, onMoveLeft, onMoveRight, onToggleComplete }: KanbanTaskCardProps) {
+const KanbanTaskCard = memo(function KanbanTaskCard({ task, projectColor, projectName, isOverdue, formatDate, onClick, onMoveLeft, onMoveRight, onToggleComplete }: KanbanTaskCardProps) {
   const isDone = task.status === 'done'
   return (
     <div
@@ -540,4 +725,4 @@ function KanbanTaskCard({ task, projectColor, projectName, isOverdue, formatDate
       </div>
     </div>
   )
-}
+})

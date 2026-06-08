@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
-import { useAppStore, Task } from '@/lib/store'
+import { useAppStore } from '@/lib/store'
+import type { Task } from '@/lib/types'
 
 interface RecommendedTask extends Task {
   recommendationScore: number

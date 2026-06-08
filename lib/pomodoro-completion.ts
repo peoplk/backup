@@ -1,4 +1,4 @@
-import { useAppStore } from './store'
+import { useAppStore } from '@/lib/store'
 
 export type PomodoroMode = 'work' | 'short-break' | 'long-break'
 

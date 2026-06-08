@@ -1,8 +1,8 @@
-import { useAppStore } from './store'
-import { useDataLink } from './data-link-service'
-import { completePomodoroSession } from './pomodoro-completion'
-import { recommendTasksForFocus, calculateSuggestedDuration } from './smart-recommendation'
-import type { Task } from './types'
+import { useAppStore } from '@/lib/store'
+import { dataLinkService } from '@/lib/data-link-service'
+import { completePomodoroSession } from '@/lib/pomodoro-completion'
+import { recommendTasksForFocus, calculateSuggestedDuration } from '@/lib/smart-recommendation'
+import type { Task } from '@/lib/types'
 
 export interface FocusTaskRecommendation {
   task: Task
@@ -78,8 +78,7 @@ export class FocusTaskIntegration {
     })
 
     if (result.sessionId) {
-      const dataLink = useDataLink()
-      dataLink.handlePomodoroCompletion(result.sessionId, duration, mode, taskId || undefined)
+      dataLinkService.handlePomodoroCompletion(result.sessionId, duration, mode, taskId || undefined)
     }
 
     if (result.taskEstimatedReached && taskId) {

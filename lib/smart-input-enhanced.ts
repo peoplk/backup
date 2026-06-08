@@ -1,4 +1,4 @@
-import type { Task } from './types'
+import type { Task } from '@/lib/types'
 
 export interface ParsedTaskInput {
   title: string
@@ -122,7 +122,7 @@ export function parseEnhancedInput(input: string): ParsedTaskInput {
   return result
 }
 
-function parseDate(text: string): { date: Date; remainingText: string } | null {
+export function parseDate(text: string): { date: Date; remainingText: string } | null {
   const now = new Date()
   let date = new Date()
   let remainingText = text

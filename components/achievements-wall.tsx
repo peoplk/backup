@@ -63,7 +63,10 @@ function getProgress(ach: Achievement, stats: { totalPomodoros: number; totalTas
 }
 
 export function AchievementsWall() {
-  const { achievements: storeAchievements, pomodoroSessions, tasks, habits } = useAppStore()
+  const storeAchievements = useAppStore((s) => s.achievements)
+  const pomodoroSessions = useAppStore((s) => s.pomodoroSessions)
+  const tasks = useAppStore((s) => s.tasks)
+  const habits = useAppStore((s) => s.habits)
   const { achievements: allAchievements, gameProgress, getLevelTitle } = useGamification()
   const [filter, setFilter] = useState<'all' | 'unlocked' | 'locked'>('all')
 

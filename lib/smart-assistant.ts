@@ -1,7 +1,7 @@
-import { useAppStore } from './store'
-import type { Task, Habit, Goal } from './types'
-import { FocusTaskIntegration } from './focus-task-integration'
-import { HabitGoalIntegration } from './habit-goal-integration'
+import { useAppStore } from '@/lib/store'
+import type { Task, Habit, Goal } from '@/lib/types'
+import { FocusTaskIntegration } from '@/lib/focus-task-integration'
+import { HabitGoalIntegration } from '@/lib/habit-goal-integration'
 
 export interface SmartSuggestion {
   type: 'task' | 'habit' | 'goal' | 'focus' | 'break'

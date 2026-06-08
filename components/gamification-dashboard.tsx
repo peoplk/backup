@@ -90,8 +90,8 @@ function StatsGrid() {
 
   return (
     <div className="grid grid-cols-2 gap-2">
-      {stats.map((stat, index) => (
-        <Card key={index} className="border-border/50">
+      {stats.map((stat) => (
+        <Card key={stat.label} className="border-border/50">
           <CardContent className="p-3">
             <div className="flex items-center gap-2">
               <stat.icon className={cn('h-4 w-4', stat.color)} />

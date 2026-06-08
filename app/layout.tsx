@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Analytics } from '@vercel/analytics/next'
 import Script from 'next/script'
 import { TitleBar } from '@/components/title-bar'
+import { ErrorBoundary } from '@/components/error-boundary'
 import { WhiteNoiseProvider } from '@/lib/white-noise-context'
 import { Toaster } from '@/components/ui/sonner'
 import './globals.css'
@@ -108,7 +109,9 @@ export default function RootLayout({
         </Script>
         <WhiteNoiseProvider>
           <TitleBar />
-          {children}
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
           <Toaster richColors position="bottom-right" />
         </WhiteNoiseProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}

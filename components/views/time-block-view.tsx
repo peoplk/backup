@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useMemo, useCallback } from 'react'
-import { useAppStore, TimeBlock } from '@/lib/store'
+import { useAppStore } from '@/lib/store'
+import type { TimeBlock } from '@/lib/types'
+import { useShallow } from 'zustand/react/shallow'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -66,7 +68,14 @@ export function TimeBlockView() {
     updateTimeBlock,
     deleteTimeBlock,
     completeTask,
-  } = useAppStore()
+  } = useAppStore(useShallow((s) => ({
+    tasks: s.tasks,
+    timeBlocks: s.timeBlocks,
+    addTimeBlock: s.addTimeBlock,
+    updateTimeBlock: s.updateTimeBlock,
+    deleteTimeBlock: s.deleteTimeBlock,
+    completeTask: s.completeTask,
+  })))
 
   const [currentDate, setCurrentDate] = useState(new Date())
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)

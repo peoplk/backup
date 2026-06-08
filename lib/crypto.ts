@@ -99,14 +99,25 @@ export function generateRandomPassword(length: number = 16): string {
 }
 
 export async function hashPassword(password: string): Promise<string> {
+  const salt = crypto.getRandomValues(new Uint8Array(16))
+  const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, '0')).join('')
   const encoder = new TextEncoder()
-  const data = encoder.encode(password)
+  const data = encoder.encode(saltHex + password)
   const hashBuffer = await crypto.subtle.digest('SHA-256', data)
   const hashArray = Array.from(new Uint8Array(hashBuffer))
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+  return `${saltHex}:${hashHex}`
 }
 
-export async function verifyPassword(password: string, hash: string): Promise<boolean> {
-  const passwordHash = await hashPassword(password)
-  return passwordHash === hash
+export async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  const colonIndex = stored.indexOf(':')
+  if (colonIndex === -1) return false
+  const saltHex = stored.slice(0, colonIndex)
+  const hashHex = stored.slice(colonIndex + 1)
+  const encoder = new TextEncoder()
+  const data = encoder.encode(saltHex + password)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  const computedHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+  return computedHash === hashHex
 }

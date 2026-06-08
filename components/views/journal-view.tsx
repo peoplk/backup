@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { useAppStore, DailyJournal } from '@/lib/store'
+import { useAppStore } from '@/lib/store'
+import type { DailyJournal } from '@/lib/types'
 import { useShallow } from 'zustand/react/shallow'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

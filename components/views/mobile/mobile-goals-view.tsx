@@ -4,11 +4,12 @@ import { useState, useMemo } from 'react'
 import { useAppStore } from '@/lib/store'
 import { useShallow } from 'zustand/react/shallow'
 import { cn } from '@/lib/utils'
+import { APP_COLORS } from '@/lib/config'
 import {
   Target, Plus, X, CheckCircle2, Circle, Clock,
   TrendingUp, Calendar, Flag, Pause, Play,
   Award, Trash2, Edit, ChevronDown, ChevronUp,
-  Sparkles,
+  Sparkles, Link2, Minus, ListTodo,
 } from 'lucide-react'
 import type { Goal } from '@/lib/types'
 
@@ -20,12 +21,12 @@ const goalTypeConfig: Record<Goal['type'], { label: string; color: string; icon:
 }
 
 const goalCategoryConfig: Record<Goal['category'], { label: string; color: string; icon: string }> = {
-  work: { label: '工作', color: '#4A90E2', icon: '💼' },
-  personal: { label: '个人', color: '#7ED321', icon: '🌟' },
-  health: { label: '健康', color: '#E91E63', icon: '💪' },
-  learning: { label: '学习', color: '#9B59B6', icon: '📚' },
-  finance: { label: '财务', color: '#F5A623', icon: '💰' },
-  other: { label: '其他', color: '#607D8B', icon: '📌' },
+  work: { label: '工作', color: APP_COLORS.blue, icon: '💼' },
+  personal: { label: '个人', color: APP_COLORS.green, icon: '🌟' },
+  health: { label: '健康', color: APP_COLORS.pink, icon: '💪' },
+  learning: { label: '学习', color: APP_COLORS.purple, icon: '📚' },
+  finance: { label: '财务', color: APP_COLORS.orange, icon: '💰' },
+  other: { label: '其他', color: APP_COLORS.gray, icon: '📌' },
 }
 
 type StatusFilter = 'all' | 'in-progress' | 'not-started' | 'completed' | 'paused'
@@ -61,9 +62,10 @@ const defaultFormData: GoalFormData = {
 }
 
 export function MobileGoalsView() {
-  const { goals, addGoal, updateGoal, deleteGoal, addMilestone, toggleMilestone } = useAppStore(
+  const { goals, tasks, addGoal, updateGoal, deleteGoal, addMilestone, toggleMilestone } = useAppStore(
     useShallow(state => ({
       goals: state.goals,
+      tasks: state.tasks,
       addGoal: state.addGoal,
       updateGoal: state.updateGoal,
       deleteGoal: state.deleteGoal,
@@ -79,6 +81,7 @@ export function MobileGoalsView() {
   const [expandedGoalId, setExpandedGoalId] = useState<string | null>(null)
   const [newMilestoneText, setNewMilestoneText] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
+  const [showTaskPicker, setShowTaskPicker] = useState<string | null>(null)
 
   const today = useMemo(() => {
     const d = new Date()
@@ -441,6 +444,132 @@ export function MobileGoalsView() {
                       >
                         <Plus className="h-4 w-4" />
                       </button>
+                    </div>
+
+                    {/* 进度更新 - 当有目标值时显示 */}
+                    {goal.targetValue && goal.targetValue > 0 && (() => {
+                      const cv = goal.currentValue || 0
+                      const tv = goal.targetValue
+                      const pct = Math.min(Math.round((cv / tv) * 100), 100)
+                      return (
+                        <div className="mb-4 pt-3 border-t border-border/30">
+                          <h4 className="text-xs font-semibold flex items-center gap-1.5 mb-2">
+                            <TrendingUp className="h-3.5 w-3.5" />
+                            进度更新
+                          </h4>
+                          <div className="flex items-center justify-between text-xs mb-1.5">
+                            <span className="text-muted-foreground">当前 / 目标</span>
+                            <span className="font-semibold">{cv} / {tv} {goal.unit || ''}</span>
+                          </div>
+                          <div className="h-2.5 rounded-full bg-muted/50 overflow-hidden mb-3">
+                            <div
+                              className={cn('h-full rounded-full transition-all duration-500', getProgressColor(pct))}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              className="h-8 w-8 rounded-xl bg-muted/60 flex items-center justify-center text-sm font-medium active:scale-90 transition-transform"
+                              onClick={() => {
+                                const nv = Math.max(0, cv - 1)
+                                updateGoal(goal.id, { currentValue: nv, progress: Math.round((nv / tv) * 100) })
+                              }}
+                            >−</button>
+                            <input
+                              type="number"
+                              className="flex-1 h-8 px-3 rounded-xl bg-muted/50 text-xs text-center outline-none focus:ring-2 focus:ring-primary/30 tabular-nums"
+                              value={cv}
+                              min={0}
+                              onChange={e => {
+                                const nv = Math.max(0, parseInt(e.target.value) || 0)
+                                updateGoal(goal.id, { currentValue: nv, progress: Math.round((nv / tv) * 100) })
+                              }}
+                            />
+                            <button
+                              className="h-8 w-8 rounded-xl bg-muted/60 flex items-center justify-center text-sm font-medium active:scale-90 transition-transform"
+                              onClick={() => {
+                                const nv = cv + 1
+                                updateGoal(goal.id, { currentValue: nv, progress: Math.round((nv / tv) * 100) })
+                              }}
+                            >+</button>
+                          </div>
+                        </div>
+                      )
+                    })()}
+
+                    {/* 关联任务管理 */}
+                    <div className="mb-4 pt-3 border-t border-border/30">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-xs font-semibold flex items-center gap-1.5">
+                          <Link2 className="h-3.5 w-3.5" />
+                          关联任务
+                        </h4>
+                        <button
+                          className="h-6 px-2 rounded-lg bg-primary/10 text-primary text-[10px] font-medium flex items-center gap-1 active:scale-95 transition-transform"
+                          onClick={() => setShowTaskPicker(showTaskPicker === goal.id ? null : goal.id)}
+                        >
+                          <Plus className="h-3 w-3" /> 添加
+                        </button>
+                      </div>
+
+                      {goal.linkedTasks.length > 0 ? (
+                        <div className="space-y-1 mb-2">
+                          {goal.linkedTasks.map(taskId => {
+                            const task = tasks.find(t => t.id === taskId)
+                            if (!task) return null
+                            return (
+                              <div key={taskId} className="flex items-center gap-2 py-1.5 px-2 rounded-lg bg-muted/30">
+                                <span className={cn(
+                                  'shrink-0 text-[10px]',
+                                  task.status === 'done' ? 'text-emerald-500' : 'text-muted-foreground/50'
+                                )}>
+                                  {task.status === 'done' ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Circle className="h-3.5 w-3.5" />}
+                                </span>
+                                <span className={cn(
+                                  'text-xs flex-1 truncate',
+                                  task.status === 'done' && 'line-through text-muted-foreground'
+                                )}>
+                                  {task.title}
+                                </span>
+                                <button
+                                  className="shrink-0 h-5 w-5 rounded-md bg-red-500/10 text-red-500 flex items-center justify-center active:scale-90 transition-transform"
+                                  onClick={() => updateGoal(goal.id, {
+                                    linkedTasks: goal.linkedTasks.filter(id => id !== taskId)
+                                  })}
+                                >
+                                  <Minus className="h-3 w-3" />
+                                </button>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-muted-foreground/60 mb-2">暂无关联任务</p>
+                      )}
+
+                      {showTaskPicker === goal.id && (() => {
+                        const availableTasks = tasks.filter(t =>
+                          t.status !== 'done' && !goal.linkedTasks.includes(t.id)
+                        )
+                        return (
+                          <div className="rounded-xl bg-muted/30 p-2 max-h-40 overflow-y-auto">
+                            {availableTasks.length > 0 ? availableTasks.map(task => (
+                              <button
+                                key={task.id}
+                                className="w-full flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-muted/50 active:scale-[0.98] transition-transform text-left"
+                                onClick={() => updateGoal(goal.id, {
+                                  linkedTasks: [...goal.linkedTasks, task.id]
+                                })}
+                              >
+                                <ListTodo className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                                <span className="text-xs truncate">{task.title}</span>
+                              </button>
+                            )) : (
+                              <p className="text-[11px] text-muted-foreground/60 text-center py-2">没有可添加的任务</p>
+                            )}
+                          </div>
+                        )
+                      })()}
                     </div>
 
                     <div className="flex items-center gap-2">

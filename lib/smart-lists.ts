@@ -1,7 +1,8 @@
 'use client'
 
 import { useMemo, useState, useEffect } from 'react'
-import { useAppStore, Task } from '@/lib/store'
+import { useAppStore } from '@/lib/store'
+import type { Task } from '@/lib/types'
 import { isRepeatTaskCompletedToday } from '@/lib/hooks'
 import type { RepeatTaskCompletion } from '@/lib/types'
 
