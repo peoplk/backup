@@ -62,7 +62,7 @@ const defaultFormData: GoalFormData = {
 }
 
 export function MobileGoalsView() {
-  const { goals, tasks, addGoal, updateGoal, deleteGoal, addMilestone, toggleMilestone } = useAppStore(
+  const { goals, tasks, addGoal, updateGoal, deleteGoal, addMilestone, toggleMilestone, deleteMilestone } = useAppStore(
     useShallow(state => ({
       goals: state.goals,
       tasks: state.tasks,
@@ -71,6 +71,7 @@ export function MobileGoalsView() {
       deleteGoal: state.deleteGoal,
       addMilestone: state.addMilestone,
       toggleMilestone: state.toggleMilestone,
+      deleteMilestone: state.deleteMilestone,
     }))
   )
 
@@ -416,6 +417,12 @@ export function MobileGoalsView() {
                             )}>
                               {milestone.title}
                             </span>
+                            <button
+                              className="shrink-0 h-5 w-5 rounded-md bg-red-500/10 text-red-500 flex items-center justify-center active:scale-90 transition-transform"
+                              onClick={() => deleteMilestone(goal.id, milestone.id)}
+                            >
+                              <Minus className="h-3 w-3" />
+                            </button>
                           </div>
                         ))}
                       </div>

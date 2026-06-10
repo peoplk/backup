@@ -11,13 +11,14 @@ import {
 } from 'lucide-react'
 
 type PriorityType = 'urgent' | 'high' | 'medium' | 'low'
-type RepeatType = 'none' | 'daily' | 'weekly' | 'monthly'
+type RepeatType = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'
 
 const REPEAT_OPTIONS: { id: RepeatType; label: string }[] = [
   { id: 'none', label: '不重复' },
   { id: 'daily', label: '每天' },
   { id: 'weekly', label: '每周' },
   { id: 'monthly', label: '每月' },
+  { id: 'yearly', label: '每年' },
 ]
 
 const PRIORITY_OPTIONS: PriorityType[] = ['urgent', 'high', 'medium', 'low']

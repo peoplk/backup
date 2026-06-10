@@ -1,4 +1,4 @@
-﻿﻿'use client'
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿'use client'
 
 import { useState, useRef } from 'react'
 import { useAppStore } from '@/lib/store'
@@ -12,7 +12,7 @@ import {
   Palette, Timer, AlertTriangle, Coffee, Trophy,
   Cloud, RefreshCw, CheckCircle2, User, Shield, Globe,
   FileJson, FileSpreadsheet, Lock, Unlock, AlertCircle,
-  X, Loader2,
+  X, Loader2, FolderOpen, Plus, Edit3,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -25,6 +25,10 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { SyncProviderSheet } from '@/components/mobile/sync-provider-sheet'
+import { getIsFirebaseConfigured } from '@/lib/firebase'
+import { getIsSupabaseConfigured } from '@/lib/supabase'
+import { getIsWebDAVConfigured } from '@/lib/webdav'
+import { getIsS3Configured } from '@/lib/s3-sync'
 
 const APP_VERSION = '2.0.0'
 
@@ -34,6 +38,7 @@ export function MobileSettingsView() {
     trashedItems, emptyTrash,
     tasks, pomodoroSessions, userLevel,
     habits, habitCheckIns, goals, anniversaries, projects,
+    addProject, updateProject, deleteProject,
   } = useAppStore(useShallow(state => ({
     pomodoroSettings: state.pomodoroSettings,
     updatePomodoroSettings: state.updatePomodoroSettings,
@@ -49,6 +54,9 @@ export function MobileSettingsView() {
     goals: state.goals,
     anniversaries: state.anniversaries,
     projects: state.projects,
+    addProject: state.addProject,
+    updateProject: state.updateProject,
+    deleteProject: state.deleteProject,
   })))
 
   const [themeMode, setThemeMode] = useState(() => {
@@ -97,6 +105,14 @@ export function MobileSettingsView() {
 
   // 开源许可
   const [showLicenseDialog, setShowLicenseDialog] = useState(false)
+
+  // 项目管理
+  const [showProjectSheet, setShowProjectSheet] = useState(false)
+  const [newProjectName, setNewProjectName] = useState('')
+  const [newProjectColor, setNewProjectColor] = useState('#6366f1')
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null)
+  const [editProjectName, setEditProjectName] = useState('')
+  const [editProjectColor, setEditProjectColor] = useState('')
 
   const handleThemeChange = (mode: string) => {
     setThemeMode(mode)
@@ -333,7 +349,21 @@ export function MobileSettingsView() {
         <ActionRow
           icon={Cloud}
           label="云同步"
-          value="点击配置"
+          value={(() => {
+            const provider = localStorage.getItem('mobile-sync-provider')
+            const enabled = localStorage.getItem('mobile-sync-enabled') === 'true'
+            const configuredProviders: string[] = []
+            if (getIsFirebaseConfigured()) configuredProviders.push('Firebase')
+            if (getIsSupabaseConfigured()) configuredProviders.push('Supabase')
+            if (getIsWebDAVConfigured()) configuredProviders.push('WebDAV')
+            if (getIsS3Configured()) configuredProviders.push('S3')
+            if (enabled && provider) {
+              const providerLabel = { firebase: 'Firebase', supabase: 'Supabase', webdav: 'WebDAV', s3: 'S3' }[provider] || provider
+              return `${providerLabel} 已启用`
+            }
+            if (configuredProviders.length > 0) return `${configuredProviders.join('/')} 已配置`
+            return '点击配置'
+          })()}
           onClick={() => setShowProviderSheet(true)}
         />
         <button
@@ -344,9 +374,9 @@ export function MobileSettingsView() {
             <span className="block h-2 w-2 rounded-full bg-muted-foreground/40" />
           </div>
           <div className="flex-1">
-            <p className="text-[13px]">未配置</p>
+            <p className="text-[13px]">选择同步服务</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">
-              点击选择 Firebase / Supabase / WebDAV
+              Firebase / Supabase / WebDAV / S3
             </p>
           </div>
         </button>
@@ -438,6 +468,15 @@ export function MobileSettingsView() {
         {trashedItems.length > 0 && (
           <ActionRow icon={Trash2} label={`回收站 (${trashedItems.length})`} onClick={() => emptyTrash()} destructive />
         )}
+      </Section>
+
+      <Section title="账号与安全">
+        <ActionRow icon={User} label="账号管理" value={displayName || '本地用户'} onClick={() => setShowAccountSheet(true)} />
+        <ActionRow icon={Lock} label="数据加密" value={encryptionEnabled ? '已启用' : '未启用'} onClick={() => setShowEncryptionSheet(true)} />
+      </Section>
+
+      <Section title="项目管理">
+        <ActionRow icon={FolderOpen} label="项目管理" value={`${projects.length} 个项目`} onClick={() => setShowProjectSheet(true)} />
       </Section>
 
       <Section title="关于">
@@ -763,6 +802,115 @@ export function MobileSettingsView() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* 项目管理 Sheet */}
+      <Sheet open={showProjectSheet} onOpenChange={setShowProjectSheet}>
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[80vh] overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>项目管理</SheetTitle>
+            <SheetDescription>管理你的项目分类</SheetDescription>
+          </SheetHeader>
+          <div className="px-4 pb-6 space-y-4">
+            {projects.length > 0 && (
+              <div className="space-y-2">
+                {projects.map(project => (
+                  <div key={project.id} className="flex items-center gap-3 p-3 rounded-xl bg-muted/30">
+                    <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: project.color }} />
+                    {editingProjectId === project.id ? (
+                      <div className="flex-1 flex items-center gap-2">
+                        <input
+                          type="text"
+                          className="flex-1 h-8 px-2 rounded-lg bg-background text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                          value={editProjectName}
+                          onChange={e => setEditProjectName(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' && editProjectName.trim()) {
+                              updateProject(project.id, { name: editProjectName.trim(), color: editProjectColor })
+                              setEditingProjectId(null)
+                            }
+                          }}
+                          autoFocus
+                        />
+                        <button
+                          className="h-8 px-3 rounded-lg bg-primary text-primary-foreground text-xs font-medium active:scale-95 transition-transform"
+                          onClick={() => {
+                            if (editProjectName.trim()) {
+                              updateProject(project.id, { name: editProjectName.trim(), color: editProjectColor })
+                              setEditingProjectId(null)
+                            }
+                          }}
+                        >保存</button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="flex-1 text-sm font-medium truncate">{project.name}</span>
+                        <span className="text-[10px] text-muted-foreground">{tasks.filter(t => t.project === project.id || t.project === project.name).length} 任务</span>
+                        <button
+                          className="h-7 w-7 rounded-lg bg-muted/50 flex items-center justify-center active:scale-90 transition-transform"
+                          onClick={() => {
+                            setEditingProjectId(project.id)
+                            setEditProjectName(project.name)
+                            setEditProjectColor(project.color)
+                          }}
+                        >
+                          <Edit3 className="h-3.5 w-3.5 text-muted-foreground" />
+                        </button>
+                        <button
+                          className="h-7 w-7 rounded-lg bg-red-500/10 flex items-center justify-center active:scale-90 transition-transform"
+                          onClick={() => deleteProject(project.id)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <input
+                  type="color"
+                  className="absolute inset-0 opacity-0 cursor-pointer"
+                  value={newProjectColor}
+                  onChange={e => setNewProjectColor(e.target.value)}
+                />
+                <span className="h-9 w-9 rounded-lg block" style={{ backgroundColor: newProjectColor }} />
+              </div>
+              <input
+                type="text"
+                placeholder="项目名称"
+                className="flex-1 h-9 px-3 rounded-xl bg-muted/50 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                value={newProjectName}
+                onChange={e => setNewProjectName(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && newProjectName.trim()) {
+                    addProject({ name: newProjectName.trim(), color: newProjectColor })
+                    setNewProjectName('')
+                    setNewProjectColor('#6366f1')
+                  }
+                }}
+              />
+              <button
+                className={cn(
+                  'h-9 px-4 rounded-xl text-sm font-medium active:scale-95 transition-transform',
+                  newProjectName.trim() ? 'bg-primary text-primary-foreground' : 'bg-muted/50 text-muted-foreground'
+                )}
+                onClick={() => {
+                  if (newProjectName.trim()) {
+                    addProject({ name: newProjectName.trim(), color: newProjectColor })
+                    setNewProjectName('')
+                    setNewProjectColor('#6366f1')
+                  }
+                }}
+                disabled={!newProjectName.trim()}
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

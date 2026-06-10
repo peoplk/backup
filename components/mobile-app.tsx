@@ -97,22 +97,21 @@ export function MobileApp() {
   }
 
   const handleNavigate = (view: string) => {
-    if (view === 'tasks') {
-      setActiveTab('tasks')
+    const tabViews: string[] = ['dashboard', 'tasks', 'focus', 'habits']
+    const moreViews: string[] = ['calendar', 'goals', 'anniversaries', 'journal', 'analytics', 'settings']
+    // 'stats' is an alias for 'analytics'
+    const resolvedView = view === 'stats' ? 'analytics' : view
+
+    if (tabViews.includes(resolvedView)) {
+      setActiveTab(resolvedView as TabId)
       setMoreView(null)
-      setActiveView('tasks')
-    } else if (view === 'focus') {
-      setActiveTab('focus')
-      setMoreView(null)
-      setActiveView('focus')
-    } else if (view === 'habits') {
-      setActiveTab('habits')
-      setMoreView(null)
-      setActiveView('habits')
-    } else if (view === 'settings') {
+      setShowMorePanel(false)
+      setActiveView(resolvedView)
+    } else if (moreViews.includes(resolvedView)) {
       setActiveTab('more')
-      setMoreView('settings')
-      setActiveView('settings')
+      setMoreView(resolvedView as MoreId)
+      setShowMorePanel(false)
+      setActiveView(resolvedView)
     }
   }
 

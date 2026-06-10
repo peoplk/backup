@@ -162,23 +162,42 @@ async function hmacSha1Base64(key: string, message: string): Promise<string> {
   return base64Encode(new Uint8Array(sig))
 }
 
-/** 构造 OSS v1 签名 */
+/** 构造 OSS v1 签名
+ *
+ * 重要：使用 x-oss-date 头而不是 HTTP Date 头。
+ *
+ * 原因：浏览器/Electron 的 fetch 规范把 `Date` 列为 Forbidden Header Name，
+ * 会默默丢弃用户设置的 Date 头，导致签名中的 Date 与实际请求头中的 Date 不一致，
+ * 触发 SignatureDoesNotMatch 错误。
+ *
+ * OSS 规范明确支持 x-oss-date 自定义头作为 Date 的替代，
+ * 不受 Forbidden Header 限制，因此是浏览器端 OSS 客户端的标准做法。
+ *
+ * 详见：https://help.aliyun.com/zh/oss/developer-reference/calculate-the-signature
+ *      https://fetch.spec.whatwg.org/#forbidden-header-name
+ */
 async function signOSSRequest(
   method: 'PUT' | 'GET' | 'HEAD',
   config: StoredConfig,
   objectKey: string,
   extraHeaders: Record<string, string> = {}
 ): Promise<{ url: string; headers: Record<string, string> }> {
-  const date = new Date().toUTCString()
+  // 用 ISO 8601 格式（UTC）—— OSS 规范要求
+  const ossDate = new Date().toUTCString()
   const contentType = extraHeaders['Content-Type'] || ''
-  const objectResource = `/${config.bucket}/${encodeURI(objectKey).replace(/\+/g, '%20')}`
+  // CanonicalizedResource: /bucket/object-key，object key 需 URL 编码（保留 /）
+  const encodedKey = encodeURIComponent(objectKey)
+    .replace(/%2F/g, '/')
+    .replace(/\+/g, '%20')
+  const objectResource = `/${config.bucket}/${encodedKey}`
 
-  // StringToSign: VERB + "\n" + Content-MD5 + "\n" + Content-Type + "\n" + Date + "\n" + CanonicalizedOSSHeaders + CanonicalizedResource
+  // StringToSign: VERB + "\n" + Content-MD5 + "\n" + Content-Type + "\n" + x-oss-date + "\n" + CanonicalizedOSSHeaders + CanonicalizedResource
+  // 注意：使用 x-oss-date 时，StringToSign 中也用同一个值
   const stringToSign = [
     method,
     '',
     contentType,
-    date,
+    ossDate,
     '',
     objectResource,
   ].join('\n')
@@ -186,11 +205,12 @@ async function signOSSRequest(
   const signature = await hmacSha1Base64(config.accessKeySecret, stringToSign)
   const authorization = `OSS ${config.accessKeyId}:${signature}`
 
-  const url = `${config.endpoint}/${config.bucket}/${encodeURI(objectKey).replace(/\+/g, '%20').replace(/%2F/g, '/')}`
+  const url = `${config.endpoint}/${config.bucket}/${encodedKey}`
   return {
     url,
     headers: {
-      Date: date,
+      // 关键：用 x-oss-date 而不是 Date，避免 Forbidden Header 拦截
+      'x-oss-date': ossDate,
       Authorization: authorization,
       ...extraHeaders,
     },
@@ -237,12 +257,32 @@ export async function testOSSConnection(
     const res = await fetch(url, { method: 'HEAD', headers })
     if (res.ok) return { success: true, message: '连接成功' }
     if (res.status === 404) return { success: true, message: '连接成功（对象不存在，推送时将自动创建）' }
-    if (res.status === 403) return { success: false, message: '认证失败或无访问权限，请检查 AccessKey 与 Bucket' }
-    if (res.status === 401) return { success: false, message: '认证失败，请检查 AccessKey ID/Secret' }
-    return { success: false, message: `服务器返回 ${res.status}` }
+    // 尝试读取 OSS 服务端返回的 XML 错误信息（含 Code/Message/RequestId）
+    const errBody = await res.text().catch(() => '')
+    const ossCode = errBody.match(/<Code>([^<]+)<\/Code>/)?.[1]
+    const ossMsg = errBody.match(/<Message>([^<]+)<\/Message>/)?.[1]
+    const requestId = res.headers.get('x-oss-request-id') || ''
+    const detail = [ossCode, ossMsg].filter(Boolean).join(' · ')
+    if (res.status === 403) {
+      return { success: false, message: `认证失败或无访问权限（${detail || '请检查 AccessKey 与 Bucket'}）${requestId ? ' · RequestId: ' + requestId : ''}` }
+    }
+    if (res.status === 401) {
+      return { success: false, message: `认证失败，请检查 AccessKey ID/Secret${requestId ? ' · RequestId: ' + requestId : ''}` }
+    }
+    if (res.status === 400 && /SignatureDoesNotMatch/i.test(detail)) {
+      return { success: false, message: `签名不匹配（${detail}）${requestId ? ' · RequestId: ' + requestId : ''} · 提示：浏览器会自动剥离 Date 头，已改用 x-oss-date 头` }
+    }
+    return { success: false, message: `服务器返回 ${res.status}${detail ? ' · ' + detail : ''}${requestId ? ' · RequestId: ' + requestId : ''}` }
   } catch (err) {
-    const message = err instanceof Error ? err.message : '连接失败'
-    return { success: false, message }
+    const raw = err instanceof Error ? err.message : '连接失败'
+    // 浏览器/桌面 WebView 调 OSS 的最常见失败原因 —— CORS 没配置
+    if (/failed to fetch|networkerror|load failed/i.test(raw)) {
+      return {
+        success: false,
+        message: `网络/CORS 错误：${raw}。浏览器端调用 OSS 必须在 Bucket 配置 CORS 规则（来源: ${typeof location !== 'undefined' ? location.origin : '本应用'}，方法: GET/HEAD/PUT/POST，允许 Headers: x-oss-date, Authorization, Content-Type）。如果 Bucket 已设公共读，文件直连可以，但 API 仍需 CORS。`,
+      }
+    }
+    return { success: false, message: raw }
   }
 }
 

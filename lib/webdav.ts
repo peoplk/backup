@@ -32,11 +32,9 @@ export interface SyncState {
   isEnabled: boolean
 }
 
-export type SyncProtocol = 'webdav' | 'oss'
+export type SyncProtocol = 'webdav'
 
 export type WebDAVPreset = {
-  /** 协议类型 —— 决定推送/拉取走 webdav.ts 还是 aliyun-oss.ts */
-  protocol: SyncProtocol
   name: string
   url: string
   description: string
@@ -45,35 +43,21 @@ export type WebDAVPreset = {
 /**
  * 预设服务列表
  * 1. 坚果云（默认）—— WebDAV
- * 2. 阿里云 OSS —— 使用 AccessKey + HMAC-SHA1 签名，无需 SDK
- * 3. 自定义 —— WebDAV
+ * 2. 自定义 —— WebDAV
+ * 注意：阿里云 OSS 已迁移到 lib/s3-sync.ts，作为独立的 S3 兼容同步模块
  */
 export const WebDAV_PRESET_SERVERS: WebDAVPreset[] = [
   {
-    protocol: 'webdav',
     name: '坚果云',
     url: 'https://dav.jianguoyun.com/dav/',
     description: '国内常用 WebDAV 服务，建议使用应用专用密码',
   },
   {
-    protocol: 'oss',
-    name: '阿里云 OSS',
-    url: 'oss://',
-    description: '对象存储，需 AccessKey + Bucket',
-  },
-  {
-    protocol: 'webdav',
     name: '自定义',
     url: '',
     description: '输入你自己的 WebDAV 服务器地址',
   },
 ]
-
-/** 根据预设名识别协议 */
-export function getPresetProtocol(presetName: string): SyncProtocol {
-  const preset = WebDAV_PRESET_SERVERS.find((p) => p.name === presetName)
-  return preset?.protocol ?? 'webdav'
-}
 
 export function getPresetServers(): WebDAVPreset[] {
   return WebDAV_PRESET_SERVERS

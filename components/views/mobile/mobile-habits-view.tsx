@@ -8,11 +8,12 @@ import { CheckCircle2, Flame, Plus, X, TrendingUp, Trash2, Edit3, Calendar, BarC
 
 const ICONS = ['📋', '💪', '📚', '🏃', '🧘', '💧', '🍎', '😴', '✍️', '🎵', '💊', '🧹', '💰', '🎯', '🌅', '🚶']
 const CATEGORIES = ['生活', '健康', '学习', '工作', '运动', '其他']
+const HABIT_COLORS = ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444', '#14b8a6', '#f97316', '#64748b']
 const FREQUENCIES: { id: 'daily' | 'weekly' | 'monthly' | 'custom'; label: string }[] = [
   { id: 'daily', label: '每天' },
   { id: 'custom', label: '工作日' },
   { id: 'weekly', label: '每周' },
-  { id: 'custom', label: '每周3次' },
+  { id: 'monthly', label: '每月' },
 ]
 
 export function MobileHabitsView() {
@@ -32,6 +33,7 @@ export function MobileHabitsView() {
   const [newIcon, setNewIcon] = useState('📋')
   const [newCategory, setNewCategory] = useState('生活')
   const [newFrequency, setNewFrequency] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('daily')
+  const [newColor, setNewColor] = useState('#6366f1')
 
   const [detailHabitId, setDetailHabitId] = useState<string | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -40,6 +42,7 @@ export function MobileHabitsView() {
   const [editIcon, setEditIcon] = useState('📋')
   const [editCategory, setEditCategory] = useState('生活')
   const [editFrequency, setEditFrequency] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('daily')
+  const [editColor, setEditColor] = useState('#6366f1')
 
   const todayStr = new Date().toDateString()
 
@@ -147,12 +150,13 @@ export function MobileHabitsView() {
       category: newCategory,
       frequency: newFrequency,
       trackingType: 'boolean',
-      color: '#6366f1',
+      color: newColor,
     })
     setNewName('')
     setNewIcon('📋')
     setNewCategory('生活')
     setNewFrequency('daily')
+    setNewColor('#6366f1')
     setShowAddSheet(false)
   }
 
@@ -163,6 +167,7 @@ export function MobileHabitsView() {
       setEditIcon(habit.icon || '📋')
       setEditCategory(habit.category || '生活')
       setEditFrequency(habit.frequency || 'daily')
+      setEditColor(habit.color || '#6366f1')
     }
     setDetailHabitId(habitId)
     setEditMode(false)
@@ -176,6 +181,7 @@ export function MobileHabitsView() {
       icon: editIcon,
       category: editCategory,
       frequency: editFrequency,
+      color: editColor,
     })
     setEditMode(false)
   }
@@ -239,8 +245,9 @@ export function MobileHabitsView() {
                 <button
                   className={cn(
                     'shrink-0 h-11 w-11 rounded-xl flex items-center justify-center text-xl transition-all active:scale-90',
-                    checkedToday ? 'bg-primary/15' : 'bg-muted/50'
+                    checkedToday ? '' : 'bg-muted/50'
                   )}
+                  style={checkedToday ? { backgroundColor: `${habit.color || '#6366f1'}15` } : undefined}
                   onClick={() => {
                     if (checkedToday) {
                       checkInHabit(habit.id, new Date(), false)
@@ -350,8 +357,9 @@ export function MobileHabitsView() {
                       key={dayStr}
                       className={cn(
                         'flex-1 h-1.5 rounded-full transition-all',
-                        isChecked ? 'bg-primary' : isToday ? 'bg-primary/20' : 'bg-muted/50'
+                        isChecked ? '' : isToday ? 'bg-primary/20' : 'bg-muted/50'
                       )}
+                      style={isChecked ? { backgroundColor: habit.color || '#6366f1' } : undefined}
                     />
                   )
                 })}
@@ -439,7 +447,7 @@ export function MobileHabitsView() {
                 <div className="flex flex-wrap gap-2">
                   {FREQUENCIES.map(freq => (
                     <button
-                      key={freq.id}
+                      key={freq.id + freq.label}
                       className={cn(
                         'px-3 py-1.5 rounded-full text-xs font-medium active:scale-95 transition-transform',
                         newFrequency === freq.id ? 'bg-primary text-primary-foreground' : 'bg-muted/50 text-muted-foreground'
@@ -447,6 +455,25 @@ export function MobileHabitsView() {
                       onClick={() => setNewFrequency(freq.id)}
                     >
                       {freq.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">颜色</label>
+                <div className="flex flex-wrap gap-2">
+                  {HABIT_COLORS.map(color => (
+                    <button
+                      key={color}
+                      className={cn(
+                        'h-8 w-8 rounded-full flex items-center justify-center transition-all active:scale-90',
+                        newColor === color ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
+                      )}
+                      style={{ backgroundColor: color }}
+                      onClick={() => setNewColor(color)}
+                    >
+                      {newColor === color && <CheckCircle2 className="h-4 w-4 text-white" />}
                     </button>
                   ))}
                 </div>
@@ -524,9 +551,27 @@ export function MobileHabitsView() {
                   <label className="text-xs text-muted-foreground mb-1 block">频率</label>
                   <div className="flex flex-wrap gap-2">
                     {FREQUENCIES.map(freq => (
-                      <button key={freq.id} className={cn('px-3 py-1.5 rounded-full text-xs font-medium active:scale-95 transition-transform',
+                      <button key={freq.id + freq.label} className={cn('px-3 py-1.5 rounded-full text-xs font-medium active:scale-95 transition-transform',
                         editFrequency === freq.id ? 'bg-primary text-primary-foreground' : 'bg-muted/50 text-muted-foreground'
                       )} onClick={() => setEditFrequency(freq.id)}>{freq.label}</button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground mb-1 block">颜色</label>
+                  <div className="flex flex-wrap gap-2">
+                    {HABIT_COLORS.map(color => (
+                      <button
+                        key={color}
+                        className={cn(
+                          'h-8 w-8 rounded-full flex items-center justify-center transition-all active:scale-90',
+                          editColor === color ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''
+                        )}
+                        style={{ backgroundColor: color }}
+                        onClick={() => setEditColor(color)}
+                      >
+                        {editColor === color && <CheckCircle2 className="h-4 w-4 text-white" />}
+                      </button>
                     ))}
                   </div>
                 </div>

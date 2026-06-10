@@ -6,7 +6,7 @@ import { useAppStore } from '@/lib/store'
 import { useShallow } from 'zustand/react/shallow'
 import { MobileBottomSheet } from './mobile-bottom-sheet'
 import { PRIORITY_CONFIG } from './mobile-priority-dot'
-import type { Project, Tag } from '@/lib/types'
+import type { Project, Tag, SubTask } from '@/lib/types'
 import {
   Flag, CalendarDays, FolderOpen, Tag as TagIcon, StickyNote,
   ListChecks, RotateCcw, Timer, Minus, Plus, X, CheckCircle2,
@@ -14,11 +14,12 @@ import {
 } from 'lucide-react'
 
 type PriorityType = 'urgent' | 'high' | 'medium' | 'low'
-type RepeatType = 'none' | 'daily' | 'weekly' | 'monthly'
+type RepeatType = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly'
 
 const REPEAT_OPTIONS: { id: RepeatType; label: string }[] = [
   { id: 'none', label: '不重复' }, { id: 'daily', label: '每天' },
   { id: 'weekly', label: '每周' }, { id: 'monthly', label: '每月' },
+  { id: 'yearly', label: '每年' },
 ]
 const PRIORITY_OPTIONS: PriorityType[] = ['urgent', 'high', 'medium', 'low']
 
@@ -235,12 +236,6 @@ export function MobileTaskDetailSheet({ open, onClose, taskId, projects, tags, t
       </div>
     </MobileBottomSheet>
   )
-}
-
-interface SubTask {
-  id: string
-  title: string
-  completed: boolean
 }
 
 interface SubTaskItemProps {

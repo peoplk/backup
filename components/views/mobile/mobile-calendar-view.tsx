@@ -4,7 +4,7 @@ import { useState, useMemo, useCallback } from 'react'
 import { useAppStore } from '@/lib/store'
 import { useShallow } from 'zustand/react/shallow'
 import { cn } from '@/lib/utils'
-import { ChevronLeft, ChevronRight, Plus, Clock, Calendar, CheckCircle2, Heart, LayoutGrid, List, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Clock, Calendar, CheckCircle2, Heart, LayoutGrid, List, Trash2, CalendarDays } from 'lucide-react'
 import type { TimeBlockCategory, TimeBlock } from '@/lib/types'
 import { MobileBottomSheet } from '@/components/mobile/mobile-bottom-sheet'
 import { MobileEmptyState } from '@/components/mobile/mobile-empty-state'
@@ -31,7 +31,7 @@ export function MobileCalendarView() {
     useShallow((s) => ({ tasks: s.tasks, timeBlocks: s.timeBlocks, addTimeBlock: s.addTimeBlock, updateTimeBlock: s.updateTimeBlock, deleteTimeBlock: s.deleteTimeBlock, anniversaries: s.anniversaries, completeTask: s.completeTask }))
   )
   const today = new Date()
-  const [viewMode, setViewMode] = useState<'month' | 'week'>('month')
+  const [viewMode, setViewMode] = useState<'month' | 'week' | 'day'>('month')
   const [currentYear, setCurrentYear] = useState(today.getFullYear())
   const [currentMonth, setCurrentMonth] = useState(today.getMonth())
   const [selectedDate, setSelectedDate] = useState<Date>(new Date(today))
@@ -111,16 +111,33 @@ export function MobileCalendarView() {
     setCurrentYear(d.getFullYear())
   }, [selectedDate])
 
+  const goToPrevDay = useCallback(() => {
+    const d = new Date(selectedDate)
+    d.setDate(d.getDate() - 1)
+    setSelectedDate(d)
+    setCurrentMonth(d.getMonth())
+    setCurrentYear(d.getFullYear())
+  }, [selectedDate])
+
+  const goToNextDay = useCallback(() => {
+    const d = new Date(selectedDate)
+    d.setDate(d.getDate() + 1)
+    setSelectedDate(d)
+    setCurrentMonth(d.getMonth())
+    setCurrentYear(d.getFullYear())
+  }, [selectedDate])
+
   const handleSwipeStart = useCallback((e: React.TouchEvent) => setSwipeStartX(e.touches[0].clientX), [])
   const handleSwipeEnd = useCallback((e: React.TouchEvent) => {
     if (swipeStartX === null) return
     const diff = e.changedTouches[0].clientX - swipeStartX
     if (Math.abs(diff) > 60) {
       if (viewMode === 'month') { diff > 0 ? goToPrevMonth() : goToNextMonth() }
-      else { diff > 0 ? goToPrevWeek() : goToNextWeek() }
+      else if (viewMode === 'week') { diff > 0 ? goToPrevWeek() : goToNextWeek() }
+      else { diff > 0 ? goToPrevDay() : goToNextDay() }
     }
     setSwipeStartX(null)
-  }, [swipeStartX, goToPrevMonth, goToNextMonth, goToPrevWeek, goToNextWeek, viewMode])
+  }, [swipeStartX, goToPrevMonth, goToNextMonth, goToPrevWeek, goToNextWeek, goToPrevDay, goToNextDay, viewMode])
 
   const handleAddTimeBlock = useCallback(() => {
     if (!newTitle.trim()) return
@@ -181,7 +198,7 @@ export function MobileCalendarView() {
     <div className="space-y-4 px-4 pt-4 pb-24">
       <div className="rounded-2xl glass-card p-4">
         <div className="flex items-center justify-between mb-4">
-          <button className="h-9 w-9 rounded-xl bg-muted/50 flex items-center justify-center active:scale-90 transition-transform" onClick={viewMode === 'month' ? goToPrevMonth : goToPrevWeek}><ChevronLeft className="h-5 w-5" /></button>
+          <button className="h-9 w-9 rounded-xl bg-muted/50 flex items-center justify-center active:scale-90 transition-transform" onClick={viewMode === 'month' ? goToPrevMonth : viewMode === 'week' ? goToPrevWeek : goToPrevDay}><ChevronLeft className="h-5 w-5" /></button>
           <div className="flex items-center gap-3">
             <h2 className="text-base font-semibold">{monthLabel}</h2>
             <button className="px-2.5 py-1 rounded-lg bg-primary/10 text-primary text-xs font-medium active:scale-95 transition-transform" onClick={goToToday}>今天</button>
@@ -192,9 +209,12 @@ export function MobileCalendarView() {
               <button className={cn('px-2 py-1 rounded-md text-[11px] font-medium transition-all', viewMode === 'week' ? 'bg-background shadow-sm' : 'text-muted-foreground')} onClick={() => setViewMode('week')}>
                 <List className="h-3.5 w-3.5" />
               </button>
+              <button className={cn('px-2 py-1 rounded-md text-[11px] font-medium transition-all', viewMode === 'day' ? 'bg-background shadow-sm' : 'text-muted-foreground')} onClick={() => setViewMode('day')}>
+                <CalendarDays className="h-3.5 w-3.5" />
+              </button>
             </div>
           </div>
-          <button className="h-9 w-9 rounded-xl bg-muted/50 flex items-center justify-center active:scale-90 transition-transform" onClick={viewMode === 'month' ? goToNextMonth : goToNextWeek}><ChevronRight className="h-5 w-5" /></button>
+          <button className="h-9 w-9 rounded-xl bg-muted/50 flex items-center justify-center active:scale-90 transition-transform" onClick={viewMode === 'month' ? goToNextMonth : viewMode === 'week' ? goToNextWeek : goToNextDay}><ChevronRight className="h-5 w-5" /></button>
         </div>
 
         {viewMode === 'month' && (
@@ -253,6 +273,15 @@ export function MobileCalendarView() {
                 </button>
               )
             })}
+          </div>
+        )}
+
+        {viewMode === 'day' && (
+          <div className="flex items-center justify-center gap-4 py-3" onTouchStart={handleSwipeStart} onTouchEnd={handleSwipeEnd}>
+            <span className="text-base font-semibold">{selectedDateLabel}</span>
+            {isSameDay(selectedDate, today) && (
+              <span className="text-[10px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded-full">今天</span>
+            )}
           </div>
         )}
       </div>

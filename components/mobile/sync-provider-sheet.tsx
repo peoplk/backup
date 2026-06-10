@@ -9,18 +9,44 @@
  * - Row: 图标 + 标签 + 右侧控件
  * - 圆角: rounded-2xl, 字体: [10px]-[13px]
  * - 交互: active:bg-muted/30 transition-colors
+ *
+ * 支持四种同步服务：Firebase / Supabase / WebDAV / S3 兼容存储
  */
 
 import { memo, useCallback, useEffect, useState } from 'react'
-import { Cloud, Globe, Check, RefreshCw, ChevronRight, Shield, Lock, User } from 'lucide-react'
+import { Cloud, Check, RefreshCw, ChevronRight, Lock, User, Server, Flame, Database, FolderOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { BottomSheet } from './bottom-sheet'
+import { S3Pane } from './sync-s3-pane'
 import { WebDAVPane } from './sync-webdav-pane'
+import { FirebasePane } from './sync-firebase-pane'
+import { SupabasePane } from './sync-supabase-pane'
 import { Switch } from '@/components/ui/switch'
+import { getIsS3Configured } from '@/lib/s3-sync'
 import { getIsWebDAVConfigured } from '@/lib/webdav'
+import { getIsFirebaseConfigured } from '@/lib/firebase'
+import { getIsSupabaseConfigured } from '@/lib/supabase'
 
 const STORAGE_ENABLED = 'mobile-sync-enabled'
 const STORAGE_LAST_SYNC = 'mobile-last-sync-at'
+const STORAGE_PROVIDER = 'mobile-sync-provider'
+type SyncProvider = 'firebase' | 'supabase' | 'webdav' | 's3'
+
+const PROVIDER_CONFIG: { key: SyncProvider; label: string; description: string; icon: React.ElementType }[] = [
+  { key: 'firebase', label: 'Firebase', description: 'Google 云服务，Firestore 实时同步', icon: Flame },
+  { key: 'supabase', label: 'Supabase', description: '开源 BaaS，PostgreSQL + Realtime', icon: Database },
+  { key: 'webdav', label: 'WebDAV', description: '坚果云 / 自建 WebDAV 服务器', icon: FolderOpen },
+  { key: 's3', label: 'S3 兼容存储', description: '阿里云 OSS / MinIO / AWS', icon: Server },
+]
+
+function isProviderConfigured(provider: SyncProvider): boolean {
+  switch (provider) {
+    case 'firebase': return getIsFirebaseConfigured()
+    case 'supabase': return getIsSupabaseConfigured()
+    case 'webdav': return getIsWebDAVConfigured()
+    case 's3': return getIsS3Configured()
+  }
+}
 
 interface SyncProviderSheetProps {
   open: boolean
@@ -37,8 +63,13 @@ function SyncProviderSheetInner({ open, onClose }: SyncProviderSheetProps) {
     const stored = localStorage.getItem(STORAGE_LAST_SYNC)
     return stored ? new Date(stored) : null
   })
-  const [showWebDAVConfig, setShowWebDAVConfig] = useState(false)
-  const [isConfigured] = useState(() => getIsWebDAVConfigured())
+  const [activeProvider, setActiveProvider] = useState<SyncProvider>(() => {
+    if (typeof window === 'undefined') return 's3'
+    return (localStorage.getItem(STORAGE_PROVIDER) as SyncProvider) || 's3'
+  })
+  const [showConfig, setShowConfig] = useState<SyncProvider | null>(null)
+
+  const isActiveConfigured = isProviderConfigured(activeProvider)
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -46,15 +77,21 @@ function SyncProviderSheetInner({ open, onClose }: SyncProviderSheetProps) {
     }
   }, [enabled])
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_PROVIDER, activeProvider)
+    }
+  }, [activeProvider])
+
   const handleClose = useCallback(() => onClose(), [onClose])
 
   const handleEnabledChange = useCallback((v: boolean) => {
-    if (v && !isConfigured) {
-      setShowWebDAVConfig(true)
+    if (v && !isActiveConfigured) {
+      setShowConfig(activeProvider)
       return
     }
     setEnabled(v)
-  }, [isConfigured])
+  }, [isActiveConfigured, activeProvider])
 
   const handleSynced = useCallback((date: Date) => {
     setLastSyncAt(date)
@@ -109,7 +146,7 @@ function SyncProviderSheetInner({ open, onClose }: SyncProviderSheetProps) {
       className="pointer-events-auto"
     >
       <div className="space-y-1 pt-2">
-        {/* 总开关 —— 使用 Row 组件 */}
+        {/* 总开关 */}
         <Section title="">
           <Row icon={Cloud} label="启用云同步">
             <Switch
@@ -121,28 +158,38 @@ function SyncProviderSheetInner({ open, onClose }: SyncProviderSheetProps) {
 
         {/* 同步服务 */}
         <Section title="同步服务">
-          <button
-            className={cn(
-              'w-full flex items-center gap-3 px-4 py-3 active:bg-muted/30 transition-colors text-left',
-              enabled && isConfigured && 'bg-primary/5'
-            )}
-            onClick={() => setShowWebDAVConfig(true)}
-          >
-            <Globe className="h-[18px] w-[18px] text-muted-foreground shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-[13px]">WebDAV</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">
-                {isConfigured ? (enabled ? '已启用' : '已配置') : '点击配置'}
-              </p>
-            </div>
-            {enabled && isConfigured ? (
-              <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center">
-                <Check className="h-3 w-3 text-primary" />
-              </div>
-            ) : (
-              <ChevronRight className="h-4 w-4 text-muted-foreground/50" />
-            )}
-          </button>
+          {PROVIDER_CONFIG.map(({ key, label, description, icon: Icon }) => {
+            const configured = isProviderConfigured(key)
+            const isActive = activeProvider === key
+            return (
+              <button
+                key={key}
+                className={cn(
+                  'w-full flex items-center gap-3 px-4 py-3 active:bg-muted/30 transition-colors text-left',
+                  isActive && enabled && configured && 'bg-primary/5'
+                )}
+                onClick={() => {
+                  setActiveProvider(key)
+                  setShowConfig(key)
+                }}
+              >
+                <Icon className="h-[18px] w-[18px] text-muted-foreground shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px]">{label}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {configured ? (isActive && enabled ? '已启用' : '已配置') : description}
+                  </p>
+                </div>
+                {isActive && enabled && configured ? (
+                  <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Check className="h-3 w-3 text-primary" />
+                  </div>
+                ) : (
+                  <ChevronRight className="h-4 w-4 text-muted-foreground/50" />
+                )}
+              </button>
+            )
+          })}
         </Section>
 
         {/* 同步状态 */}
@@ -157,17 +204,16 @@ function SyncProviderSheetInner({ open, onClose }: SyncProviderSheetProps) {
           <button
             className={cn(
               'w-full flex items-center justify-center gap-2 px-4 py-3 text-[13px] font-medium transition-colors',
-              enabled && isConfigured
+              enabled && isActiveConfigured
                 ? 'text-primary active:bg-primary/5'
                 : 'text-muted-foreground active:bg-muted/30'
             )}
             onClick={() => {
-              if (!enabled || !isConfigured) {
-                setShowWebDAVConfig(true)
+              if (!enabled || !isActiveConfigured) {
+                setShowConfig(activeProvider)
               }
-              // 实际同步逻辑在 WebDAVPane 中
             }}
-            disabled={!enabled || !isConfigured}
+            disabled={!enabled || !isActiveConfigured}
           >
             <RefreshCw className="h-4 w-4" />
             立即同步
@@ -179,8 +225,8 @@ function SyncProviderSheetInner({ open, onClose }: SyncProviderSheetProps) {
           <ActionRow
             icon={User}
             label="账号管理"
-            value={isConfigured ? '已配置' : '未配置'}
-            onClick={() => setShowWebDAVConfig(true)}
+            value={isActiveConfigured ? '已配置' : '未配置'}
+            onClick={() => setShowConfig(activeProvider)}
           />
           <ActionRow
             icon={Lock}
@@ -190,14 +236,76 @@ function SyncProviderSheetInner({ open, onClose }: SyncProviderSheetProps) {
         </Section>
       </div>
 
-      {/* WebDAV 配置面板 */}
-      <WebDAVConfigSheet
-        open={showWebDAVConfig}
-        onClose={() => setShowWebDAVConfig(false)}
-        syncEnabled={enabled}
+      {/* Firebase 配置面板 */}
+      <ProviderConfigSheet
+        provider="firebase"
+        open={showConfig === 'firebase'}
+        onClose={() => setShowConfig(null)}
+        syncEnabled={enabled && activeProvider === 'firebase'}
         onSyncEnabledChange={handleEnabledChange}
         lastSyncAt={lastSyncAt}
         onSynced={handleSynced}
+        pane={<FirebasePane
+          syncEnabled={enabled && activeProvider === 'firebase'}
+          onSyncEnabledChange={handleEnabledChange}
+          lastSyncAt={lastSyncAt}
+          onSynced={handleSynced}
+          onClose={() => setShowConfig(null)}
+        />}
+      />
+
+      {/* Supabase 配置面板 */}
+      <ProviderConfigSheet
+        provider="supabase"
+        open={showConfig === 'supabase'}
+        onClose={() => setShowConfig(null)}
+        syncEnabled={enabled && activeProvider === 'supabase'}
+        onSyncEnabledChange={handleEnabledChange}
+        lastSyncAt={lastSyncAt}
+        onSynced={handleSynced}
+        pane={<SupabasePane
+          syncEnabled={enabled && activeProvider === 'supabase'}
+          onSyncEnabledChange={handleEnabledChange}
+          lastSyncAt={lastSyncAt}
+          onSynced={handleSynced}
+          onClose={() => setShowConfig(null)}
+        />}
+      />
+
+      {/* WebDAV 配置面板 */}
+      <ProviderConfigSheet
+        provider="webdav"
+        open={showConfig === 'webdav'}
+        onClose={() => setShowConfig(null)}
+        syncEnabled={enabled && activeProvider === 'webdav'}
+        onSyncEnabledChange={handleEnabledChange}
+        lastSyncAt={lastSyncAt}
+        onSynced={handleSynced}
+        pane={<WebDAVPane
+          syncEnabled={enabled && activeProvider === 'webdav'}
+          onSyncEnabledChange={handleEnabledChange}
+          lastSyncAt={lastSyncAt}
+          onSynced={handleSynced}
+          onClose={() => setShowConfig(null)}
+        />}
+      />
+
+      {/* S3 配置面板 */}
+      <ProviderConfigSheet
+        provider="s3"
+        open={showConfig === 's3'}
+        onClose={() => setShowConfig(null)}
+        syncEnabled={enabled && activeProvider === 's3'}
+        onSyncEnabledChange={handleEnabledChange}
+        lastSyncAt={lastSyncAt}
+        onSynced={handleSynced}
+        pane={<S3Pane
+          syncEnabled={enabled && activeProvider === 's3'}
+          onSyncEnabledChange={handleEnabledChange}
+          lastSyncAt={lastSyncAt}
+          onSynced={handleSynced}
+          onClose={() => setShowConfig(null)}
+        />}
       />
     </BottomSheet>
   )
@@ -205,41 +313,43 @@ function SyncProviderSheetInner({ open, onClose }: SyncProviderSheetProps) {
 
 export const SyncProviderSheet = memo(SyncProviderSheetInner)
 
-// WebDAV 配置详情 Sheet
-interface WebDAVConfigSheetProps {
+// 通用 Provider 配置详情 Sheet
+interface ProviderConfigSheetProps {
+  provider: SyncProvider
   open: boolean
   onClose: () => void
   syncEnabled: boolean
   onSyncEnabledChange: (v: boolean) => void
   lastSyncAt: Date | null
   onSynced: (date: Date) => void
+  pane: React.ReactNode
 }
 
-function WebDAVConfigSheetInner({
+const PROVIDER_LABELS: Record<SyncProvider, { title: string; description: string }> = {
+  firebase: { title: 'Firebase', description: '配置 Google Firebase 同步' },
+  supabase: { title: 'Supabase', description: '配置 Supabase PostgreSQL 同步' },
+  webdav: { title: 'WebDAV', description: '配置 WebDAV / 坚果云同步' },
+  s3: { title: 'S3 兼容存储', description: '配置 S3 / 阿里云 OSS / MinIO' },
+}
+
+function ProviderConfigSheetInner({
+  provider,
   open,
   onClose,
-  syncEnabled,
-  onSyncEnabledChange,
-  lastSyncAt,
-  onSynced,
-}: WebDAVConfigSheetProps) {
+  pane,
+}: ProviderConfigSheetProps) {
+  const { title, description } = PROVIDER_LABELS[provider]
   return (
     <BottomSheet
       open={open}
       onClose={onClose}
-      title="WebDAV 配置"
-      description="配置 WebDAV 服务器连接"
+      title={title}
+      description={description}
       className="pointer-events-auto"
     >
-      <WebDAVPane
-        syncEnabled={syncEnabled}
-        onSyncEnabledChange={onSyncEnabledChange}
-        lastSyncAt={lastSyncAt}
-        onSynced={onSynced}
-        onClose={onClose}
-      />
+      {pane}
     </BottomSheet>
   )
 }
 
-const WebDAVConfigSheet = memo(WebDAVConfigSheetInner)
+const ProviderConfigSheet = memo(ProviderConfigSheetInner)

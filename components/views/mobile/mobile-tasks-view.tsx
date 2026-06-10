@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback, memo } from 'react'
+import { useState, useMemo, useCallback, memo, useRef, useEffect } from 'react'
 import { useAppStore } from '@/lib/store'
 import type { Task } from '@/lib/types'
 import { useShallow } from 'zustand/react/shallow'
@@ -31,12 +31,13 @@ interface KanbanColumn {
   icon: typeof Inbox
   color: string
   bg: string
+  accent: string
 }
 
 const KANBAN_COLUMNS: KanbanColumn[] = [
-  { id: 'todo', label: '待办', icon: ClipboardList, color: 'text-slate-500', bg: 'bg-slate-500/10' },
-  { id: 'in-progress', label: '进行中', icon: Play, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-  { id: 'done', label: '已完成', icon: CheckCircle2, color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+  { id: 'todo', label: '待办', icon: ClipboardList, color: 'text-slate-600 dark:text-slate-300', bg: 'bg-slate-100 dark:bg-slate-500/20', accent: 'bg-slate-500' },
+  { id: 'in-progress', label: '进行中', icon: Play, color: 'text-blue-600 dark:text-blue-300', bg: 'bg-blue-50 dark:bg-blue-500/20', accent: 'bg-blue-500' },
+  { id: 'done', label: '已完成', icon: CheckCircle2, color: 'text-emerald-600 dark:text-emerald-300', bg: 'bg-emerald-50 dark:bg-emerald-500/20', accent: 'bg-emerald-500' },
 ]
 
 const SMART_LISTS: { id: FilterType; label: string; icon: typeof Inbox; iconColor: string; iconBg: string }[] = [
@@ -459,48 +460,18 @@ export function MobileTasksView() {
 
       <div className="pb-24">
         {viewMode === 'kanban' ? (
-          <div className="flex gap-2 overflow-x-auto px-3 py-2" style={{ scrollbarWidth: 'none' }}>
-            {KANBAN_COLUMNS.map((column) => {
-              const Icon = column.icon
-              const list = kanbanGroups[column.id]
-              return (
-                <div key={column.id} className="shrink-0 w-[78vw] max-w-[300px] flex flex-col">
-                  <div className={cn('flex items-center justify-between px-3 py-2 rounded-t-xl', column.bg)}>
-                    <div className="flex items-center gap-1.5">
-                      <Icon className={cn('h-3.5 w-3.5', column.color)} />
-                      <span className={cn('text-[12px] font-semibold', column.color)}>{column.label}</span>
-                    </div>
-                    <span className="text-[10px] font-medium text-muted-foreground bg-background/60 rounded-full px-1.5 py-0.5">
-                      {list.length}
-                    </span>
-                  </div>
-                  <div className="flex-1 space-y-2 p-2 rounded-b-xl bg-muted/20 min-h-[100px]">
-                    {list.length > 0 ? (
-                      list.map(task => (
-                        <KanbanTaskCard
-                          key={task.id}
-                          task={task}
-                          projectColor={getProjectColor(task.project)}
-                          projectName={getProjectName(task.project)}
-                          isOverdue={isOverdue(task.dueDate)}
-                          formatDate={formatDate}
-                          onClick={() => setDetailTaskId(task.id)}
-                          onMoveLeft={getLeftColumn(column.id)}
-                          onMoveRight={getRightColumn(column.id)}
-                          onToggleComplete={() => task.status === 'done' ? uncompleteTask(task.id) : completeTask(task.id)}
-                        />
-                      ))
-                    ) : (
-                      <div className="flex flex-col items-center justify-center py-6 text-muted-foreground/60">
-                        <Archive className="h-5 w-5 mb-1" />
-                        <span className="text-[10px]">无任务</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+          <KanbanView
+            columns={KANBAN_COLUMNS}
+            kanbanGroups={kanbanGroups}
+            getProjectColor={getProjectColor}
+            getProjectName={getProjectName}
+            isOverdue={isOverdue}
+            formatDate={formatDate}
+            onTaskClick={setDetailTaskId}
+            getLeftColumn={getLeftColumn}
+            getRightColumn={getRightColumn}
+            onToggleComplete={(taskId, isDone) => isDone ? uncompleteTask(taskId) : completeTask(taskId)}
+          />
         ) : sortedTasks.length > 0 ? (
           groupedTasks.map(group => (
             <div key={group.key}>
@@ -641,6 +612,198 @@ export function MobileTasksView() {
   )
 }
 
+interface KanbanViewProps {
+  columns: KanbanColumn[]
+  kanbanGroups: Record<KanbanColumnId, Task[]>
+  getProjectColor: (id: string | undefined) => string
+  getProjectName: (id: string | undefined) => string
+  isOverdue: (date: Date | string | undefined) => boolean
+  formatDate: (date: Date | string | undefined) => string
+  onTaskClick: (taskId: string) => void
+  getLeftColumn: (current: KanbanColumnId) => ((taskId: string) => void) | undefined
+  getRightColumn: (current: KanbanColumnId) => ((taskId: string) => void) | undefined
+  onToggleComplete: (taskId: string, isDone: boolean) => void
+}
+
+function KanbanView({ columns, kanbanGroups, getProjectColor, getProjectName, isOverdue, formatDate, onTaskClick, getLeftColumn, getRightColumn, onToggleComplete }: KanbanViewProps) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [activeColumnIdx, setActiveColumnIdx] = useState(0)
+  const [canScroll, setCanScroll] = useState(false)
+
+  const totalTasks = useMemo(
+    () => columns.reduce((sum, c) => sum + kanbanGroups[c.id].length, 0),
+    [columns, kanbanGroups]
+  )
+  const doneTasks = kanbanGroups['done'].length
+
+  const updateScrollState = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const max = el.scrollWidth - el.clientWidth
+    setCanScroll(max > 4)
+    if (max <= 4) {
+      setActiveColumnIdx(0)
+      return
+    }
+    const colWidth = el.scrollWidth / columns.length
+    const idx = Math.round(el.scrollLeft / colWidth)
+    setActiveColumnIdx(Math.min(columns.length - 1, Math.max(0, idx)))
+  }, [columns.length])
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    updateScrollState()
+    el.addEventListener('scroll', updateScrollState, { passive: true })
+    const ro = new ResizeObserver(updateScrollState)
+    ro.observe(el)
+    return () => {
+      el.removeEventListener('scroll', updateScrollState)
+      ro.disconnect()
+    }
+  }, [updateScrollState, columns, kanbanGroups])
+
+  const scrollToColumn = (idx: number) => {
+    const el = scrollRef.current
+    if (!el) return
+    const colWidth = el.scrollWidth / columns.length
+    el.scrollTo({ left: colWidth * idx, behavior: 'smooth' })
+  }
+
+  return (
+    <div className="flex flex-col">
+      {/* 顶部进度概览 */}
+      <div className="px-4 pt-3 pb-2 flex items-center gap-3">
+        <div className="flex-1">
+          <div className="flex items-baseline justify-between mb-1.5">
+            <span className="text-[11px] font-semibold text-muted-foreground">完成进度</span>
+            <span className="text-[11px] font-semibold tabular-nums">
+              <span className="text-foreground">{doneTasks}</span>
+              <span className="text-muted-foreground"> / {totalTasks}</span>
+            </span>
+          </div>
+          <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-emerald-400 to-emerald-500 rounded-full transition-all duration-300"
+              style={{ width: `${totalTasks > 0 ? (doneTasks / totalTasks) * 100 : 0}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 看板横向滚动区 */}
+      <div
+        ref={scrollRef}
+        className="flex gap-3 overflow-x-auto px-3 py-2 snap-x snap-mandatory"
+        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+      >
+        {columns.map((column) => {
+          const list = kanbanGroups[column.id]
+          return (
+            <KanbanColumn
+              key={column.id}
+              column={column}
+              list={list}
+              isActive={activeColumnIdx === columns.findIndex(c => c.id === column.id)}
+              getProjectColor={getProjectColor}
+              getProjectName={getProjectName}
+              isOverdue={isOverdue}
+              formatDate={formatDate}
+              onTaskClick={onTaskClick}
+              getLeftColumn={getLeftColumn(column.id)}
+              getRightColumn={getRightColumn(column.id)}
+              onToggleComplete={onToggleComplete}
+            />
+          )
+        })}
+      </div>
+
+      {/* 底部点状指示器 - 仅在需要滚动时显示 */}
+      {canScroll && (
+        <div className="flex items-center justify-center gap-1.5 pb-3 pt-1">
+          {columns.map((col, idx) => (
+            <button
+              key={col.id}
+              onClick={() => scrollToColumn(idx)}
+              aria-label={`切换到${col.label}`}
+              className={cn(
+                'h-1.5 rounded-full transition-all duration-200 active:scale-90',
+                activeColumnIdx === idx ? 'w-5 bg-primary' : 'w-1.5 bg-muted-foreground/30'
+              )}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface KanbanColumnProps {
+  column: KanbanColumn
+  list: Task[]
+  isActive: boolean
+  getProjectColor: (id: string | undefined) => string
+  getProjectName: (id: string | undefined) => string
+  isOverdue: (date: Date | string | undefined) => boolean
+  formatDate: (date: Date | string | undefined) => string
+  onTaskClick: (taskId: string) => void
+  getLeftColumn?: (taskId: string) => void
+  getRightColumn?: (taskId: string) => void
+  onToggleComplete: (taskId: string, isDone: boolean) => void
+}
+
+const KanbanColumn = memo(function KanbanColumn({ column, list, isActive, getProjectColor, getProjectName, isOverdue, formatDate, onTaskClick, getLeftColumn, getRightColumn, onToggleComplete }: KanbanColumnProps) {
+  const Icon = column.icon
+  return (
+    <div className={cn(
+      'shrink-0 w-[78vw] max-w-[300px] flex flex-col snap-center transition-opacity duration-200',
+      !isActive && 'opacity-70'
+    )}>
+      {/* 列头 */}
+      <div className={cn('flex items-center justify-between px-3 py-2.5 rounded-t-2xl relative overflow-hidden', column.bg)}>
+        <div className={cn('absolute left-0 top-0 bottom-0 w-1', column.accent)} />
+        <div className="flex items-center gap-1.5">
+          <Icon className={cn('h-3.5 w-3.5', column.color)} />
+          <span className={cn('text-[13px] font-semibold tracking-tight', column.color)}>{column.label}</span>
+        </div>
+        <span className={cn(
+          'text-[10px] font-semibold rounded-full min-w-[20px] h-[18px] flex items-center justify-center px-1.5',
+          column.color, 'bg-background/70'
+        )}>
+          {list.length}
+        </span>
+      </div>
+
+      {/* 列表区 */}
+      <div className="flex-1 space-y-2 p-2 rounded-b-2xl bg-muted/30 min-h-[200px]">
+        {list.length > 0 ? (
+          list.map(task => (
+            <KanbanTaskCard
+              key={task.id}
+              task={task}
+              projectColor={getProjectColor(task.project)}
+              projectName={getProjectName(task.project)}
+              isOverdue={isOverdue(task.dueDate)}
+              formatDate={formatDate}
+              onClick={() => onTaskClick(task.id)}
+              onMoveLeft={getLeftColumn}
+              onMoveRight={getRightColumn}
+              onToggleComplete={() => onToggleComplete(task.id, task.status === 'done')}
+            />
+          ))
+        ) : (
+          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground/50">
+            <div className={cn('h-10 w-10 rounded-full flex items-center justify-center mb-1.5', column.bg)}>
+              <Archive className="h-4 w-4" />
+            </div>
+            <span className="text-[10px]">无任务</span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+})
+
 interface KanbanTaskCardProps {
   task: Task
   projectColor: string
@@ -653,52 +816,88 @@ interface KanbanTaskCardProps {
   onToggleComplete: () => void
 }
 
-const PRIORITY_DOT_COLORS: Record<string, string> = {
+const PRIORITY_BAR_COLORS: Record<string, string> = {
   urgent: 'bg-red-500',
   high: 'bg-orange-500',
   medium: 'bg-blue-500',
-  low: 'bg-gray-400',
+  low: 'bg-gray-300 dark:bg-gray-600',
 }
 
 const KanbanTaskCard = memo(function KanbanTaskCard({ task, projectColor, projectName, isOverdue, formatDate, onClick, onMoveLeft, onMoveRight, onToggleComplete }: KanbanTaskCardProps) {
   const isDone = task.status === 'done'
+  const subtitle = task.description || task.notes
+  const tagCount = task.tags?.length || 0
+  const subtaskCount = task.subtasks?.length || 0
+  const completedSubtasks = task.subtasks?.filter(s => s.completed).length || 0
+
   return (
     <div
       className={cn(
-        'rounded-xl bg-background p-2.5 border border-border/40 active:scale-[0.98] transition-all cursor-pointer shadow-sm',
-        isDone && 'opacity-60'
+        'relative rounded-xl bg-background p-2.5 pl-3 border border-border/40 active:scale-[0.98] transition-all cursor-pointer shadow-sm overflow-hidden',
+        isDone && 'opacity-60 bg-muted/20'
       )}
       onClick={onClick}
     >
+      {/* 左侧优先级色条 */}
+      <div className={cn('absolute left-0 top-0 bottom-0 w-1', PRIORITY_BAR_COLORS[task.priority] || 'bg-gray-300')} />
+
       <div className="flex items-start gap-1.5 mb-1">
         <button
           onClick={(e) => { e.stopPropagation(); onToggleComplete() }}
           className={cn(
-            'shrink-0 mt-0.5 h-4 w-4 rounded-full border-2 flex items-center justify-center transition-all',
-            isDone ? 'bg-emerald-500 border-emerald-500' : 'border-muted-foreground/40'
+            'shrink-0 mt-0.5 h-4 w-4 rounded-full border-[1.5px] flex items-center justify-center transition-all active:scale-90',
+            isDone ? 'bg-emerald-500 border-emerald-500' : 'border-muted-foreground/40 hover:border-primary'
           )}
         >
           {isDone && <CheckCircle2 className="h-2.5 w-2.5 text-white" />}
         </button>
         <p className={cn(
-          'text-[12px] font-medium leading-snug flex-1 min-w-0 break-words',
+          'text-[12.5px] font-medium leading-snug flex-1 min-w-0 break-words',
           isDone && 'line-through text-muted-foreground'
         )}>
           {task.title}
         </p>
       </div>
-      <div className="flex items-center justify-between gap-1 mt-1.5">
+
+      {/* 描述/备注（如果存在） */}
+      {subtitle && (
+        <p className="text-[10px] text-muted-foreground line-clamp-1 ml-5 mb-1.5">{subtitle}</p>
+      )}
+
+      {/* 子任务进度 */}
+      {subtaskCount > 0 && (
+        <div className="ml-5 mb-1.5 flex items-center gap-1.5">
+          <div className="flex-1 h-0.5 rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full bg-emerald-500 rounded-full transition-all"
+              style={{ width: `${(completedSubtasks / subtaskCount) * 100}%` }}
+            />
+          </div>
+          <span className="text-[9px] text-muted-foreground tabular-nums shrink-0">{completedSubtasks}/{subtaskCount}</span>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between gap-1 mt-1 ml-5">
         <div className="flex items-center gap-1.5 min-w-0 flex-1">
-          <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', PRIORITY_DOT_COLORS[task.priority] || 'bg-gray-400')} />
           {projectName && (
-            <span className="text-[10px] text-muted-foreground truncate">{projectName}</span>
+            <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground truncate">
+              <span className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: projectColor }} />
+              <span className="truncate">{projectName}</span>
+            </span>
           )}
           {task.dueDate && (
             <span className={cn(
-              'text-[10px] shrink-0',
+              'flex items-center gap-0.5 text-[10px] shrink-0',
               isOverdue && !isDone ? 'text-red-500 font-medium' : 'text-muted-foreground'
             )}>
+              <CalendarDays className="h-2.5 w-2.5" />
               {formatDate(task.dueDate)}
+            </span>
+          )}
+          {tagCount > 0 && (
+            <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground shrink-0">
+              <TagIcon className="h-2.5 w-2.5" />
+              {tagCount}
             </span>
           )}
         </div>
@@ -706,7 +905,7 @@ const KanbanTaskCard = memo(function KanbanTaskCard({ task, projectColor, projec
           {onMoveLeft && (
             <button
               onClick={(e) => { e.stopPropagation(); onMoveLeft(task.id) }}
-              className="h-5 w-5 rounded flex items-center justify-center text-muted-foreground hover:bg-muted"
+              className="h-5 w-5 rounded flex items-center justify-center text-muted-foreground hover:bg-muted active:scale-90 transition-all"
               title="上一列"
             >
               <ChevronLeft className="h-3 w-3" />
@@ -715,7 +914,7 @@ const KanbanTaskCard = memo(function KanbanTaskCard({ task, projectColor, projec
           {onMoveRight && (
             <button
               onClick={(e) => { e.stopPropagation(); onMoveRight(task.id) }}
-              className="h-5 w-5 rounded flex items-center justify-center text-muted-foreground hover:bg-muted"
+              className="h-5 w-5 rounded flex items-center justify-center text-muted-foreground hover:bg-muted active:scale-90 transition-all"
               title="下一列"
             >
               <ChevronRight className="h-3 w-3" />

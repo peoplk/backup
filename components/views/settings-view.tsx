@@ -2,14 +2,10 @@
 
 import { useAppStore } from '@/lib/store'
 import { useSyncStore, pullDataFromCloud, resolveConflict } from '@/lib/sync-store'
+import { useS3SyncStore, pushDataToS3, pullDataFromS3, resolveS3Conflict } from '@/lib/s3-store'
 import { getIsFirebaseConfigured, getFirebaseConfig } from '@/lib/firebase'
 import type { FirebaseConfigInput } from '@/lib/firebase'
-import { getIsSupabaseConfigured, getSupabaseConfig, saveSupabaseConfig } from '@/lib/supabase'
-import type { SupabaseConfigInput } from '@/lib/supabase'
-import { useSupabaseSyncStore, pushDataToSupabase, pullDataFromSupabase, resolveSupabaseConflict } from '@/lib/supabase-store'
-import { useWebDAVSyncStore, pushDataToWebDAV, pullDataFromWebDAV, resolveWebDAVConflict } from '@/lib/webdav-store'
-import { getIsWebDAVConfigured, getWebDAVConfig, saveWebDAVConfig, testWebDAVConnection, WebDAV_PRESET_SERVERS, getPresetProtocol, type WebDAVConfigInput, type SyncProtocol } from '@/lib/webdav'
-import { getIsOSSConfigured, getOSSConfig, saveOSSConfig, testOSSConnection, syncToOSS, syncFromOSS, ensureOSSAuth, OSS_PRESET_REGIONS, type OSSConfigInput } from '@/lib/aliyun-oss'
+import { getIsS3Configured, getS3Config, saveS3Config, S3_PRESET_SERVICES, type S3ConfigInput } from '@/lib/s3-sync'
 import { CalendarBridge, isNativePlatform } from '@/lib/calendar-bridge'
 import type { CalendarInfo } from '@/lib/calendar-bridge'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -60,12 +56,9 @@ import {
   CalendarDays,
   Flame,
   HardDrive,
-  Server,
   Power,
-  Save,
-  ChevronDown,
 } from 'lucide-react'
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import { getStoredTheme, setTheme, type ThemeMode } from '@/lib/theme'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -296,6 +289,7 @@ export function SettingsView() {
   })))
   
   const syncStore = useSyncStore()
+  const s3SyncStore = useS3SyncStore()
   const [firebaseConfigForm, setFirebaseConfigForm] = useState<FirebaseConfigInput>({
     apiKey: '',
     authDomain: '',
@@ -306,74 +300,42 @@ export function SettingsView() {
   })
   const [showFirebaseConfig, setShowFirebaseConfig] = useState(false)
   const [showApiKey, setShowApiKey] = useState(false)
-  const [supabaseConfigForm, setSupabaseConfigForm] = useState<SupabaseConfigInput>({
-    url: '',
-    anonKey: '',
-    tableName: 'focusflow_state',
-  })
-  const [showSupabaseConfig, setShowSupabaseConfig] = useState(false)
-  const [supabaseStatus, setSupabaseStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle')
-  const [supabaseError, setSupabaseError] = useState<string | null>(null)
-  const [supabaseUserId, setSupabaseUserId] = useState<string | null>(null)
 
   // 统一的云同步面板状态
-  const [selectedProvider, setSelectedProvider] = useState<'none' | 'firebase' | 'supabase' | 'webdav'>(() => {
+  const [selectedProvider, setSelectedProvider] = useState<'none' | 'firebase' | 's3'>(() => {
     if (typeof window === 'undefined') return 'none'
-    return (localStorage.getItem('sync-provider-selected') as 'none' | 'firebase' | 'supabase' | 'webdav') || 'none'
+    return (localStorage.getItem('sync-provider-selected') as 'none' | 'firebase' | 's3') || 'none'
   })
-  const [webdavConfigForm, setWebdavConfigForm] = useState<WebDAVConfigInput>({
-    serverUrl: '',
-    username: '',
-    password: '',
-    remotePath: 'focusflow',
-    syncInterval: 30,
-  })
-  const [webdavStatus, setWebdavStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle')
-  const [webdavError, setWebdavError] = useState<string | null>(null)
-  const [showWebdavConfig, setShowWebdavConfig] = useState(false)
-  const [showWebdavPassword, setShowWebdavPassword] = useState(false)
-  const [webdavTestResult, setWebdavTestResult] = useState<{ success: boolean; message: string } | null>(null)
-  // === 阿里云 OSS 同步状态 ===
-  const [ossConfigForm, setOssConfigForm] = useState<OSSConfigInput>({
+  const [s3ConfigForm, setS3ConfigForm] = useState<S3ConfigInput>({
     endpoint: '',
+    region: 'us-east-1',
     bucket: '',
     accessKeyId: '',
-    accessKeySecret: '',
+    secretAccessKey: '',
+    forcePathStyle: true,
     remoteKey: 'focusflow-sync.json',
     syncInterval: 30,
   })
-  const [ossTestResult, setOssTestResult] = useState<{ success: boolean; message: string } | null>(null)
-  const [ossSyncing, setOssSyncing] = useState(false)
-  const [supabaseAuthForm, setSupabaseAuthForm] = useState({ email: '', password: '' })
+  const [showS3Config, setShowS3Config] = useState(false)
+  const [showS3Secret, setShowS3Secret] = useState(false)
+  const [s3TestResult, setS3TestResult] = useState<{ success: boolean; message: string } | null>(null)
 
   useEffect(() => {
     const config = getFirebaseConfig()
     if (config) {
       setFirebaseConfigForm(config)
     }
-    const supa = getSupabaseConfig()
-    if (supa) {
-      setSupabaseConfigForm({ url: supa.url, anonKey: supa.anonKey, tableName: supa.tableName || 'focusflow_state' })
-    }
-    const w = getWebDAVConfig()
-    if (w) {
-      setWebdavConfigForm({
-        serverUrl: w.serverUrl,
-        username: w.username,
-        password: w.password,
-        remotePath: w.remotePath || 'focusflow',
-        syncInterval: w.syncInterval || 30,
-      })
-    }
-    const oss = getOSSConfig()
-    if (oss) {
-      setOssConfigForm({
-        endpoint: oss.endpoint,
-        bucket: oss.bucket,
-        accessKeyId: oss.accessKeyId,
-        accessKeySecret: oss.accessKeySecret,
-        remoteKey: oss.remoteKey || 'focusflow-sync.json',
-        syncInterval: oss.syncInterval || 30,
+    const s3 = getS3Config()
+    if (s3) {
+      setS3ConfigForm({
+        endpoint: s3.endpoint,
+        region: s3.region || 'us-east-1',
+        bucket: s3.bucket,
+        accessKeyId: s3.accessKeyId,
+        secretAccessKey: s3.secretAccessKey,
+        forcePathStyle: s3.forcePathStyle ?? true,
+        remoteKey: s3.remoteKey || 'focusflow-sync.json',
+        syncInterval: s3.syncInterval || 30,
       })
     }
   }, [])
@@ -384,23 +346,14 @@ export function SettingsView() {
     }
   }, [selectedProvider])
 
-  const supabaseStore = useSupabaseSyncStore()
-  const webdavStore = useWebDAVSyncStore()
-
-  /**
-   * 当前选中的同步协议（WebDAV / OSS）
-   * 识别规则：
-   * 1. 如果 serverUrl 是 'oss://'  → OSS
-   * 2. 如果 serverUrl 匹配任意预设且预设 protocol 是 oss → OSS
-   * 3. 否则 → webdav
-   */
-  const currentProtocol: SyncProtocol = useMemo(() => {
-    const url = webdavConfigForm.serverUrl
-    if (url === 'oss://') return 'oss'
-    const matched = WebDAV_PRESET_SERVERS.find((p) => p.url === url)
-    if (matched?.protocol === 'oss') return 'oss'
-    return 'webdav'
-  }, [webdavConfigForm.serverUrl])
+  // Show the enabled provider's status, or fall back to selected provider
+  const activeSyncStore = s3SyncStore.isEnabled
+    ? s3SyncStore
+    : syncStore.isEnabled
+      ? syncStore
+      : selectedProvider === 's3'
+        ? s3SyncStore
+        : syncStore
 
   const [soundEnabled, setSoundEnabled] = useState(true)
   const [notificationEnabled, setNotificationEnabled] = useState(true)
@@ -1094,8 +1047,8 @@ export function SettingsView() {
             <CardTitle className="flex items-center gap-2">
               <Cloud className="h-5 w-5" />
               云同步
-              <Badge variant={syncStore.isEnabled ? 'default' : 'outline'} className="ml-auto text-[10px]">
-                {syncStore.isEnabled ? '已启用' : '未启用'}
+              <Badge variant={activeSyncStore.isEnabled ? 'default' : 'outline'} className="ml-auto text-[10px]">
+                {activeSyncStore.isEnabled ? '已启用' : '未启用'}
               </Badge>
             </CardTitle>
             <CardDescription>选择服务并配置你的同步方式</CardDescription>
@@ -1109,46 +1062,45 @@ export function SettingsView() {
                   <Badge variant="secondary" className="text-[10px]">
                     {selectedProvider === 'none' && '未配置'}
                     {selectedProvider === 'firebase' && 'Firebase'}
-                    {selectedProvider === 'supabase' && 'Supabase'}
-                    {selectedProvider === 'webdav' && 'WebDAV'}
+                    {selectedProvider === 's3' && 'S3'}
                   </Badge>
                 </div>
-                {syncStore.isEnabled && (
+                {activeSyncStore.isEnabled && (
                   <>
                     <div className="flex items-center gap-1.5">
                       <span className="text-muted-foreground">状态：</span>
-                      {syncStore.status === 'syncing' && <Loader2 className="h-3 w-3 animate-spin text-chart-1" />}
-                      {syncStore.status === 'synced' && <CheckCircle2 className="h-3 w-3 text-chart-2" />}
-                      {syncStore.status === 'error' && <AlertCircle className="h-3 w-3 text-destructive" />}
-                      {syncStore.status === 'offline' && <CloudOff className="h-3 w-3 text-muted-foreground" />}
+                      {activeSyncStore.status === 'syncing' && <Loader2 className="h-3 w-3 animate-spin text-chart-1" />}
+                      {activeSyncStore.status === 'synced' && <CheckCircle2 className="h-3 w-3 text-chart-2" />}
+                      {activeSyncStore.status === 'error' && <AlertCircle className="h-3 w-3 text-destructive" />}
+                      {activeSyncStore.status === 'offline' && <CloudOff className="h-3 w-3 text-muted-foreground" />}
                       <span>
-                        {syncStore.status === 'idle' && '空闲'}
-                        {syncStore.status === 'syncing' && '同步中'}
-                        {syncStore.status === 'synced' && '已同步'}
-                        {syncStore.status === 'error' && '出错'}
-                        {syncStore.status === 'offline' && '离线'}
+                        {activeSyncStore.status === 'idle' && '空闲'}
+                        {activeSyncStore.status === 'syncing' && '同步中'}
+                        {activeSyncStore.status === 'synced' && '已同步'}
+                        {activeSyncStore.status === 'error' && '出错'}
+                        {activeSyncStore.status === 'offline' && '离线'}
                       </span>
                     </div>
-                    {syncStore.lastSyncAt && (
+                    {activeSyncStore.lastSyncAt && (
                       <div className="flex items-center gap-1.5">
                         <span className="text-muted-foreground">上次同步：</span>
                         <span>
-                          {syncStore.lastSyncAt instanceof Date
-                            ? syncStore.lastSyncAt.toLocaleString('zh-CN')
-                            : new Date(syncStore.lastSyncAt).toLocaleString('zh-CN')}
+                          {activeSyncStore.lastSyncAt instanceof Date
+                            ? activeSyncStore.lastSyncAt.toLocaleString('zh-CN')
+                            : new Date(activeSyncStore.lastSyncAt).toLocaleString('zh-CN')}
                         </span>
                       </div>
                     )}
                   </>
                 )}
                 <div className="ml-auto">
-                  {syncStore.isEnabled ? (
+                  {activeSyncStore.isEnabled ? (
                     <Button
                       variant="outline"
                       size="sm"
                       className="h-7 text-xs gap-1"
                       onClick={async () => {
-                        await syncStore.logout()
+                        await activeSyncStore.logout()
                         toast.success('已停用云同步')
                       }}
                     >
@@ -1160,11 +1112,10 @@ export function SettingsView() {
                       variant="default"
                       size="sm"
                       className="h-7 text-xs gap-1"
-                      onClick={() => syncStore.setSyncEnabled(true)}
+                      onClick={() => activeSyncStore.setSyncEnabled(true)}
                       disabled={
                         (selectedProvider === 'firebase' && !getIsFirebaseConfigured()) ||
-                        (selectedProvider === 'supabase' && (!getIsSupabaseConfigured() || !supabaseStore.userId)) ||
-                        (selectedProvider === 'webdav' && (!getIsWebDAVConfigured() || !webdavStore.userId)) ||
+                        (selectedProvider === 's3' && !getIsS3Configured()) ||
                         selectedProvider === 'none'
                       }
                     >
@@ -1176,15 +1127,14 @@ export function SettingsView() {
               </div>
             </div>
 
-            {/* 提供方选择器：4 列分段控件 */}
+            {/* 提供方选择器：3 列分段控件 */}
             <div>
               <p className="text-sm font-medium mb-2">服务提供商</p>
-              <div role="tablist" className="grid grid-cols-4 gap-1 rounded-xl border border-border/50 bg-muted/20 p-1">
+              <div role="tablist" className="grid grid-cols-3 gap-1 rounded-xl border border-border/50 bg-muted/20 p-1">
                 {[
                   { key: 'none' as const, label: '未配置', Icon: Power },
                   { key: 'firebase' as const, label: 'Firebase', Icon: Flame },
-                  { key: 'supabase' as const, label: 'Supabase', Icon: Database },
-                  { key: 'webdav' as const, label: 'WebDAV', Icon: HardDrive },
+                  { key: 's3' as const, label: 'S3', Icon: HardDrive },
                 ].map(({ key, label, Icon }) => (
                   <button
                     key={key}
@@ -1210,7 +1160,7 @@ export function SettingsView() {
 
             {/* === 概览页：未配置 === */}
             {selectedProvider === 'none' && (
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-xl border border-border/50 p-4 space-y-2 hover:border-primary/30 transition-colors">
                   <div className="flex items-center gap-2">
                     <div className="h-8 w-8 rounded-lg bg-orange-500/10 flex items-center justify-center">
@@ -1233,41 +1183,21 @@ export function SettingsView() {
 
                 <div className="rounded-xl border border-border/50 p-4 space-y-2 hover:border-primary/30 transition-colors">
                   <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-                      <Database className="h-4 w-4 text-emerald-500" />
-                    </div>
-                    <p className="text-sm font-semibold">Supabase</p>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    自托管 Postgres，邮箱密码登录，实时推送
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    <Badge variant="secondary" className="text-[10px]">自托管</Badge>
-                    <Badge variant="secondary" className="text-[10px]">邮箱密码</Badge>
-                    <Badge variant="secondary" className="text-[10px]">实时</Badge>
-                  </div>
-                  <Button size="sm" variant="outline" className="w-full mt-2 gap-1" onClick={() => setSelectedProvider('supabase')}>
-                    配置 Supabase
-                  </Button>
-                </div>
-
-                <div className="rounded-xl border border-border/50 p-4 space-y-2 hover:border-primary/30 transition-colors">
-                  <div className="flex items-center gap-2">
                     <div className="h-8 w-8 rounded-lg bg-sky-500/10 flex items-center justify-center">
                       <HardDrive className="h-4 w-4 text-sky-500" />
                     </div>
-                    <p className="text-sm font-semibold">WebDAV</p>
+                    <p className="text-sm font-semibold">S3</p>
                   </div>
                   <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    坚果云/自建服务器，用户名密码，定时轮询
+                    S3 兼容存储（阿里云 OSS / MinIO / AWS），AccessKey 认证，定时轮询
                   </p>
                   <div className="flex flex-wrap gap-1">
-                    <Badge variant="secondary" className="text-[10px]">坚果云</Badge>
-                    <Badge variant="secondary" className="text-[10px]">用户名密码</Badge>
+                    <Badge variant="secondary" className="text-[10px]">S3兼容</Badge>
+                    <Badge variant="secondary" className="text-[10px]">AccessKey</Badge>
                     <Badge variant="secondary" className="text-[10px]">轮询</Badge>
                   </div>
-                  <Button size="sm" variant="outline" className="w-full mt-2 gap-1" onClick={() => setSelectedProvider('webdav')}>
-                    配置 WebDAV
+                  <Button size="sm" variant="outline" className="w-full mt-2 gap-1" onClick={() => setSelectedProvider('s3')}>
+                    配置 S3
                   </Button>
                 </div>
               </div>
@@ -1530,218 +1460,148 @@ export function SettingsView() {
               </div>
             )}
 
-            {/* === Supabase === */}
-            {selectedProvider === 'supabase' && (
+            {/* === S3 === */}
+            {selectedProvider === 's3' && (
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {getIsSupabaseConfigured() ? (
-                      <CheckCircle2 className="h-4 w-4 text-chart-2" />
-                    ) : (
-                      <AlertCircle className="h-4 w-4 text-amber-500" />
-                    )}
-                    <div>
-                      <p className="text-sm font-medium">Supabase 状态</p>
-                      <p className="text-xs text-muted-foreground">
-                        {getIsSupabaseConfigured() ? '已配置，URL/anonKey 有效' : '尚未配置'}
-                      </p>
-                    </div>
+                {!getIsS3Configured() && (
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+                    <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">S3 未配置</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">请填写下方 S3 配置信息后保存</p>
                   </div>
-                  <Badge variant={getIsSupabaseConfigured() ? 'default' : 'outline'}>
-                    {getIsSupabaseConfigured() ? '已就绪' : '未配置'}
-                  </Badge>
-                </div>
+                )}
 
                 <Button
                   variant="outline"
                   size="sm"
                   className="w-full gap-2"
-                  onClick={() => setShowSupabaseConfig(!showSupabaseConfig)}
+                  onClick={() => setShowS3Config(!showS3Config)}
                 >
                   <Settings className="h-3.5 w-3.5" />
-                  {showSupabaseConfig ? '收起配置' : (getIsSupabaseConfigured() ? '修改 Supabase 配置' : '配置 Supabase')}
+                  {showS3Config ? '收起配置' : (getIsS3Configured() ? '修改 S3 配置' : '填写 S3 配置')}
                 </Button>
 
-                {showSupabaseConfig && (
+                {showS3Config && (
                   <div className="space-y-3 rounded-xl border border-border/50 p-3">
                     <div className="space-y-2">
-                      <label className="text-xs font-medium">Project URL *</label>
+                      <label className="text-xs font-medium">预设服务</label>
+                      <select
+                        value={s3ConfigForm.endpoint}
+                        onChange={(e) => {
+                          const preset = S3_PRESET_SERVICES.find((p) => p.endpoint === e.target.value)
+                          setS3ConfigForm((p) => ({
+                            ...p,
+                            endpoint: e.target.value,
+                            region: preset?.region || p.region,
+                            forcePathStyle: preset?.forcePathStyle ?? p.forcePathStyle,
+                          }))
+                        }}
+                        className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
+                      >
+                        {S3_PRESET_SERVICES.map((preset) => (
+                          <option key={preset.name} value={preset.endpoint}>
+                            {preset.name}（{preset.description}）
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium">Endpoint *</label>
                       <Input
                         type="text"
-                        placeholder="https://xxxxx.supabase.co"
-                        value={supabaseConfigForm.url}
-                        onChange={(e) => setSupabaseConfigForm((p) => ({ ...p, url: e.target.value }))}
+                        placeholder="https://s3.amazonaws.com"
+                        value={s3ConfigForm.endpoint}
+                        onChange={(e) => setS3ConfigForm((p) => ({ ...p, endpoint: e.target.value }))}
                         className="h-8 text-xs"
                       />
                     </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium">anon public key *</label>
-                      <Input
-                        type="password"
-                        placeholder="eyJhbGciOi..."
-                        value={supabaseConfigForm.anonKey}
-                        onChange={(e) => setSupabaseConfigForm((p) => ({ ...p, anonKey: e.target.value }))}
-                        className="h-8 text-xs"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium">表名（默认 focusflow_state）</label>
-                      <Input
-                        type="text"
-                        placeholder="focusflow_state"
-                        value={supabaseConfigForm.tableName}
-                        onChange={(e) => setSupabaseConfigForm((p) => ({ ...p, tableName: e.target.value }))}
-                        className="h-8 text-xs"
-                      />
-                    </div>
-                    <Button
-                      size="sm"
-                      className="w-full"
-                      disabled={!supabaseConfigForm.url || !supabaseConfigForm.anonKey}
-                      onClick={() => {
-                        const ok = saveSupabaseConfig(supabaseConfigForm)
-                        if (ok) {
-                          toast.success('Supabase 配置已保存')
-                          setShowSupabaseConfig(false)
-                        } else {
-                          toast.error('保存失败，请检查配置')
-                        }
-                      }}
-                    >
-                      保存配置
-                    </Button>
-                    <div className="rounded-lg bg-muted/30 p-2.5 text-[11px] text-muted-foreground leading-relaxed">
-                      <p className="font-medium mb-1">建表 SQL（首次使用）：</p>
-                      <pre className="font-mono text-[10px] whitespace-pre-wrap break-all">
-{`create table focusflow_state (
-  user_id text primary key,
-  data jsonb,
-  updated_at timestamptz default now()
-);
-alter table focusflow_state enable row level security;
-create policy "own" on focusflow_state
-  for all using (user_id = current_setting('request.jwt.claims', true)::json->>'sub')
-  with check (user_id = current_setting('request.jwt.claims', true)::json->>'sub');`}
-                      </pre>
-                    </div>
-                  </div>
-                )}
 
-                {getIsSupabaseConfigured() && (
-                  <>
-                    <Separator />
-
-                    {/* 邮箱密码登录 */}
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium">账号登录</p>
-                      <div className="space-y-2 rounded-xl border border-border/50 p-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">Region *</label>
                         <Input
-                          type="email"
-                          placeholder="邮箱"
-                          value={supabaseAuthForm.email}
-                          onChange={(e) => setSupabaseAuthForm((p) => ({ ...p, email: e.target.value }))}
+                          type="text"
+                          placeholder="us-east-1"
+                          value={s3ConfigForm.region}
+                          onChange={(e) => setS3ConfigForm((p) => ({ ...p, region: e.target.value }))}
                           className="h-8 text-xs"
                         />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">Bucket *</label>
                         <Input
-                          type="password"
-                          placeholder="密码"
-                          value={supabaseAuthForm.password}
-                          onChange={(e) => setSupabaseAuthForm((p) => ({ ...p, password: e.target.value }))}
+                          type="text"
+                          placeholder="my-bucket"
+                          value={s3ConfigForm.bucket}
+                          onChange={(e) => setS3ConfigForm((p) => ({ ...p, bucket: e.target.value }))}
                           className="h-8 text-xs"
                         />
-                        <div className="flex gap-2">
-                          <Button
-                            variant="default"
-                            size="sm"
-                            className="flex-1"
-                            disabled={!supabaseAuthForm.email || !supabaseAuthForm.password || supabaseStatus === 'syncing'}
-                            onClick={async () => {
-                              try {
-                                setSupabaseStatus('syncing')
-                                setSupabaseError(null)
-                                const ok = await supabaseStore.loginWithEmail(supabaseAuthForm.email, supabaseAuthForm.password)
-                                if (ok) {
-                                  setSupabaseUserId(supabaseStore.userId)
-                                  setSupabaseStatus('synced')
-                                  toast.success('登录成功')
-                                } else {
-                                  setSupabaseStatus('error')
-                                  setSupabaseError('登录失败')
-                                  toast.error('登录失败')
-                                }
-                              } catch (err) {
-                                const msg = err instanceof Error ? err.message : '登录失败'
-                                setSupabaseStatus('error')
-                                setSupabaseError(msg)
-                                toast.error(msg)
-                              }
-                            }}
-                          >
-                            登录
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="flex-1"
-                            disabled={!supabaseAuthForm.email || !supabaseAuthForm.password || supabaseStatus === 'syncing'}
-                            onClick={async () => {
-                              try {
-                                setSupabaseStatus('syncing')
-                                setSupabaseError(null)
-                                const ok = await supabaseStore.signUpWithEmail(supabaseAuthForm.email, supabaseAuthForm.password)
-                                if (ok) {
-                                  setSupabaseUserId(supabaseStore.userId)
-                                  setSupabaseStatus('synced')
-                                  toast.success('注册成功，已自动登录')
-                                } else {
-                                  setSupabaseStatus('error')
-                                  setSupabaseError('注册失败')
-                                  toast.error('注册失败')
-                                }
-                              } catch (err) {
-                                const msg = err instanceof Error ? err.message : '注册失败'
-                                setSupabaseStatus('error')
-                                setSupabaseError(msg)
-                                toast.error(msg)
-                              }
-                            }}
-                          >
-                            注册
-                          </Button>
-                        </div>
-                        {supabaseStore.userEmail && (
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-muted-foreground">已登录：{supabaseStore.userEmail}</span>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 text-[11px] text-destructive"
-                              onClick={async () => {
-                                await supabaseStore.logout()
-                                setSupabaseUserId(null)
-                                setSupabaseStatus('idle')
-                                toast.success('已退出')
-                              }}
-                            >
-                              退出
-                            </Button>
-                          </div>
-                        )}
                       </div>
                     </div>
 
                     <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        {supabaseStatus === 'syncing' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                        {supabaseStatus === 'synced' && <CheckCircle2 className="h-3.5 w-3.5 text-chart-2" />}
-                        {supabaseStatus === 'error' && <AlertCircle className="h-3.5 w-3.5 text-destructive" />}
-                        <span className="text-xs text-muted-foreground">
-                          {supabaseStatus === 'syncing' && '同步中...'}
-                          {supabaseStatus === 'synced' && '已同步'}
-                          {supabaseStatus === 'error' && supabaseError}
-                          {supabaseStatus === 'idle' && (supabaseUserId ? `用户：${supabaseUserId.slice(0, 8)}...` : '登录后启用同步')}
-                        </span>
+                      <label className="text-xs font-medium">AccessKey ID *</label>
+                      <Input
+                        type="text"
+                        placeholder="LTAI5t..."
+                        value={s3ConfigForm.accessKeyId}
+                        onChange={(e) => setS3ConfigForm((p) => ({ ...p, accessKeyId: e.target.value }))}
+                        className="h-8 text-xs"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium">Secret Access Key *</label>
+                      <div className="relative">
+                        <Input
+                          type={showS3Secret ? 'text' : 'password'}
+                          placeholder="••••••"
+                          value={s3ConfigForm.secretAccessKey}
+                          onChange={(e) => setS3ConfigForm((p) => ({ ...p, secretAccessKey: e.target.value }))}
+                          className="h-8 text-xs pr-9"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowS3Secret(!showS3Secret)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                        >
+                          {showS3Secret ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                        </button>
                       </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">远端对象 Key</label>
+                        <Input
+                          type="text"
+                          placeholder="focusflow-sync.json"
+                          value={s3ConfigForm.remoteKey || 'focusflow-sync.json'}
+                          onChange={(e) => setS3ConfigForm((p) => ({ ...p, remoteKey: e.target.value }))}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium">同步间隔（秒）</label>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={3600}
+                          placeholder="30"
+                          value={s3ConfigForm.syncInterval ?? 30}
+                          onChange={(e) => setS3ConfigForm((p) => ({ ...p, syncInterval: Math.max(0, parseInt(e.target.value) || 0) }))}
+                          className="h-8 text-xs"
+                        />
+                        <p className="text-[10px] text-muted-foreground">0 = 仅手动</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-medium">Path Style 访问</label>
+                      <Switch
+                        checked={s3ConfigForm.forcePathStyle ?? true}
+                        onCheckedChange={(checked) => setS3ConfigForm((p) => ({ ...p, forcePathStyle: checked }))}
+                      />
                     </div>
 
                     <div className="flex gap-2">
@@ -1749,431 +1609,87 @@ create policy "own" on focusflow_state
                         variant="outline"
                         size="sm"
                         className="flex-1 gap-1.5"
+                        disabled={!s3ConfigForm.endpoint || !s3ConfigForm.bucket || !s3ConfigForm.accessKeyId || s3SyncStore.status === 'syncing'}
                         onClick={async () => {
-                          try {
-                            setSupabaseStatus('syncing')
-                            setSupabaseError(null)
-                            const store = useAppStore.getState()
-                            const data: Record<string, unknown> = {}
-                            SYNC_DATA_KEYS.forEach((k) => { if ((store as any)[k] !== undefined) data[k] = (store as any)[k] })
-                            await pushDataToSupabase(data)
-                            setSupabaseStatus('synced')
-                            toast.success('已推送到 Supabase')
-                          } catch (err) {
-                            const msg = err instanceof Error ? err.message : '推送失败'
-                            setSupabaseStatus('error')
-                            setSupabaseError(msg)
-                            toast.error(msg)
+                          setS3TestResult(null)
+                          const result = await s3SyncStore.testConnection(s3ConfigForm)
+                          setS3TestResult(result)
+                          if (result.success) {
+                            toast.success(result.message)
+                          } else {
+                            toast.error(result.message)
                           }
                         }}
-                        disabled={supabaseStatus === 'syncing' || !supabaseStore.isEnabled}
                       >
-                        <Upload className="h-3.5 w-3.5" />
-                        推送
+                        <RefreshCw className={cn('h-3.5 w-3.5', s3SyncStore.status === 'syncing' && 'animate-spin')} />
+                        测试连接
                       </Button>
                       <Button
-                        variant="outline"
                         size="sm"
                         className="flex-1 gap-1.5"
+                        disabled={!s3ConfigForm.endpoint || !s3ConfigForm.bucket || !s3ConfigForm.accessKeyId || s3SyncStore.status === 'syncing'}
                         onClick={async () => {
-                          try {
-                            setSupabaseStatus('syncing')
-                            setSupabaseError(null)
-                            const cloudData = await pullDataFromSupabase()
-                            if (cloudData) {
-                              const store = useAppStore.getState()
-                              const localData: Record<string, unknown> = {}
-                              SYNC_DATA_KEYS.forEach((k) => { if ((store as any)[k] !== undefined) localData[k] = (store as any)[k] })
-                              const merged = await resolveSupabaseConflict(localData)
-                              const mergedKeys = Object.keys(merged)
-                              mergedKeys.forEach((k) => {
-                                if (typeof (useAppStore.getState() as any)[k] !== 'function') {
-                                  (useAppStore.setState as any)({ [k]: merged[k] })
-                                }
-                              })
-                              setSupabaseStatus('synced')
-                              toast.success('已从 Supabase 拉取并合并数据')
-                            } else {
-                              setSupabaseStatus('idle')
-                              toast.info('Supabase 暂无数据')
-                            }
-                          } catch (err) {
-                            const msg = err instanceof Error ? err.message : '拉取失败'
-                            setSupabaseStatus('error')
-                            setSupabaseError(msg)
-                            toast.error(msg)
+                          setS3TestResult(null)
+                          const ok = await s3SyncStore.saveConfig(s3ConfigForm)
+                          if (ok) {
+                            toast.success('S3 配置已保存')
+                            setShowS3Config(false)
+                          } else {
+                            toast.error('保存失败，请检查配置')
                           }
                         }}
-                        disabled={supabaseStatus === 'syncing' || !supabaseStore.isEnabled}
                       >
-                        <Download className="h-3.5 w-3.5" />
-                        拉取
+                        <Check className="h-3.5 w-3.5" />
+                        保存配置
                       </Button>
                     </div>
 
-                    <div className="rounded-xl bg-muted/30 p-3 space-y-1.5">
-                      <p className="text-xs font-medium">使用说明</p>
-                      <p className="text-[11px] text-muted-foreground leading-relaxed">
-                        • Supabase 与 Firebase 互不影响，可任选其一或同时使用<br />
-                        • 推/拉数据基于用户邮箱关联，请在多设备间使用同一账号<br />
-                        • 推荐在 Supabase 控制台配置 RLS 策略以保护数据
-                      </p>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* === WebDAV === */}
-            {selectedProvider === 'webdav' && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    {getIsWebDAVConfigured() ? (
-                      <CheckCircle2 className="h-4 w-4 text-chart-2" />
-                    ) : (
-                      <AlertCircle className="h-4 w-4 text-amber-500" />
+                    {s3TestResult && (
+                      <div className={cn(
+                        'rounded-lg p-2.5 text-xs',
+                        s3TestResult.success ? 'bg-chart-2/10 text-chart-2' : 'bg-destructive/10 text-destructive'
+                      )}>
+                        {s3TestResult.message}
+                      </div>
                     )}
-                    <div>
-                      <p className="text-sm font-medium">WebDAV 状态</p>
-                      <p className="text-xs text-muted-foreground">
-                        {getIsWebDAVConfigured() ? '已配置服务器与账号' : '尚未配置'}
-                      </p>
+
+                    <div className="rounded-lg bg-amber-500/5 border border-amber-500/20 p-2.5 text-[11px] text-amber-600 dark:text-amber-400">
+                      ⚠ Secret Access Key 明文存储在本地，建议使用 RAM 子账号 + 只读权限以提升安全性
                     </div>
-                  </div>
-                  <Badge variant={getIsWebDAVConfigured() ? 'default' : 'outline'}>
-                    {getIsWebDAVConfigured() ? '已就绪' : '未配置'}
-                  </Badge>
-                </div>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full gap-2"
-                  onClick={() => setShowWebdavConfig(!showWebdavConfig)}
-                >
-                  <Settings className="h-3.5 w-3.5" />
-                  {showWebdavConfig ? '收起配置' : (getIsWebDAVConfigured() || getIsOSSConfigured() ? '修改同步配置' : '配置同步服务')}
-                </Button>
-
-                {showWebdavConfig && (
-                  <div className="space-y-3 rounded-xl border border-border/50 p-3">
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium">预设服务</label>
-                      <WebDAVPresetDropdown
-                        value={currentProtocol === 'oss' ? 'oss://' : webdavConfigForm.serverUrl}
-                        onChange={(serverUrl) => {
-                          const protocol = getPresetProtocol(
-                            WebDAV_PRESET_SERVERS.find((p) => p.url === serverUrl)?.name || ''
-                          )
-                          if (protocol === 'oss') {
-                            // 切到 OSS：切换为 OSS 字段（用第一个 Region 作为默认）
-                            setOssConfigForm((p) => ({
-                              ...p,
-                              endpoint: OSS_PRESET_REGIONS[0].endpoint,
-                            }))
-                          } else {
-                            // 切到 WebDAV：填入 url
-                            setWebdavConfigForm((p) => ({ ...p, serverUrl }))
-                          }
-                        }}
-                      />
-                      <p className="text-[11px] text-muted-foreground">
-                        选择预设可自动填入服务器地址
-                      </p>
-                    </div>
-
-                    {currentProtocol === 'webdav' ? (
-                      <>
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium">服务器地址 *</label>
-                          <Input
-                            type="text"
-                            placeholder="https://dav.jianguoyun.com/dav/"
-                            value={webdavConfigForm.serverUrl}
-                            onChange={(e) => setWebdavConfigForm((p) => ({ ...p, serverUrl: e.target.value }))}
-                            className="h-8 text-xs"
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium">用户名 *</label>
-                          <Input
-                            type="text"
-                            placeholder="your-username"
-                            value={webdavConfigForm.username}
-                            onChange={(e) => setWebdavConfigForm((p) => ({ ...p, username: e.target.value }))}
-                            className="h-8 text-xs"
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium">密码 / 应用专用密码 *</label>
-                          <div className="relative">
-                            <Input
-                              type={showWebdavPassword ? 'text' : 'password'}
-                              placeholder="••••••"
-                              value={webdavConfigForm.password}
-                              onChange={(e) => setWebdavConfigForm((p) => ({ ...p, password: e.target.value }))}
-                              className="h-8 text-xs pr-9"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setShowWebdavPassword(!showWebdavPassword)}
-                              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                            >
-                              {showWebdavPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="space-y-2">
-                            <label className="text-xs font-medium">远端路径</label>
-                            <Input
-                              type="text"
-                              placeholder="focusflow"
-                              value={webdavConfigForm.remotePath || 'focusflow'}
-                              onChange={(e) => setWebdavConfigForm((p) => ({ ...p, remotePath: e.target.value }))}
-                              className="h-8 text-xs"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-xs font-medium">同步间隔（秒）</label>
-                            <Input
-                              type="number"
-                              min={0}
-                              max={3600}
-                              placeholder="30"
-                              value={webdavConfigForm.syncInterval ?? 30}
-                              onChange={(e) => setWebdavConfigForm((p) => ({ ...p, syncInterval: Math.max(0, parseInt(e.target.value) || 0) }))}
-                              className="h-8 text-xs"
-                            />
-                            <p className="text-[10px] text-muted-foreground">0 = 仅手动</p>
-                          </div>
-                        </div>
-
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="flex-1 gap-1.5"
-                            disabled={!webdavConfigForm.serverUrl || !webdavConfigForm.username || webdavStatus === 'syncing'}
-                            onClick={async () => {
-                              setWebdavStatus('syncing')
-                              setWebdavError(null)
-                              setWebdavTestResult(null)
-                              const result = await testWebDAVConnection(webdavConfigForm)
-                              setWebdavTestResult(result)
-                              if (result.success) {
-                                toast.success('连接成功')
-                                setWebdavStatus('synced')
-                              } else {
-                                setWebdavStatus('error')
-                                setWebdavError(result.message)
-                                toast.error(result.message)
-                              }
-                            }}
-                          >
-                            <Server className="h-3.5 w-3.5" />
-                            测试连接
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="flex-1 gap-1.5"
-                            disabled={!webdavConfigForm.serverUrl || !webdavConfigForm.username || webdavStatus === 'syncing'}
-                            onClick={async () => {
-                              setWebdavError(null)
-                              setWebdavTestResult(null)
-                              const ok = await webdavStore.saveConfig(webdavConfigForm)
-                              if (ok) {
-                                toast.success('配置已保存')
-                                setShowWebdavConfig(false)
-                              } else {
-                                toast.error('保存失败，请检查配置')
-                              }
-                            }}
-                          >
-                            <Save className="h-3.5 w-3.5" />
-                            保存配置
-                          </Button>
-                        </div>
-
-                        {webdavTestResult && (
-                          <div className={cn(
-                            'rounded-lg p-2.5 text-xs',
-                            webdavTestResult.success ? 'bg-chart-2/10 text-chart-2' : 'bg-destructive/10 text-destructive'
-                          )}>
-                            {webdavTestResult.message}
-                          </div>
-                        )}
-
-                        <div className="rounded-lg bg-amber-500/5 border border-amber-500/20 p-2.5 text-[11px] text-amber-600 dark:text-amber-400">
-                          ⚠ WebDAV 密码明文存储在本地，建议使用应用专用密码（坚果云等）以提升安全性
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        {/* === 阿里云 OSS 配置 === */}
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium">Region *</label>
-                          <select
-                            value={ossConfigForm.endpoint}
-                            onChange={(e) => setOssConfigForm((p) => ({ ...p, endpoint: e.target.value }))}
-                            className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs"
-                          >
-                            {OSS_PRESET_REGIONS.map((r) => (
-                              <option key={r.region} value={r.endpoint}>
-                                {r.name}（{r.description}）
-                              </option>
-                            ))}
-                          </select>
-                          <p className="text-[10px] text-muted-foreground">Endpoint: {ossConfigForm.endpoint}</p>
-                        </div>
-
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium">Bucket 名称 *</label>
-                          <Input
-                            type="text"
-                            placeholder="my-bucket"
-                            value={ossConfigForm.bucket}
-                            onChange={(e) => setOssConfigForm((p) => ({ ...p, bucket: e.target.value }))}
-                            className="h-8 text-xs"
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium">AccessKey ID *</label>
-                          <Input
-                            type="text"
-                            placeholder="LTAI5t..."
-                            value={ossConfigForm.accessKeyId}
-                            onChange={(e) => setOssConfigForm((p) => ({ ...p, accessKeyId: e.target.value }))}
-                            className="h-8 text-xs"
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium">AccessKey Secret *</label>
-                          <div className="relative">
-                            <Input
-                              type={showWebdavPassword ? 'text' : 'password'}
-                              placeholder="••••••"
-                              value={ossConfigForm.accessKeySecret}
-                              onChange={(e) => setOssConfigForm((p) => ({ ...p, accessKeySecret: e.target.value }))}
-                              className="h-8 text-xs pr-9"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setShowWebdavPassword(!showWebdavPassword)}
-                              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                            >
-                              {showWebdavPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                            </button>
-                          </div>
-                        </div>
-
-                        <div className="space-y-2">
-                          <label className="text-xs font-medium">远端对象 Key</label>
-                          <Input
-                            type="text"
-                            placeholder="focusflow-sync.json"
-                            value={ossConfigForm.remoteKey || 'focusflow-sync.json'}
-                            onChange={(e) => setOssConfigForm((p) => ({ ...p, remoteKey: e.target.value }))}
-                            className="h-8 text-xs"
-                          />
-                        </div>
-
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="flex-1 gap-1.5"
-                            disabled={!ossConfigForm.endpoint || !ossConfigForm.bucket || !ossConfigForm.accessKeyId || ossSyncing}
-                            onClick={async () => {
-                              setOssSyncing(true)
-                              setOssTestResult(null)
-                              const result = await testOSSConnection(ossConfigForm)
-                              setOssTestResult(result)
-                              setOssSyncing(false)
-                              if (result.success) {
-                                toast.success(result.message)
-                              } else {
-                                toast.error(result.message)
-                              }
-                            }}
-                          >
-                            <Server className="h-3.5 w-3.5" />
-                            {ossSyncing ? '测试中...' : '测试连接'}
-                          </Button>
-                          <Button
-                            size="sm"
-                            className="flex-1 gap-1.5"
-                            disabled={!ossConfigForm.endpoint || !ossConfigForm.bucket || !ossConfigForm.accessKeyId || ossSyncing}
-                            onClick={async () => {
-                              setOssTestResult(null)
-                              const ok = saveOSSConfig(ossConfigForm)
-                              if (ok) {
-                                toast.success('OSS 配置已保存')
-                                setShowWebdavConfig(false)
-                              } else {
-                                toast.error('保存失败，请检查配置')
-                              }
-                            }}
-                          >
-                            <Save className="h-3.5 w-3.5" />
-                            保存配置
-                          </Button>
-                        </div>
-
-                        {ossTestResult && (
-                          <div className={cn(
-                            'rounded-lg p-2.5 text-xs',
-                            ossTestResult.success ? 'bg-chart-2/10 text-chart-2' : 'bg-destructive/10 text-destructive'
-                          )}>
-                            {ossTestResult.message}
-                          </div>
-                        )}
-
-                        <div className="rounded-lg bg-amber-500/5 border border-amber-500/20 p-2.5 text-[11px] text-amber-600 dark:text-amber-400">
-                          ⚠ AccessKey Secret 明文存储在本地，建议使用 RAM 子账号 + 只读 OSS 权限以提升安全性
-                        </div>
-                      </>
-                    )}
                   </div>
                 )}
 
-                {getIsWebDAVConfigured() && (
+                {getIsS3Configured() && (
                   <>
                     <Separator />
 
-                    {webdavStore.username && (
+                    {s3SyncStore.accessKeyId && (
                       <div className="flex items-center justify-between rounded-xl bg-sky-500/5 border border-sky-500/20 p-3">
                         <div className="flex items-center gap-2">
                           <HardDrive className="h-4 w-4 text-sky-500" />
                           <div>
-                            <p className="text-sm font-medium">{webdavStore.username}</p>
+                            <p className="text-sm font-medium">{s3SyncStore.accessKeyId}</p>
                             <p className="text-xs text-muted-foreground">
                               {(() => {
-                                const cfg = getWebDAVConfig()
-                                return cfg ? `${cfg.serverUrl} · ${cfg.remotePath || 'focusflow'}` : ''
+                                const cfg = getS3Config()
+                                return cfg ? `${cfg.bucket} · ${cfg.endpoint}` : ''
                               })()}
                             </p>
                           </div>
                         </div>
-                        <Badge variant="default" className="text-[10px]">WebDAV</Badge>
+                        <Badge variant="default" className="text-[10px]">S3</Badge>
                       </div>
                     )}
 
                     <div className="flex items-center gap-2">
-                      {webdavStatus === 'syncing' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                      {webdavStatus === 'synced' && <CheckCircle2 className="h-3.5 w-3.5 text-chart-2" />}
-                      {webdavStatus === 'error' && <AlertCircle className="h-3.5 w-3.5 text-destructive" />}
+                      {s3SyncStore.status === 'syncing' && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                      {s3SyncStore.status === 'synced' && <CheckCircle2 className="h-3.5 w-3.5 text-chart-2" />}
+                      {s3SyncStore.status === 'error' && <AlertCircle className="h-3.5 w-3.5 text-destructive" />}
                       <span className="text-xs text-muted-foreground">
-                        {webdavStatus === 'syncing' && '同步中...'}
-                        {webdavStatus === 'synced' && '已同步'}
-                        {webdavStatus === 'error' && webdavError}
-                        {webdavStatus === 'idle' && (webdavStore.userId ? `用户：${webdavStore.userId.slice(0, 8)}...` : '启用后开始轮询')}
+                        {s3SyncStore.status === 'syncing' && '同步中...'}
+                        {s3SyncStore.status === 'synced' && '已同步'}
+                        {s3SyncStore.status === 'error' && s3SyncStore.error}
+                        {s3SyncStore.status === 'idle' && (s3SyncStore.userId ? `用户：${s3SyncStore.userId.slice(0, 8)}...` : '启用后开始同步')}
                       </span>
                     </div>
 
@@ -2184,22 +1700,13 @@ create policy "own" on focusflow_state
                         className="flex-1 gap-1.5"
                         onClick={async () => {
                           try {
-                            setWebdavStatus('syncing')
-                            setWebdavError(null)
-                            const store = useAppStore.getState()
-                            const data: Record<string, unknown> = {}
-                            SYNC_DATA_KEYS.forEach((k) => { if ((store as any)[k] !== undefined) data[k] = (store as any)[k] })
-                            await pushDataToWebDAV(data)
-                            setWebdavStatus('synced')
-                            toast.success('已推送到 WebDAV')
-                          } catch (err) {
-                            const msg = err instanceof Error ? err.message : '推送失败'
-                            setWebdavStatus('error')
-                            setWebdavError(msg)
-                            toast.error(msg)
+                            await s3SyncStore.forceSync()
+                            toast.success('数据已推送到 S3')
+                          } catch {
+                            toast.error('推送失败')
                           }
                         }}
-                        disabled={webdavStatus === 'syncing' || !webdavStore.isEnabled}
+                        disabled={s3SyncStore.status === 'syncing' || !s3SyncStore.isEnabled}
                       >
                         <Upload className="h-3.5 w-3.5" />
                         推送
@@ -2210,34 +1717,27 @@ create policy "own" on focusflow_state
                         className="flex-1 gap-1.5"
                         onClick={async () => {
                           try {
-                            setWebdavStatus('syncing')
-                            setWebdavError(null)
-                            const cloudData = await pullDataFromWebDAV()
+                            const cloudData = await pullDataFromS3()
                             if (cloudData) {
                               const store = useAppStore.getState()
                               const localData: Record<string, unknown> = {}
                               SYNC_DATA_KEYS.forEach((k) => { if ((store as any)[k] !== undefined) localData[k] = (store as any)[k] })
-                              const merged = await resolveWebDAVConflict(localData)
+                              const merged = await resolveS3Conflict(localData)
                               const mergedKeys = Object.keys(merged)
                               mergedKeys.forEach((k) => {
                                 if (typeof (useAppStore.getState() as any)[k] !== 'function') {
                                   (useAppStore.setState as any)({ [k]: merged[k] })
                                 }
                               })
-                              setWebdavStatus('synced')
-                              toast.success('已从 WebDAV 拉取并合并数据')
+                              toast.success('已从 S3 拉取并合并数据')
                             } else {
-                              setWebdavStatus('idle')
-                              toast.info('WebDAV 暂无数据')
+                              toast.info('S3 暂无数据')
                             }
-                          } catch (err) {
-                            const msg = err instanceof Error ? err.message : '拉取失败'
-                            setWebdavStatus('error')
-                            setWebdavError(msg)
-                            toast.error(msg)
+                          } catch {
+                            toast.error('拉取失败')
                           }
                         }}
-                        disabled={webdavStatus === 'syncing' || !webdavStore.isEnabled}
+                        disabled={s3SyncStore.status === 'syncing' || !s3SyncStore.isEnabled}
                       >
                         <Download className="h-3.5 w-3.5" />
                         拉取
@@ -2247,125 +1747,9 @@ create policy "own" on focusflow_state
                     <div className="rounded-xl bg-muted/30 p-3 space-y-1.5">
                       <p className="text-xs font-medium">使用说明</p>
                       <p className="text-[11px] text-muted-foreground leading-relaxed">
-                        • WebDAV 同步依赖账号密码，请妥善保管<br />
-                        • 默认 30 秒轮询一次，可调整间隔或设为 0 手动触发<br />
-                        • 与 Firebase/Supabase 互不影响，可任选其一或同时使用
-                      </p>
-                    </div>
-                  </>
-                )}
-
-                {getIsOSSConfigured() && (
-                  <>
-                    <Separator />
-
-                    <div className="flex items-center justify-between rounded-xl bg-orange-500/5 border border-orange-500/20 p-3">
-                      <div className="flex items-center gap-2">
-                        <Cloud className="h-4 w-4 text-orange-500" />
-                        <div>
-                          <p className="text-sm font-medium">阿里云 OSS</p>
-                          <p className="text-xs text-muted-foreground">
-                            {(() => {
-                              const cfg = getOSSConfig()
-                              return cfg ? `${cfg.bucket} · ${cfg.endpoint}` : ''
-                            })()}
-                          </p>
-                        </div>
-                      </div>
-                      <Badge variant="default" className="text-[10px] bg-orange-500">OSS</Badge>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      {ossSyncing && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                      {ossTestResult?.success && !ossSyncing && <CheckCircle2 className="h-3.5 w-3.5 text-chart-2" />}
-                      {ossTestResult && !ossTestResult.success && !ossSyncing && <AlertCircle className="h-3.5 w-3.5 text-destructive" />}
-                      <span className="text-xs text-muted-foreground">
-                        {ossSyncing && '同步中...'}
-                        {!ossSyncing && ossTestResult?.message}
-                        {!ossSyncing && !ossTestResult && '点击下方按钮推送/拉取数据'}
-                      </span>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1 gap-1.5"
-                        disabled={ossSyncing}
-                        onClick={async () => {
-                          try {
-                            setOssSyncing(true)
-                            setOssTestResult(null)
-                            const userId = await ensureOSSAuth()
-                            if (!userId) throw new Error('OSS 未配置')
-                            const store = useAppStore.getState()
-                            const data: Record<string, unknown> = {}
-                            SYNC_DATA_KEYS.forEach((k) => { if ((store as any)[k] !== undefined) data[k] = (store as any)[k] })
-                            await syncToOSS(userId, data)
-                            setOssTestResult({ success: true, message: '已推送到 OSS' })
-                            toast.success('已推送到 OSS')
-                          } catch (err) {
-                            const msg = err instanceof Error ? err.message : '推送失败'
-                            setOssTestResult({ success: false, message: msg })
-                            toast.error(msg)
-                          } finally {
-                            setOssSyncing(false)
-                          }
-                        }}
-                      >
-                        <Upload className="h-3.5 w-3.5" />
-                        推送
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1 gap-1.5"
-                        disabled={ossSyncing}
-                        onClick={async () => {
-                          try {
-                            setOssSyncing(true)
-                            setOssTestResult(null)
-                            const userId = await ensureOSSAuth()
-                            if (!userId) throw new Error('OSS 未配置')
-                            const cloudData = await syncFromOSS(userId)
-                            if (cloudData) {
-                              const store = useAppStore.getState()
-                              const localData: Record<string, unknown> = {}
-                              SYNC_DATA_KEYS.forEach((k) => { if ((store as any)[k] !== undefined) localData[k] = (store as any)[k] })
-                              // 简单合并：远端覆盖本地（与 WebDAV 行为一致）
-                              const merged = { ...localData, ...cloudData }
-                              const mergedKeys = Object.keys(merged)
-                              mergedKeys.forEach((k) => {
-                                if (typeof (useAppStore.getState() as any)[k] !== 'function') {
-                                  (useAppStore.setState as any)({ [k]: merged[k] })
-                                }
-                              })
-                              setOssTestResult({ success: true, message: '已从 OSS 拉取并合并数据' })
-                              toast.success('已从 OSS 拉取并合并数据')
-                            } else {
-                              setOssTestResult({ success: true, message: 'OSS 暂无数据' })
-                              toast.info('OSS 暂无数据')
-                            }
-                          } catch (err) {
-                            const msg = err instanceof Error ? err.message : '拉取失败'
-                            setOssTestResult({ success: false, message: msg })
-                            toast.error(msg)
-                          } finally {
-                            setOssSyncing(false)
-                          }
-                        }}
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                        拉取
-                      </Button>
-                    </div>
-
-                    <div className="rounded-xl bg-muted/30 p-3 space-y-1.5">
-                      <p className="text-xs font-medium">使用说明</p>
-                      <p className="text-[11px] text-muted-foreground leading-relaxed">
-                        • 阿里云 OSS 同步依赖 AccessKey，请妥善保管<br />
+                        • S3 同步依赖 AccessKey，请妥善保管<br />
                         • 首次推送会自动创建远端对象；支持手动推送/拉取<br />
-                        • 与 WebDAV/Firebase/Supabase 互不影响，可任选其一或同时使用
+                        • 与 Firebase 互不影响，可任选其一或同时使用
                       </p>
                     </div>
                   </>
@@ -2594,125 +1978,6 @@ create policy "own" on focusflow_state
       </Card>
       
       {ConfirmDialog}
-    </div>
-  )
-}
-
-/**
- * 同步服务预设下拉选择器（自定义样式）
- *
- * 设计要点：
- * 1. 不使用原生 <select>，避免桌面 WebView 弹出系统菜单
- * 2. 修复"自定义"选项：清空 serverUrl 让用户手动输入，而非 disabled 不可点击
- * 3. 点击外部自动关闭
- * 4. 选中状态用主色背景高亮
- * 5. 支持 WebDAV 与阿里云 OSS 双协议预设
- */
-function WebDAVPresetDropdown({
-  value,
-  onChange,
-}: {
-  value: string
-  onChange: (serverUrl: string) => void
-}) {
-  const [open, setOpen] = useState(false)
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  // 点击外部关闭
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
-
-  // 当前选中的预设（用 url 匹配；OSS 用 url='oss://' 标识）
-  const matchedPreset = WebDAV_PRESET_SERVERS.find((p) => p.url && p.url === value)
-  const isCustom = value !== '' && !matchedPreset
-  const displayName = matchedPreset?.name ?? (isCustom ? '自定义' : '选择预设')
-
-  return (
-    <div ref={containerRef} className="relative">
-      {/* 触发按钮 —— 桌面端紧凑尺寸，与其他 Input 高度一致 */}
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className={cn(
-          'w-full h-8 px-2.5 rounded-md border border-input bg-background text-xs flex items-center justify-between transition-colors',
-          'hover:bg-muted/30 focus:outline-none focus:ring-2 focus:ring-primary/20'
-        )}
-      >
-        <span className={cn(value ? 'text-foreground' : 'text-muted-foreground')}>
-          {displayName}
-        </span>
-        <ChevronDown
-          className={cn(
-            'h-3.5 w-3.5 text-muted-foreground transition-transform',
-            open && 'rotate-180'
-          )}
-        />
-      </button>
-
-      {/* 下拉菜单 —— 自定义样式 */}
-      {open && (
-        <>
-          {/* 半透明遮罩 */}
-          <div
-            className="fixed inset-0 z-40"
-            onClick={() => setOpen(false)}
-            aria-hidden="true"
-          />
-          {/* 菜单内容 */}
-          <div
-            className={cn(
-              'absolute top-full left-0 right-0 mt-1 z-50',
-              'rounded-xl border border-border/60 bg-popover shadow-lg overflow-hidden',
-              'animate-in fade-in-0 zoom-in-95'
-            )}
-          >
-            {WebDAV_PRESET_SERVERS.map((preset) => {
-              const isSelected = preset.url && preset.url === value
-              return (
-                <button
-                  key={preset.name}
-                  type="button"
-                  onClick={() => {
-                    if (preset.url) {
-                      onChange(preset.url)
-                    } else {
-                      // 自定义：清空 url 让用户手动输入
-                      onChange('')
-                    }
-                    setOpen(false)
-                  }}
-                  className={cn(
-                    'w-full flex items-center justify-between gap-2 px-3 py-2 text-xs text-left transition-colors',
-                    'hover:bg-muted/40 active:bg-muted/60',
-                    isSelected && 'bg-primary/10 text-primary hover:bg-primary/15',
-                    !isSelected && !preset.url && 'text-muted-foreground'
-                  )}
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="font-medium">{preset.name}</span>
-                    {preset.description && (
-                      <span className="text-[10px] text-muted-foreground truncate">
-                        {preset.description}
-                      </span>
-                    )}
-                  </div>
-                  {isSelected && (
-                    <Check className="h-3.5 w-3.5 text-primary shrink-0" />
-                  )}
-                </button>
-              )
-            })}
-          </div>
-        </>
-      )}
     </div>
   )
 }
