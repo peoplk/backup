@@ -24,9 +24,9 @@ export function DailyReviewTrigger() {
 
   // 暴露手动打开 API
   useEffect(() => {
-    ;(window as any).__openDailyReview = () => setOpen(true)
+    window.__openDailyReview = () => setOpen(true)
     return () => {
-      delete (window as any).__openDailyReview
+      window.__openDailyReview = undefined
     }
   }, [])
 

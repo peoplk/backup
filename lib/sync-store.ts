@@ -29,6 +29,10 @@ export interface SyncStoreState extends SyncState {
   userName: string | null
   syncProvider: 'firebase' | 'supabase' | null
   setSyncProvider: (provider: 'firebase' | 'supabase' | null) => void
+  setConflicts: (conflicts: import('@/lib/types').SyncConflict[]) => void
+  clearConflicts: () => void
+  detectConflicts: (localData: Record<string, unknown>, remoteData: Record<string, unknown>) => import('@/lib/types').SyncConflict[]
+  resolveConflictItem: (conflictId: string) => void
 }
 
 const {

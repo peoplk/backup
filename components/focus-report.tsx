@@ -2,6 +2,7 @@
 
 import { Fragment, useState, useEffect, useMemo } from 'react'
 import { useAppStore } from '@/lib/store'
+import { COLOR_PALETTE } from '@/lib/palette'
 import { useShallow } from 'zustand/react/shallow'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -54,11 +55,7 @@ import {
 import { subDays, startOfWeek, startOfMonth, startOfDay, endOfDay, format } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
 
-const CHART_COLORS = [
-  '#4A90E2', '#7ED321', '#F5A623', '#BD10E0', '#50E3C2',
-  '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
-  '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9',
-]
+const CHART_COLORS = COLOR_PALETTE
 
 export function FocusReport() {
   const { pomodoroSessions, projects, tasks } = useAppStore(useShallow((state) => ({

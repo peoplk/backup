@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { useAppStore } from '@/lib/store'
+import { COLOR_PALETTE } from '@/lib/palette'
 import type { Habit } from '@/lib/types'
 import { useHabitStats, useLast30Days } from '@/lib/hooks'
 import { toast } from 'sonner'
@@ -45,6 +46,7 @@ import {
   Zap,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { WEEKDAY_NAMES, habitFrequencyLabel, isHabitScheduledOn } from '@/lib/habit-frequency'
 import {
   BarChart,
   Bar,
@@ -61,7 +63,7 @@ import {
 } from 'recharts'
 
 const habitIcons = ['🌅', '🏃', '📚', '🧘', '💧', '💪', '🎯', '✍️', '🛏️', '🥗', '💊', '🎵']
-const habitColors = ['#F5A623', '#4A90E2', '#7ED321', '#9B59B6', '#E91E63', '#00CED1', '#FF5722', '#607D8B']
+const habitColors = COLOR_PALETTE
 
 import { CHART_TOOLTIP_STYLE } from '@/lib/config'
 
@@ -94,7 +96,7 @@ export function HabitsView() {
   const [newHabit, setNewHabit] = useState({
     name: '',
     icon: '🌅',
-    color: '#4A90E2',
+    color: COLOR_PALETTE[0],
     frequency: 'daily' as Habit['frequency'],
     category: 'health',
     reminderTime: '',
@@ -102,6 +104,8 @@ export function HabitsView() {
     trackingType: 'boolean' as 'boolean' | 'quantity',
     targetValue: 1,
     unit: '',
+    weeklyPattern: [] as number[],
+    intervalDays: 2,
   })
 
   const today = new Date()
@@ -121,8 +125,10 @@ export function HabitsView() {
       trackingType: newHabit.trackingType,
       targetValue: newHabit.trackingType === 'quantity' ? newHabit.targetValue : undefined,
       unit: newHabit.trackingType === 'quantity' ? newHabit.unit || undefined : undefined,
+      weeklyPattern: newHabit.frequency === 'custom' && newHabit.weeklyPattern.length > 0 ? [...newHabit.weeklyPattern] : undefined,
+      intervalDays: newHabit.frequency === 'custom' && newHabit.weeklyPattern.length === 0 ? newHabit.intervalDays : undefined,
     } as Omit<Habit, 'id' | 'createdAt' | 'archived'>)
-    setNewHabit({ name: '', icon: '🌅', color: '#4A90E2', frequency: 'daily', category: 'health', reminderTime: '', reminderEnabled: false, trackingType: 'boolean', targetValue: 1, unit: '' })
+    resetNewHabit()
     setIsAddDialogOpen(false)
   }
 
@@ -139,23 +145,20 @@ export function HabitsView() {
       trackingType: newHabit.trackingType,
       targetValue: newHabit.trackingType === 'quantity' ? newHabit.targetValue : undefined,
       unit: newHabit.trackingType === 'quantity' ? newHabit.unit || undefined : undefined,
+      weeklyPattern: newHabit.frequency === 'custom' && newHabit.weeklyPattern.length > 0 ? [...newHabit.weeklyPattern] : undefined,
+      intervalDays: newHabit.frequency === 'custom' && newHabit.weeklyPattern.length === 0 ? newHabit.intervalDays : undefined,
     })
     setEditingHabit(null)
-    setNewHabit({ name: '', icon: '🌅', color: '#4A90E2', frequency: 'daily', category: 'health', reminderTime: '', reminderEnabled: false, trackingType: 'boolean', targetValue: 1, unit: '' })
+    resetNewHabit()
+  }
+
+  const resetNewHabit = () => {
+    setNewHabit({ name: '', icon: '🌅', color: COLOR_PALETTE[0], frequency: 'daily', category: 'health', reminderTime: '', reminderEnabled: false, trackingType: 'boolean', targetValue: 1, unit: '', weeklyPattern: [], intervalDays: 2 })
   }
 
   const handleCheckIn = (habitId: string, completed: boolean, value?: number) => {
     checkInHabit(habitId, today, completed, undefined, value)
     dataLink.handleHabitCheck(habitId, today, completed)
-  }
-
-  const getHabitValueToday = (habitId: string) => {
-    const checkIn = habitStats.todayCheckIns.find((c) => c.habitId === habitId)
-    return checkIn?.value || 0
-  }
-
-  const isHabitCompletedToday = (habitId: string) => {
-    return habitStats.todayCheckIns.some((c) => c.habitId === habitId && c.completed)
   }
 
   const filteredHabits = selectedCategory === 'all' 
@@ -376,6 +379,55 @@ export function HabitsView() {
                     <SelectItem value="custom">自定义</SelectItem>
                   </SelectContent>
                 </Select>
+                {newHabit.frequency === 'custom' && (
+                  <div className="space-y-2 rounded-xl border border-border/50 p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-muted-foreground">按星期</span>
+                      <div className="flex gap-1">
+                        {WEEKDAY_NAMES.map((day, idx) => {
+                          const selected = newHabit.weeklyPattern.includes(idx)
+                          return (
+                            <button
+                              key={idx}
+                              className={cn(
+                                'h-7 w-7 rounded-full text-xs font-medium transition-all',
+                                selected
+                                  ? 'bg-primary text-primary-foreground'
+                                  : 'bg-muted text-muted-foreground hover:bg-muted-foreground/20'
+                              )}
+                              onClick={() =>
+                                setNewHabit({
+                                  ...newHabit,
+                                  weeklyPattern: selected
+                                    ? newHabit.weeklyPattern.filter((d) => d !== idx)
+                                    : [...newHabit.weeklyPattern, idx],
+                                })
+                              }
+                            >
+                              {day}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs font-medium text-muted-foreground">或每隔 N 天</span>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={90}
+                        value={newHabit.intervalDays}
+                        onChange={(e) =>
+                          setNewHabit({
+                            ...newHabit,
+                            intervalDays: Math.max(1, parseInt(e.target.value) || 1),
+                          })
+                        }
+                        className="w-20 h-8"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">提醒时间（可选）</label>
@@ -512,224 +564,47 @@ export function HabitsView() {
             </Card>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredHabits.map((habit) => {
-                const streak = habitStats.getHabitStreak(habit.id)
-                const completionRate = habitStats.getHabitCompletionRate(habit.id)
-                const isCompleted = isHabitCompletedToday(habit.id)
-                const currentValue = getHabitValueToday(habit.id)
-                const isQuantity = habit.trackingType === 'quantity'
-                const targetValue = habit.targetValue || 1
-                const quantityProgress = isQuantity ? Math.min((currentValue / targetValue) * 100, 100) : 0
-                const [inputValue, setInputValue] = useState('')
-
-                return (
-                  <Card key={habit.id} className="overflow-hidden">
-                    <div
-                      className="h-1"
-                      style={{ backgroundColor: habit.color }}
-                    />
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className="flex h-12 w-12 items-center justify-center rounded-xl text-2xl"
-                            style={{ backgroundColor: `${habit.color}20` }}
-                          >
-                            {habit.icon}
-                          </div>
-                          <div>
-                            <h3 className="font-semibold">{habit.name}</h3>
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                              <Flame className="h-3 w-3" style={{ color: habit.color }} />
-                              <span>{streak} 天连续</span>
-                              {(habit.streakFreezes || 0) > 0 && (
-                                <span className="text-xs text-blue-500" title={`连续冻结 ×${habit.streakFreezes}`}>
-                                  🧊 ×{habit.streakFreezes}
-                                </span>
-                              )}
-                              {!isHabitCompletedToday(habit.id) && (habit.streakFreezes || 0) < (habit.maxStreakFreezes || 3) && (
-                                <button
-                                  className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    useStreakFreeze(habit.id)
-                                  }}
-                                  title={`使用连续冻结 (${habit.streakFreezes || 0}/${habit.maxStreakFreezes || 3})`}
-                                >
-                                  🧊+1
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => {
-                              setEditingHabit(habit)
-                              setNewHabit({
-                                name: habit.name,
-                                icon: habit.icon,
-                                color: habit.color,
-                                frequency: habit.frequency,
-                                category: habit.category || 'health',
-                                reminderTime: habit.reminderTime || '',
-                                reminderEnabled: habit.reminderEnabled || false,
-                                trackingType: habit.trackingType || 'boolean',
-                                targetValue: habit.targetValue || 1,
-                                unit: habit.unit || '',
-                              })
-                              setIsAddDialogOpen(true)
-                            }}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() => {
-                              deleteHabit(habit.id)
-                              toast.success('习惯已删除', {
-                                description: habit.name,
-                                action: {
-                                  label: '撤销',
-                                  onClick: () => undoLastDelete(),
-                                },
-                                duration: 5000,
-                              })
-                            }}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      {isQuantity && (
-                        <div className="mt-3 rounded-xl bg-muted/30 p-3">
-                          <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-xs text-muted-foreground">今日进度</span>
-                            <span className="text-sm font-semibold" style={{ color: habit.color }}>
-                              {currentValue} / {targetValue} {habit.unit || ''}
-                            </span>
-                          </div>
-                          <Progress value={quantityProgress} className="h-2" />
-                        </div>
-                      )}
-                      <div className="mt-4">
-                        <div className="mb-2 flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">30天完成率</span>
-                          <span className="font-medium">{completionRate}%</span>
-                        </div>
-                        <Progress value={completionRate} className="h-2" />
-                      </div>
-                      <div className="mt-3">
-                        <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
-                          <span>最近14天</span>
-                          <span>{streak > 0 ? `🔥 连续${streak}天` : '开始打卡吧'}</span>
-                        </div>
-                        <div className="flex gap-1">
-                          {Array.from({ length: 14 }, (_, i) => {
-                            const d = new Date()
-                            d.setDate(d.getDate() - (13 - i))
-                            const dateStr = d.toDateString()
-                            const checkIn = habitCheckIns.find(
-                              c => c.habitId === habit.id && new Date(c.date).toDateString() === dateStr
-                            )
-                            const isToday = dateStr === todayStr
-                            const fillPercent = isQuantity && checkIn?.value && habit.targetValue
-                              ? Math.min((checkIn.value / habit.targetValue) * 100, 100)
-                              : (checkIn?.completed ? 100 : 0)
-                            return (
-                              <div
-                                key={i}
-                                className={cn(
-                                  'h-5 flex-1 rounded-sm transition-all relative overflow-hidden',
-                                  !checkIn?.completed && !isToday && 'bg-muted/40',
-                                  isToday && !checkIn?.completed && 'border-2 border-dashed border-muted-foreground/30'
-                                )}
-                                title={`${d.getMonth() + 1}/${d.getDate()} ${checkIn?.completed ? (checkIn.value ? `${checkIn.value}/${habit.targetValue || ''}${habit.unit || ''}` : '✓') : ''}`}
-                              >
-                                {(checkIn?.completed || (isQuantity && checkIn?.value)) && (
-                                  <div
-                                    className="absolute inset-0 transition-all"
-                                    style={{
-                                      backgroundColor: habit.color,
-                                      opacity: fillPercent >= 100 ? 1 : 0.4 + (fillPercent / 100) * 0.6,
-                                    }}
-                                  />
-                                )}
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-                      {isQuantity ? (
-                        <div className="mt-4 flex gap-2">
-                          <Input
-                            type="number"
-                            min={0}
-                            placeholder={`输入${habit.unit || '数值'}...`}
-                            value={inputValue}
-                            onChange={(e) => setInputValue(e.target.value)}
-                            className="flex-1 h-9"
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                const val = parseInt(inputValue) || 0
-                                if (val > 0) {
-                                  const completed = val >= targetValue
-                                  handleCheckIn(habit.id, completed, val)
-                                  setInputValue('')
-                                }
-                              }
-                            }}
-                          />
-                          <Button
-                            className="gap-1.5 shrink-0"
-                            style={{ backgroundColor: isCompleted ? habit.color : undefined }}
-                            variant={isCompleted ? 'default' : 'default'}
-                            onClick={() => {
-                              const val = parseInt(inputValue) || (currentValue > 0 ? currentValue + 1 : 1)
-                              const completed = val >= targetValue
-                              handleCheckIn(habit.id, completed, val)
-                              setInputValue('')
-                            }}
-                          >
-                            <Plus className="h-4 w-4" />
-                            记录
-                          </Button>
-                        </div>
-                      ) : (
-                        <Button
-                          className={cn(
-                            'mt-4 w-full gap-2 transition-all duration-300',
-                            isCompleted
-                              ? 'bg-chart-2 hover:bg-chart-2/90 scale-100'
-                              : 'bg-muted hover:bg-muted/80 hover:scale-[1.02]'
-                          )}
-                          style={{
-                            backgroundColor: isCompleted ? habit.color : undefined,
-                          }}
-                          onClick={() => handleCheckIn(habit.id, !isCompleted)}
-                        >
-                          {isCompleted ? (
-                            <>
-                              <Check className="h-4 w-4 animate-bounce" />
-                              已完成 ✓
-                            </>
-                          ) : (
-                            <>
-                              <Plus className="h-4 w-4" />
-                              打卡
-                            </>
-                          )}
-                        </Button>
-                      )}
-                    </CardContent>
-                  </Card>
-                )
-              })}
+              {filteredHabits.map((habit) => (
+                <HabitCard
+                  key={habit.id}
+                  habit={habit}
+                  habitStats={habitStats}
+                  habitCheckIns={habitCheckIns}
+                  todayStr={todayStr}
+                  today={today}
+                  onEdit={(h) => {
+                    setEditingHabit(h)
+                    setNewHabit({
+                      name: h.name,
+                      icon: h.icon,
+                      color: h.color,
+                      frequency: h.frequency,
+                      category: h.category || 'health',
+                      reminderTime: h.reminderTime || '',
+                      reminderEnabled: h.reminderEnabled || false,
+                      trackingType: h.trackingType || 'boolean',
+                      targetValue: h.targetValue || 1,
+                      unit: h.unit || '',
+                      weeklyPattern: h.weeklyPattern ? [...h.weeklyPattern] : [],
+                      intervalDays: h.intervalDays || 2,
+                    })
+                    setIsAddDialogOpen(true)
+                  }}
+                  onDelete={(id, name) => {
+                    deleteHabit(id)
+                    toast.success('习惯已删除', {
+                      description: name,
+                      action: {
+                        label: '撤销',
+                        onClick: () => undoLastDelete(),
+                      },
+                      duration: 5000,
+                    })
+                  }}
+                  onCheckIn={handleCheckIn}
+                  onStreakFreeze={useStreakFreeze}
+                />
+              ))}
             </div>
           )}
         </TabsContent>
@@ -888,7 +763,7 @@ export function HabitsView() {
                       <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'oklch(0.5 0.02 260)', fontSize: 12 }} />
                       <YAxis axisLine={false} tickLine={false} tick={{ fill: 'oklch(0.5 0.02 260)', fontSize: 12 }} domain={[0, 100]} />
                       <Tooltip contentStyle={CHART_TOOLTIP_STYLE} formatter={(value: number) => [`${value}%`, '完成率']} />
-                      <Bar dataKey="完成率" fill="#4A90E2" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="完成率" fill={COLOR_PALETTE[0]} radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -936,7 +811,7 @@ export function HabitsView() {
                       <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fill: 'oklch(0.5 0.02 260)', fontSize: 10 }} interval={4} />
                       <YAxis axisLine={false} tickLine={false} tick={{ fill: 'oklch(0.5 0.02 260)', fontSize: 10 }} />
                       <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                      <Line type="monotone" dataKey="完成" stroke="#7ED321" strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="完成" stroke={COLOR_PALETTE[1]} strokeWidth={2} dot={false} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -946,5 +821,231 @@ export function HabitsView() {
         </TabsContent>
       </Tabs>
     </div>
+  )
+}
+
+interface HabitCardProps {
+  habit: Habit
+  habitStats: ReturnType<typeof useHabitStats>
+  habitCheckIns: import('@/lib/types').HabitCheckIn[]
+  todayStr: string
+  today: Date
+  onEdit: (habit: Habit) => void
+  onDelete: (id: string, name: string) => void
+  onCheckIn: (habitId: string, completed: boolean, value?: number) => void
+  onStreakFreeze: (habitId: string) => void
+}
+
+function HabitCard({
+  habit,
+  habitStats,
+  habitCheckIns,
+  todayStr,
+  today,
+  onEdit,
+  onDelete,
+  onCheckIn,
+  onStreakFreeze,
+}: HabitCardProps) {
+  const [inputValue, setInputValue] = useState('')
+  const streak = habitStats.getHabitStreak(habit.id)
+  const completionRate = habitStats.getHabitCompletionRate(habit.id)
+  const isCompleted = habitStats.todayCheckIns.some((c) => c.habitId === habit.id && c.completed)
+  const currentValue = habitStats.todayCheckIns.find((c) => c.habitId === habit.id)?.value || 0
+  const isQuantity = habit.trackingType === 'quantity'
+  const targetValue = habit.targetValue || 1
+  const quantityProgress = isQuantity ? Math.min((currentValue / targetValue) * 100, 100) : 0
+
+  return (
+    <Card className="overflow-hidden">
+      <div
+        className="h-1"
+        style={{ backgroundColor: habit.color }}
+      />
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between">
+          <div className="flex items-center gap-3">
+            <div
+              className="flex h-12 w-12 items-center justify-center rounded-xl text-2xl"
+              style={{ backgroundColor: `${habit.color}20` }}
+            >
+              {habit.icon}
+            </div>
+            <div>
+              <h3 className="font-semibold">{habit.name}</h3>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>{habitFrequencyLabel(habit)}</span>
+                {!isHabitScheduledOn(habit, today) && (
+                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground/70">
+                    今日休息
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Flame className="h-3 w-3" style={{ color: habit.color }} />
+                <span>{streak} 天连续</span>
+                {(habit.streakFreezes || 0) > 0 && (
+                  <span className="text-xs text-blue-500" title={`连续冻结 ×${habit.streakFreezes}`}>
+                    🧊 ×{habit.streakFreezes}
+                  </span>
+                )}
+                {!isCompleted && (habit.streakFreezes || 0) < (habit.maxStreakFreezes || 3) && (
+                  <button
+                    className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      onStreakFreeze(habit.id)
+                    }}
+                    title={`使用连续冻结 (${habit.streakFreezes || 0}/${habit.maxStreakFreezes || 3})`}
+                  >
+                    🧊+1
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => onEdit(habit)}
+              aria-label="编辑习惯"
+            >
+              <Edit className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-destructive hover:text-destructive"
+              onClick={() => onDelete(habit.id, habit.name)}
+              aria-label="删除习惯"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        {isQuantity && (
+          <div className="mt-3 rounded-xl bg-muted/30 p-3">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs text-muted-foreground">今日进度</span>
+              <span className="text-sm font-semibold" style={{ color: habit.color }}>
+                {currentValue} / {targetValue} {habit.unit || ''}
+              </span>
+            </div>
+            <Progress value={quantityProgress} className="h-2" />
+          </div>
+        )}
+        <div className="mt-4">
+          <div className="mb-2 flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">30天完成率</span>
+            <span className="font-medium">{completionRate}%</span>
+          </div>
+          <Progress value={completionRate} className="h-2" />
+        </div>
+        <div className="mt-3">
+          <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
+            <span>最近14天</span>
+            <span>{streak > 0 ? `🔥 连续${streak}天` : '开始打卡吧'}</span>
+          </div>
+          <div className="flex gap-1">
+            {Array.from({ length: 14 }, (_, i) => {
+              const d = new Date()
+              d.setDate(d.getDate() - (13 - i))
+              const dateStr = d.toDateString()
+              const checkIn = habitCheckIns.find(
+                c => c.habitId === habit.id && new Date(c.date).toDateString() === dateStr
+              )
+              const isToday = dateStr === todayStr
+              const fillPercent = isQuantity && checkIn?.value && habit.targetValue
+                ? Math.min((checkIn.value / habit.targetValue) * 100, 100)
+                : (checkIn?.completed ? 100 : 0)
+              return (
+                <div
+                  key={i}
+                  className={cn(
+                    'h-5 flex-1 rounded-sm transition-all relative overflow-hidden',
+                    !checkIn?.completed && !isToday && 'bg-muted/40',
+                    isToday && !checkIn?.completed && 'border-2 border-dashed border-muted-foreground/30'
+                  )}
+                  title={`${d.getMonth() + 1}/${d.getDate()} ${checkIn?.completed ? (checkIn.value ? `${checkIn.value}/${habit.targetValue || ''}${habit.unit || ''}` : '✓') : ''}`}
+                >
+                  {(checkIn?.completed || (isQuantity && checkIn?.value)) && (
+                    <div
+                      className="absolute inset-0 transition-all"
+                      style={{
+                        backgroundColor: habit.color,
+                        opacity: fillPercent >= 100 ? 1 : 0.4 + (fillPercent / 100) * 0.6,
+                      }}
+                    />
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+        {isQuantity ? (
+          <div className="mt-4 flex gap-2">
+            <Input
+              type="number"
+              min={0}
+              placeholder={`输入${habit.unit || '数值'}...`}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              className="flex-1 h-9"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const val = parseInt(inputValue) || 0
+                  if (val > 0) {
+                    const completed = val >= targetValue
+                    onCheckIn(habit.id, completed, val)
+                    setInputValue('')
+                  }
+                }
+              }}
+            />
+            <Button
+              className="gap-1.5 shrink-0"
+              style={{ backgroundColor: isCompleted ? habit.color : undefined }}
+              variant={isCompleted ? 'default' : 'default'}
+              onClick={() => {
+                const val = parseInt(inputValue) || (currentValue > 0 ? currentValue + 1 : 1)
+                const completed = val >= targetValue
+                onCheckIn(habit.id, completed, val)
+                setInputValue('')
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              记录
+            </Button>
+          </div>
+        ) : (
+          <Button
+            className={cn(
+              'mt-4 w-full gap-2 transition-all duration-300',
+              isCompleted
+                ? 'bg-chart-2 hover:bg-chart-2/90 scale-100'
+                : 'bg-muted hover:bg-muted/80 hover:scale-[1.02]'
+            )}
+            style={{
+              backgroundColor: isCompleted ? habit.color : undefined,
+            }}
+            onClick={() => onCheckIn(habit.id, !isCompleted)}
+          >
+            {isCompleted ? (
+              <>
+                <Check className="h-4 w-4 animate-bounce" />
+                已完成 ✓
+              </>
+            ) : (
+              <>
+                <Plus className="h-4 w-4" />
+                打卡
+              </>
+            )}
+          </Button>
+        )}
+      </CardContent>
+    </Card>
   )
 }

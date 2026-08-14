@@ -1,4 +1,5 @@
 import type { Habit, Anniversary, Task, TimeEntry, PomodoroSession, Project, HabitCheckIn } from '@/lib/types'
+import { COLOR_PALETTE } from '@/lib/palette'
 
 export const APP_CONFIG = {
   name: 'FocusFlow',
@@ -37,21 +38,21 @@ export const POMODORO_CONFIG = {
 }
 
 export const DEFAULT_HABITS: Omit<Habit, 'id' | 'createdAt' | 'archived'>[] = [
-  { name: '阅读30分钟', icon: '📖', color: '#4A90E2', frequency: 'daily', trackingType: 'boolean' },
-  { name: '运动健身', icon: '🏃', color: '#7ED321', frequency: 'daily', trackingType: 'boolean' },
-  { name: '早起', icon: '🌅', color: '#F5A623', frequency: 'daily', trackingType: 'boolean' },
-  { name: '冥想', icon: '🧘', color: '#9B59B6', frequency: 'daily', trackingType: 'boolean' },
+  { name: '阅读30分钟', icon: '📖', color: COLOR_PALETTE[0], frequency: 'daily', trackingType: 'boolean' },
+  { name: '运动健身', icon: '🏃', color: COLOR_PALETTE[1], frequency: 'daily', trackingType: 'boolean' },
+  { name: '早起', icon: '🌅', color: COLOR_PALETTE[2], frequency: 'daily', trackingType: 'boolean' },
+  { name: '冥想', icon: '🧘', color: COLOR_PALETTE[4], frequency: 'daily', trackingType: 'boolean' },
 ]
 
 export const DEFAULT_ANNIVERSARIES: Omit<Anniversary, 'id' | 'createdAt'>[] = [
-  { title: '新年', date: new Date(new Date().getFullYear(), 0, 1), type: 'festival', repeat: true, remindDays: 7, color: '#E91E63', icon: '🎉' },
-  { title: '中秋节', date: new Date(new Date().getFullYear(), 8, 17), type: 'festival', repeat: true, remindDays: 7, color: '#F5A623', icon: '🌕' },
+  { title: '新年', date: new Date(new Date().getFullYear(), 0, 1), type: 'festival', repeat: true, remindDays: 7, color: COLOR_PALETTE[3], icon: '🎉' },
+  { title: '中秋节', date: new Date(new Date().getFullYear(), 8, 17), type: 'festival', repeat: true, remindDays: 7, color: COLOR_PALETTE[2], icon: '🌕' },
 ]
 
 export const DEFAULT_PROJECTS: Omit<Project, 'id' | 'totalTime'>[] = [
-  { name: '工作', color: '#4A90E2' },
-  { name: '学习', color: '#7ED321' },
-  { name: '生活', color: '#F5A623' },
+  { name: '工作', color: COLOR_PALETTE[0] },
+  { name: '学习', color: COLOR_PALETTE[1] },
+  { name: '生活', color: COLOR_PALETTE[2] },
 ]
 
 export const DEFAULT_TASKS: Omit<Task, 'id' | 'createdAt' | 'completedPomodoros'>[] = [
@@ -128,9 +129,9 @@ export const NOTIFICATION_CONFIG = {
 }
 
 export const PRIORITY_CONFIG = {
-  urgent: { label: '紧急', color: '#E91E63' },
-  high: { label: '高', color: '#FF5722' },
-  medium: { label: '中', color: '#4A90E2' },
+  urgent: { label: '紧急', color: COLOR_PALETTE[3] },
+  high: { label: '高', color: COLOR_PALETTE[2] },
+  medium: { label: '中', color: COLOR_PALETTE[0] },
   low: { label: '低', color: '#9E9E9E' },
 }
 
@@ -159,12 +160,15 @@ export const TASK_TYPE_CONFIG: Record<string, { label: string; color: string; bg
 }
 
 export const APP_COLORS = {
-  blue: '#4A90E2',
-  green: '#7ED321',
-  purple: '#9B59B6',
-  orange: '#F5A623',
-  pink: '#E91E63',
-  gray: '#607D8B',
+  blue: COLOR_PALETTE[0],
+  green: COLOR_PALETTE[1],
+  orange: COLOR_PALETTE[2],
+  red: COLOR_PALETTE[3],
+  purple: COLOR_PALETTE[4],
+  pink: COLOR_PALETTE[5],
+  cyan: COLOR_PALETTE[6],
+  amber: COLOR_PALETTE[7],
+  gray: COLOR_PALETTE[7],
   indigo: '#6366f1',
   midGray: '#6b7280',
   primary: '#4F46E5',

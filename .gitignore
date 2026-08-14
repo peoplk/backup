@@ -14,3 +14,32 @@ next.user-config.*
 node_modules
 .next/
 .DS_Store
+
+# Build artifacts (avoid huge binaries being scanned by Tailwind/webpack)
+dist/
+release/
+release-build/
+build-output/
+dist-app/
+out/
+android/
+android-app/
+src-tauri/
+.git/
+
+# Logs and build metadata
+*.log
+*.tsbuildinfo
+
+# Installers / binaries
+*.apk
+*.rar
+rustup-init.exe
+
+# Temp / scratch files
+temp_features/
+nova-app.js
+nova-content.html
+nova-fetch.ps1
+extract_docx.ps1
+test-oss-sign.js

@@ -1,6 +1,7 @@
 import { useMemo, useEffect, useRef } from 'react'
 import { useAppStore } from '@/lib/store'
 import type { Task, RepeatRule, RepeatTaskCompletion } from '@/lib/types'
+import { computeDailyScore, computeScoreTrend } from '@/lib/productivity-score'
 
 const CLEANUP_INTERVAL = 24 * 60 * 60 * 1000
 const LAST_CLEANUP_KEY = 'last-cleanup-time'
@@ -133,11 +134,12 @@ export function useAutoCleanup() {
 }
 
 export function useStats() {
-  const tasks = useAppStore((s) => s.tasks)
-  const pomodoroSessions = useAppStore((s) => s.pomodoroSessions)
-  const timeEntries = useAppStore((s) => s.timeEntries)
-  const habits = useAppStore((s) => s.habits)
-  const habitCheckIns = useAppStore((s) => s.habitCheckIns)
+const tasks = useAppStore((s) => s.tasks)
+const pomodoroSessions = useAppStore((s) => s.pomodoroSessions)
+const timeEntries = useAppStore((s) => s.timeEntries)
+const habits = useAppStore((s) => s.habits)
+const habitCheckIns = useAppStore((s) => s.habitCheckIns)
+const timeBlocks = useAppStore((s) => s.timeBlocks)
 
   const today = useMemo(() => {
     const d = new Date()
@@ -176,9 +178,24 @@ export function useStats() {
   }, [tasks])
 
   const efficiencyScore = useMemo(() => {
-    const total = tasks.length
-    return total > 0 ? Math.round((completedTasks.length / total) * 100) : 0
-  }, [tasks, completedTasks])
+    return computeDailyScore(new Date(), {
+      tasks,
+      pomodoroSessions,
+      timeBlocks,
+      habits,
+      habitCheckIns,
+    }).score
+  }, [tasks, pomodoroSessions, timeBlocks, habits, habitCheckIns])
+
+  const productivityTrend = useMemo(() => {
+    return computeScoreTrend(7, {
+      tasks,
+      pomodoroSessions,
+      timeBlocks,
+      habits,
+      habitCheckIns,
+    })
+  }, [tasks, pomodoroSessions, timeBlocks, habits, habitCheckIns])
 
   return {
     today,
@@ -190,6 +207,7 @@ export function useStats() {
     urgentTasks,
     completedTasks,
     efficiencyScore,
+    productivityTrend,
   }
 }
 

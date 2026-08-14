@@ -1,4 +1,34 @@
 import { create } from 'zustand'
+import type { SyncConflict } from '@/lib/types'
+
+export type RemoteSyncStatus = {
+  status?: 'idle' | 'syncing' | 'synced' | 'error' | 'offline'
+  lastSyncAt?: Date | null
+  error?: string | null
+  conflicts?: SyncConflict[]
+  userId?: string | null
+  isEnabled?: boolean
+  userEmail?: string | null
+}
+
+export interface SyncStoreBaseState {
+  status: 'idle' | 'syncing' | 'synced' | 'error'
+  lastSyncAt: Date | null
+  error: string | null
+  conflicts: SyncConflict[]
+  userId: string | null
+  isEnabled: boolean
+  userEmail: string | null
+  enableSync: () => Promise<void>
+  disableSync: () => void
+  forceSync: () => Promise<void>
+  setSyncEnabled: (enabled: boolean) => void
+  logout: () => Promise<void>
+  setConflicts: (conflicts: SyncConflict[]) => void
+  clearConflicts: () => void
+  detectConflicts: (localData: Record<string, unknown>, remoteData: Record<string, unknown>) => SyncConflict[]
+  resolveConflictItem: (conflictId: string) => void
+}
 
 /**
  * Strategy configuration for creating a sync store.
@@ -21,7 +51,7 @@ export interface SyncStoreConfig {
   /** Extra state to reset on disableSync / logout (besides the common fields) */
   getResetState: () => Record<string, unknown>
   /** Register a callback that the remote layer calls on status changes */
-  setRemoteSyncStatusCallback: (callback: (status: any) => void) => void
+  setRemoteSyncStatusCallback: (callback: (status: RemoteSyncStatus) => void) => void
 }
 
 /**
@@ -33,6 +63,47 @@ export interface SyncStoreHelpers {
   getUnsubscribe: () => (() => void) | null
   setUnsubscribe: (fn: (() => void) | null) => void
   getSyncDataCallback: () => ((data: Record<string, unknown>) => void) | null
+}
+
+const SYNC_ARRAY_KEYS = ['tasks', 'habits', 'goals', 'anniversaries', 'projects', 'tags']
+
+function normalizeForCompare(value: unknown): unknown {
+  if (value instanceof Date) return value.toISOString()
+  if (Array.isArray(value)) return value.map(normalizeForCompare)
+  if (value && typeof value === 'object') {
+    const sorted: Record<string, unknown> = {}
+    Object.keys(value as Record<string, unknown>)
+      .sort()
+      .forEach(k => { sorted[k] = normalizeForCompare((value as Record<string, unknown>)[k]) })
+    return sorted
+  }
+  return value
+}
+
+function detectDataConflicts(
+  localData: Record<string, unknown>,
+  remoteData: Record<string, unknown>,
+): SyncConflict[] {
+  const conflicts: SyncConflict[] = []
+  SYNC_ARRAY_KEYS.forEach(key => {
+    const localArr = Array.isArray(localData[key]) ? localData[key] as Array<{ id: string; title?: string; name?: string; [k: string]: unknown }> : []
+    const remoteArr = Array.isArray(remoteData[key]) ? remoteData[key] as Array<{ id: string; title?: string; name?: string; [k: string]: unknown }> : []
+    const remoteById = new Map(remoteArr.map(item => [item.id, item]))
+    localArr.forEach(localItem => {
+      const remoteItem = remoteById.get(localItem.id)
+      if (!remoteItem) return
+      if (JSON.stringify(normalizeForCompare(localItem)) !== JSON.stringify(normalizeForCompare(remoteItem))) {
+        conflicts.push({
+          id: `${key}-${localItem.id}`,
+          type: key === 'anniversaries' ? 'anniversary' : key === 'tasks' ? 'task' : key === 'habits' ? 'habit' : key === 'goals' ? 'goal' : key === 'projects' ? 'project' : key === 'tags' ? 'tag' : 'other',
+          name: localItem.title || localItem.name || `${key}-${localItem.id}`,
+          localData: localItem,
+          remoteData: remoteItem,
+        })
+      }
+    })
+  })
+  return conflicts
 }
 
 /**
@@ -64,11 +135,11 @@ export function createSyncStore<TExtra extends Record<string, unknown> = {}>(
     getSyncDataCallback: () => syncDataCallback,
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const useStore = create<any>((set, get) => ({
+  const useStore = create<SyncStoreBaseState>((set, get) => ({
     status: 'idle',
     lastSyncAt: null,
     error: null,
+    conflicts: [] as SyncConflict[],
     userId: null,
     isEnabled: false,
     userEmail: null,
@@ -90,8 +161,17 @@ export function createSyncStore<TExtra extends Record<string, unknown> = {}>(
         currentUserId = userId
         set({ userId, status: 'syncing', ...config.getEnableSyncExtraState(userId) })
 
-        unsubscribe = config.subscribeToRemote(userId, (data) => {
-          syncDataCallback?.(data)
+        unsubscribe = config.subscribeToRemote(userId, async (data) => {
+          let finalData = data
+          try {
+            const localData = syncDataProvider?.()
+            if (localData && Object.keys(localData).length > 0) {
+              finalData = await config.mergeLocalAndRemote(userId, localData)
+            }
+          } catch {
+            finalData = data
+          }
+          syncDataCallback?.(finalData)
           set({ status: 'synced', lastSyncAt: new Date(), error: null })
         })
       } catch (err) {
@@ -114,7 +194,9 @@ export function createSyncStore<TExtra extends Record<string, unknown> = {}>(
       if (!userId || !get().isEnabled) return
       set({ status: 'syncing' })
       try {
-        const localData = syncDataProvider?.() ?? (window as any).__SYNC_DATA__ as Record<string, unknown>
+        const localData =
+          syncDataProvider?.() ??
+          (typeof window !== 'undefined' ? (window.__SYNC_DATA__ as Record<string, unknown> | undefined) : undefined)
         if (localData) {
           await config.syncToRemote(userId, localData)
         }
@@ -133,22 +215,50 @@ export function createSyncStore<TExtra extends Record<string, unknown> = {}>(
     },
 
     logout: async () => {
+      let signOutError: string | null = null
       try {
         await config.signOutRemote()
-      } catch {}
+      } catch (err) {
+        signOutError = err instanceof Error ? err.message : '退出登录失败'
+      }
       if (unsubscribe) {
         unsubscribe()
         unsubscribe = null
       }
       currentUserId = null
-      set({ isEnabled: false, status: 'idle', userId: null, lastSyncAt: null, userEmail: null, ...config.getResetState() })
+      set({
+        isEnabled: false,
+        status: 'idle',
+        userId: null,
+        lastSyncAt: null,
+        userEmail: null,
+        conflicts: [],
+        error: signOutError,
+        ...config.getResetState(),
+      })
+    },
+
+    setConflicts: (conflicts: SyncConflict[]) => set({ conflicts }),
+
+    clearConflicts: () => set({ conflicts: [] }),
+
+    detectConflicts: (localData: Record<string, unknown>, remoteData: Record<string, unknown>) => {
+      const conflicts = detectDataConflicts(localData, remoteData)
+      set({ conflicts })
+      return conflicts
+    },
+
+    resolveConflictItem: (conflictId: string) => {
+      set((state) => ({
+        conflicts: state.conflicts.filter((c: SyncConflict) => c.id !== conflictId),
+      }))
     },
 
     ...(extend ? extend(set, get, helpers, config) : {}),
   }))
 
-  config.setRemoteSyncStatusCallback((status: any) => {
-    useStore.setState(status)
+  config.setRemoteSyncStatusCallback((status: RemoteSyncStatus) => {
+    useStore.setState(status as Partial<SyncStoreBaseState>)
   })
 
   function setCallback(cb: (data: Record<string, unknown>) => void) {

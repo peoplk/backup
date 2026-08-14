@@ -19,34 +19,55 @@ import { CommandPalette } from '@/components/command-palette'
 import { KeyboardShortcutsDialog } from '@/components/keyboard-shortcuts-dialog'
 import { MiniTimer } from '@/components/mini-timer'
 import { QuickCapture } from '@/components/quick-capture'
+import { PrivacyLockOverlay } from '@/components/privacy-lock-overlay'
 import { DailyReviewTrigger } from '@/lib/hooks/use-daily-review-trigger'
 import { useAppStore } from '@/lib/store'
+import { useShallow } from 'zustand/react/shallow'
 import { useAutoNotifications } from '@/lib/use-auto-notifications'
+import { ensurePomodoroEngine } from '@/lib/pomodoro-engine'
 import { useAutoCleanup } from '@/lib/hooks'
 import { useDarkModeSchedule } from '@/lib/use-dark-mode-schedule'
+import { useIdleDetector } from '@/lib/use-idle-detector'
 import { VIEW_TITLES } from '@/lib/config'
 import { useKeyboardShortcuts } from '@/lib/shortcuts'
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 import { Search, Menu, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ErrorBoundary } from '@/components/error-boundary'
 
 export function DesktopApp() {
-  const { sidebarCollapsed, activeView, toggleSidebar } = useAppStore()
+  const { sidebarCollapsed, activeView, toggleSidebar } = useAppStore(
+    useShallow((s) => ({ sidebarCollapsed: s.sidebarCollapsed, activeView: s.activeView, toggleSidebar: s.toggleSidebar }))
+  )
   const [showMobileMenu, setShowMobileMenu] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
   const [isElectron, setIsElectron] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   useKeyboardShortcuts()
   useAutoNotifications()
   useAutoCleanup()
   useDarkModeSchedule()
+  useIdleDetector()
 
   useEffect(() => {
     setIsElectron(!!window.electronAPI)
   }, [])
 
   useEffect(() => {
+    ensurePomodoroEngine()
     useAppStore.getState().refreshRepeatTasks()
+    // 启动时恢复加密存储的 LLM API Key（safeStorage 可用时系统级解密）
+    void import('@/lib/llm-assistant')
+      .then(({ initLLMConfig }) => initLLMConfig())
+      .catch(() => {
+        // 密钥恢复失败时静默降级，不阻塞启动
+      })
   }, [])
 
   useEffect(() => {
@@ -67,6 +88,86 @@ export function DesktopApp() {
     window.electronAPI.onMenuStartFocus?.(() => {
       useAppStore.getState().setActiveView('focus')
     })
+    window.electronAPI.onTrayTogglePomodoro?.(() => {
+      useAppStore.getState().setActiveView('focus')
+      window.dispatchEvent(new CustomEvent('focusflow:toggle-pomodoro'))
+    })
+    window.electronAPI.onClipboardCapture?.((data: { text: string; type: string }) => {
+      let title = data.text
+      try {
+        const hostname = new URL(data.text).hostname.replace(/^www\./, '')
+        title = hostname || data.text
+      } catch {
+        // 保留原文
+      }
+      useAppStore.getState().addTask({
+        title,
+        type: 'task',
+        priority: 'medium',
+        status: 'todo',
+        tags: [],
+        notes: data.text,
+      })
+      useAppStore.getState().setActiveView('tasks')
+      toast.success('已从剪贴板创建任务', { description: title })
+    })
+  }, [])
+
+  useEffect(() => {
+    const api = window.electronAPI
+    if (!api?.reportTrayState) return
+    let last = ''
+    const report = () => {
+      const { tasks, pomodoroTimerState } = useAppStore.getState()
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const tomorrow = new Date(today)
+      tomorrow.setDate(tomorrow.getDate() + 1)
+      const todayCount = tasks.filter((t) => {
+        if (t.status === 'done' || t.status === 'cancelled') return false
+        if (!t.dueDate) return false
+        const due = new Date(t.dueDate)
+        return due >= today && due < tomorrow
+      }).length
+      const isRunning = pomodoroTimerState.isRunning
+      const status = isRunning
+        ? pomodoroTimerState.mode === 'work'
+          ? '专注中'
+          : '休息中'
+        : '空闲'
+      const key = `${todayCount}|${status}`
+      if (key !== last) {
+        last = key
+        api.reportTrayState({ todayCount, pomodoroStatus: status })
+      }
+    }
+    report()
+    const unsubscribe = useAppStore.subscribe(() => report())
+    return () => unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    const api = window.electronAPI
+    if (!api?.sendPomodoroState) return
+    const interval = setInterval(() => {
+      const p = useAppStore.getState().pomodoroTimerState
+      // 未运行时无需高频广播；仅在计时真正运行时上报，降低 IPC 开销
+      if (!p.isRunning) return
+      const s = useAppStore.getState().pomodoroSettings
+      const totalDuration =
+        p.mode === 'work'
+          ? s.workDuration
+          : p.mode === 'short-break'
+          ? s.shortBreakDuration
+          : s.longBreakDuration
+      api.sendPomodoroState({
+        timeLeft: p.timeLeft,
+        totalDuration,
+        isRunning: p.isRunning,
+        mode: p.mode,
+      })
+    }, 1000)
+    return () => clearInterval(interval)
   }, [])
 
   useEffect(() => {
@@ -84,33 +185,89 @@ export function DesktopApp() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
+  useEffect(() => {
+    const prevent = (e: DragEvent) => {
+      if (Array.from(e.dataTransfer?.types ?? []).includes('Files')) {
+        e.preventDefault()
+      }
+    }
+    const handleDrop = (e: DragEvent) => {
+      const files = Array.from(e.dataTransfer?.files ?? [])
+      if (files.length === 0) return
+      e.preventDefault()
+      const store = useAppStore.getState()
+      const created = files.map((f) => {
+        const name = f.name.replace(/\.[^.]+$/, '') || f.name
+        store.addTask({
+          title: name,
+          type: 'task',
+          priority: 'medium',
+          status: 'todo',
+          tags: [],
+          notes: f.name,
+        })
+        return name
+      })
+      store.setActiveView('tasks')
+      toast.success(`已拖放创建 ${created.length} 个任务`, {
+        description: created.slice(0, 3).join('、') + (created.length > 3 ? '…' : ''),
+      })
+    }
+    window.addEventListener('dragover', prevent)
+    window.addEventListener('drop', handleDrop)
+    return () => {
+      window.removeEventListener('dragover', prevent)
+      window.removeEventListener('drop', handleDrop)
+    }
+  }, [])
+
+  const viewFallback = (title: string) => (
+    <div className="flex flex-col items-center justify-center h-full gap-4 p-8">
+      <p className="text-lg font-medium text-muted-foreground">{title}加载出错</p>
+      <button
+        className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+        onClick={() => window.location.reload()}
+      >
+        刷新页面
+      </button>
+    </div>
+  )
+
   const renderView = () => {
     switch (activeView) {
       case 'dashboard':
-        return <DashboardView />
+        return <ErrorBoundary fallback={viewFallback('仪表盘')}><DashboardView /></ErrorBoundary>
       case 'tasks':
-        return <TasksView />
+        return <ErrorBoundary fallback={viewFallback('任务')}><TasksView /></ErrorBoundary>
       case 'focus':
-        return <FocusView />
+        return <ErrorBoundary fallback={viewFallback('专注')}><FocusView /></ErrorBoundary>
       case 'goals':
-        return <GoalsView />
+        return <ErrorBoundary fallback={viewFallback('目标')}><GoalsView /></ErrorBoundary>
       case 'calendar':
-        return <CalendarView />
+        return <ErrorBoundary fallback={viewFallback('日历')}><CalendarView /></ErrorBoundary>
       case 'analytics':
-        return <AnalyticsView />
+        return <ErrorBoundary fallback={viewFallback('分析')}><AnalyticsView /></ErrorBoundary>
       case 'habits':
-        return <HabitsView />
+        return <ErrorBoundary fallback={viewFallback('习惯')}><HabitsView /></ErrorBoundary>
       case 'anniversaries':
-        return <AnniversariesView />
+        return <ErrorBoundary fallback={viewFallback('纪念日')}><AnniversariesView /></ErrorBoundary>
       case 'time-block':
-        return <TimeBlockView />
+        return <ErrorBoundary fallback={viewFallback('时间块')}><TimeBlockView /></ErrorBoundary>
       case 'journal':
-        return <JournalView />
+        return <ErrorBoundary fallback={viewFallback('日志')}><JournalView /></ErrorBoundary>
       case 'settings':
-        return <SettingsView />
+        return <ErrorBoundary fallback={viewFallback('设置')}><SettingsView /></ErrorBoundary>
       default:
-        return <DashboardView />
+        return <ErrorBoundary fallback={viewFallback('仪表盘')}><DashboardView /></ErrorBoundary>
     }
+  }
+
+  if (!mounted) {
+    return (
+      <div className="h-screen bg-background flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
+      </div>
+    )
   }
 
   return (
@@ -143,13 +300,14 @@ export function DesktopApp() {
           isElectron && 'pt-9 h-[calc(100vh-2.25rem)]'
         )}
       >
-        <header className="shrink-0 sticky top-0 z-20 flex h-14 items-center justify-between px-5 lg:px-8 bg-transparent">
+        <header className="shrink-0 z-20 flex h-14 items-center justify-between px-5 lg:px-8 bg-background/80 backdrop-blur-md border-b border-border/40">
           <div className="flex items-center gap-4">
             <Button
               variant="ghost"
               size="icon"
               className="lg:hidden h-9 w-9"
               onClick={() => setShowMobileMenu(true)}
+              aria-label="打开菜单"
             >
               <Menu className="h-5 w-5" />
             </Button>
@@ -166,7 +324,7 @@ export function DesktopApp() {
               className="hidden md:flex gap-2 text-muted-foreground hover:text-foreground h-9 rounded-xl px-3"
               onClick={() => {
                 if (typeof window !== 'undefined') {
-                  ;(window as any).__openQuickCapture?.()
+                  window.__openQuickCapture?.()
                 }
               }}
               title="快速捕获任务 (Ctrl+Shift+A)"
@@ -183,7 +341,7 @@ export function DesktopApp() {
               className="md:hidden h-9 w-9 rounded-xl"
               onClick={() => {
                 if (typeof window !== 'undefined') {
-                  ;(window as any).__openQuickCapture?.()
+                  window.__openQuickCapture?.()
                 }
               }}
               title="快速捕获"
@@ -211,6 +369,7 @@ export function DesktopApp() {
               className="md:hidden h-9 w-9 rounded-xl"
               onClick={() => setShowSearch(true)}
               data-search-trigger
+              aria-label="搜索"
             >
               <Search className="h-5 w-5" />
             </Button>
@@ -233,6 +392,7 @@ export function DesktopApp() {
       <MiniTimer />
       <QuickCapture />
       <DailyReviewTrigger />
+      <PrivacyLockOverlay />
     </div>
   )
 }

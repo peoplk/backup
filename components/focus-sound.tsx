@@ -75,12 +75,12 @@ export function FocusSound() {
 
   const stopAllAudio = useCallback(() => {
     oscillatorsRef.current.forEach(osc => {
-      try { osc.stop() } catch {}
+      try { osc.stop() } catch { /* already stopped */ }
     })
     oscillatorsRef.current = []
 
     if (ambientNodesRef.current) {
-      try { ambientNodesRef.current.source.stop() } catch {}
+      try { ambientNodesRef.current.source.stop() } catch { /* already stopped */ }
       ambientNodesRef.current = null
     }
   }, [])
@@ -249,6 +249,7 @@ export function FocusSound() {
         <Button
           variant="outline"
           size="icon"
+          aria-label="声音设置"
           className={cn(
             'relative',
             isPlaying && 'text-primary bg-primary/10'

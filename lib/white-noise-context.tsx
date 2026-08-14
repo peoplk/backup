@@ -230,7 +230,7 @@ export function WhiteNoiseProvider({ children }: { children: React.ReactNode }) 
   const ensureContext = useCallback(() => {
     if (typeof window === 'undefined') return null
     if (!audioCtxRef.current) {
-      const Ctor = (window.AudioContext || (window as any).webkitAudioContext) as typeof AudioContext
+      const Ctor = (window.AudioContext || window.webkitAudioContext) as typeof AudioContext
       if (!Ctor) return null
       audioCtxRef.current = new Ctor()
       const master = audioCtxRef.current.createGain()
@@ -249,7 +249,7 @@ export function WhiteNoiseProvider({ children }: { children: React.ReactNode }) 
       activeRef.current.forEach((item) => {
         try {
           item.sourceNode.disconnect()
-        } catch {}
+        } catch { /* already disconnected */ }
       })
       activeRef.current.clear()
       if (audioCtxRef.current) {
@@ -273,9 +273,9 @@ export function WhiteNoiseProvider({ children }: { children: React.ReactNode }) 
             item.gainNode.gain.cancelScheduledValues(audioCtxRef.current?.currentTime || 0)
             item.gainNode.gain.linearRampToValueAtTime(0, (audioCtxRef.current?.currentTime || 0) + 0.2)
             setTimeout(() => {
-              try { item.sourceNode.disconnect() } catch {}
+              try { item.sourceNode.disconnect() } catch { /* already disconnected */ }
             }, 250)
-          } catch {}
+          } catch { /* audio param may be invalid */ }
           activeRef.current.delete(noiseId)
         }
       } else {
@@ -289,7 +289,7 @@ export function WhiteNoiseProvider({ children }: { children: React.ReactNode }) 
         gain.connect(masterGainRef.current)
         try {
           (source as AudioBufferSourceNode).start(0)
-        } catch {}
+        } catch { /* already started */ }
         // 渐入
         gain.gain.linearRampToValueAtTime(volumes[noiseId] ?? 0.3, ctx.currentTime + 0.3)
         activeRef.current.set(noiseId, {
@@ -312,7 +312,7 @@ export function WhiteNoiseProvider({ children }: { children: React.ReactNode }) 
       try {
         item.gainNode.gain.cancelScheduledValues(ctx.currentTime)
         item.gainNode.gain.linearRampToValueAtTime(volume, ctx.currentTime + 0.1)
-      } catch {}
+      } catch { /* audio param may be invalid */ }
     }
   }, [])
 
@@ -340,7 +340,7 @@ export function WhiteNoiseProvider({ children }: { children: React.ReactNode }) 
 
   const stopAll = useCallback(() => {
     activeRef.current.forEach((item) => {
-      try { item.sourceNode.disconnect() } catch {}
+      try { item.sourceNode.disconnect() } catch { /* already disconnected */ }
     })
     activeRef.current.clear()
     setActiveNoises(new Set())

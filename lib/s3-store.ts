@@ -27,6 +27,10 @@ export interface S3SyncState extends SyncState {
   testConnection: (config: S3ConfigInput) => Promise<{ success: boolean; message: string }>
   provider: 's3' | null
   accessKeyId: string | null
+  setConflicts: (conflicts: import('@/lib/types').SyncConflict[]) => void
+  clearConflicts: () => void
+  detectConflicts: (localData: Record<string, unknown>, remoteData: Record<string, unknown>) => import('@/lib/types').SyncConflict[]
+  resolveConflictItem: (conflictId: string) => void
 }
 
 const {

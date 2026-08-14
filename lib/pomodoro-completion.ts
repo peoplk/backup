@@ -11,6 +11,14 @@ export interface CompletePomodoroParams {
   startTime?: Date
 }
 
+export interface AbandonPomodoroParams {
+  duration: number
+  selectedTaskId?: string | null
+  focusNote?: string
+  sessionTags?: string[]
+  startTime?: Date
+}
+
 export interface CompletePomodoroResult {
   sessionId: string
   timeBlockId?: string
@@ -49,6 +57,25 @@ export function completePomodoroSession(params: CompletePomodoroParams): Complet
     tags: sessionTags && sessionTags.length > 0 ? sessionTags : undefined,
   }
   state.addPomodoroSession(sessionPayload)
+
+  // 更新全局标签库的使用计数（对标 Toggl 标签复用）
+  if (sessionTags && sessionTags.length > 0) {
+    for (const tagName of sessionTags) {
+      const tagState = useAppStore.getState()
+      const existing = tagState.tags.find((t) => t.name === tagName)
+      if (existing) {
+        tagState.updateTag(existing.id, { usageCount: existing.usageCount + 1 })
+      } else {
+        // 标签不存在则先添加到全局，再记一次使用
+        tagState.addTag({ name: tagName, color: '' })
+        const afterAdd = useAppStore.getState()
+        const added = afterAdd.tags.find((t) => t.name === tagName)
+        if (added) {
+          afterAdd.updateTag(added.id, { usageCount: 1 })
+        }
+      }
+    }
+  }
 
   const latestState = useAppStore.getState()
   const createdSession = latestState.pomodoroSessions[latestState.pomodoroSessions.length - 1]
@@ -131,4 +158,49 @@ export function completePomodoroSession(params: CompletePomodoroParams): Complet
     newCompletedPomodoros,
     taskEstimatedReached,
   }
+}
+
+export function abandonPomodoroSession(params: AbandonPomodoroParams): { sessionId: string } {
+  const {
+    duration,
+    selectedTaskId,
+    focusNote,
+    sessionTags,
+    startTime,
+  } = params
+
+  const state = useAppStore.getState()
+  const completedAt = new Date()
+  const startedAt = startTime || new Date(completedAt.getTime() - duration * 1000)
+
+  state.addAbandonedPomodoroSession({
+    taskId: selectedTaskId || undefined,
+    type: 'work',
+    duration,
+    note: focusNote?.trim() || undefined,
+    tags: sessionTags && sessionTags.length > 0 ? sessionTags : undefined,
+  })
+
+  const latestState = useAppStore.getState()
+  const createdSession = latestState.abandonedPomodoroSessions[latestState.abandonedPomodoroSessions.length - 1]
+  const sessionId = createdSession?.id || ''
+
+  // 记录一个放弃的专注时间块，方便在日历/时间线中查看
+  const task = selectedTaskId
+    ? latestState.tasks.find(t => t.id === selectedTaskId)
+    : undefined
+  const blockTitle = `🥀 放弃专注${task ? ` · ${task.title}` : ''}`
+  latestState.addTimeBlock({
+    title: blockTitle,
+    description: focusNote?.trim() || undefined,
+    date: completedAt,
+    startTime: formatTime(startedAt),
+    endTime: formatTime(completedAt),
+    category: 'focus',
+    color: '',
+    taskId: selectedTaskId || undefined,
+    completed: false,
+  })
+
+  return { sessionId }
 }

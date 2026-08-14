@@ -144,7 +144,7 @@ export function TaskTemplates({ onSelectTemplate }: TaskTemplatesProps) {
       if (stored) {
         setCustomTemplates(JSON.parse(stored))
       }
-    } catch {}
+    } catch { /* corrupted data, use defaults */ }
   }, [])
 
   // 保存自定义模板到 localStorage
@@ -152,7 +152,7 @@ export function TaskTemplates({ onSelectTemplate }: TaskTemplatesProps) {
     setCustomTemplates(templates)
     try {
       localStorage.setItem('focusflow-custom-templates', JSON.stringify(templates))
-    } catch {}
+    } catch { /* non-critical */ }
   }
 
   const allTemplates = [...DEFAULT_TEMPLATES, ...customTemplates]
@@ -339,6 +339,7 @@ export function TaskTemplates({ onSelectTemplate }: TaskTemplatesProps) {
                       e.stopPropagation()
                       handleDeleteTemplate(template.id)
                     }}
+                    aria-label="删除模板"
                   >
                     <Trash2 className="h-3 w-3" />
                   </Button>

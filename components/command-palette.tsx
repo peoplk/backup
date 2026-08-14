@@ -243,7 +243,7 @@ export function CommandPalette() {
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
+      if (e.key === 'p' && (e.metaKey || e.ctrlKey) && e.shiftKey) {
         e.preventDefault()
         setOpen((open) => !open)
       }
@@ -368,7 +368,8 @@ export function CommandPalette() {
             <kbd className="h-4 rounded border bg-muted px-1 text-[10px]">
               <Command className="h-3 w-3" />
             </kbd>
-            <kbd className="h-4 rounded border bg-muted px-1 text-[10px]">K</kbd>
+            <kbd className="h-4 rounded border bg-muted px-1 text-[10px]">⇧</kbd>
+            <kbd className="h-4 rounded border bg-muted px-1 text-[10px]">P</kbd>
             <span>打开命令面板</span>
           </div>
         </div>

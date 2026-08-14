@@ -71,6 +71,7 @@ export function GoalCelebration({ open, onClose, streakDays }: GoalCelebrationPr
           variant="ghost"
           size="icon"
           onClick={onClose}
+          aria-label="关闭"
           className="absolute right-3 top-3 h-7 w-7"
         >
           <X className="h-4 w-4" />

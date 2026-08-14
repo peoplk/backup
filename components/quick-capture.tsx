@@ -46,9 +46,9 @@ export function QuickCapture() {
 
   // 暴露给其他组件调用
   useEffect(() => {
-    ;(window as any).__openQuickCapture = openCapture
+    window.__openQuickCapture = openCapture
     return () => {
-      delete (window as any).__openQuickCapture
+      window.__openQuickCapture = undefined
     }
   }, [openCapture])
 

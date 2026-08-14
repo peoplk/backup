@@ -1,5 +1,4 @@
 import { useAppStore } from '@/lib/store'
-import type { RepeatRule } from '@/lib/types'
 
 export interface RestoreCounts {
   tasks: number
@@ -10,11 +9,74 @@ export interface RestoreCounts {
   goals: number
   tags: number
   reminders: number
+  timeEntries: number
+  pomodoroSessions: number
   [key: string]: number
 }
 
+function toDate(value: unknown): Date | undefined {
+  if (value == null) return undefined
+  const d = new Date(value as string)
+  return isNaN(d.getTime()) ? undefined : d
+}
+
+function asArray(data: Record<string, unknown>, key: string): Record<string, unknown>[] {
+  const arr = data[key]
+  return Array.isArray(arr) ? (arr as Record<string, unknown>[]) : []
+}
+
+function isISODateString(v: unknown): v is string {
+  return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(v)
+}
+
+function deepRestoreDates<T>(value: T, depth = 0): T {
+  if (value == null || depth > 8) return value
+  if (value instanceof Date) return value as T
+  if (Array.isArray(value)) {
+    return value.map((v) => deepRestoreDates(v, depth + 1)) as T
+  }
+  if (typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (isISODateString(v)) {
+        const d = new Date(v)
+        out[k] = isNaN(d.getTime()) ? v : d
+      } else {
+        out[k] = deepRestoreDates(v, depth + 1)
+      }
+    }
+    return out as T
+  }
+  return value
+}
+
+const EXTRA_KEYS = [
+  'notifications',
+  'achievements',
+  'userLevel',
+  'sidebarCollapsed',
+  'activeSmartList',
+  'focusGoals',
+  'repeatCompletions',
+  'trashedItems',
+  'taskOrder',
+  'timeBlocks',
+  'distractions',
+  'journals',
+  'taskTemplates',
+  'pomodoroStrictMode',
+  'dashboardWidgets',
+  'darkModeSchedule',
+  'workingHours',
+  'focusSoundSettings',
+  'focusPresets',
+  'dailyReviewSettings',
+  'savedFilters',
+  'activeSavedFilterId',
+  'abandonedPomodoroSessions',
+]
+
 export function restoreDataToStore(data: Record<string, unknown>): RestoreCounts {
-  const store = useAppStore.getState()
   const counts: RestoreCounts = {
     tasks: 0,
     habits: 0,
@@ -24,162 +86,192 @@ export function restoreDataToStore(data: Record<string, unknown>): RestoreCounts
     goals: 0,
     tags: 0,
     reminders: 0,
+    timeEntries: 0,
+    pomodoroSessions: 0,
   }
 
-  // 恢复任务
-  if (data.tasks && Array.isArray(data.tasks)) {
-    data.tasks.forEach((t: Record<string, unknown>) => {
-      try {
-        store.addTask({
-          title: (t.title as string) || '未命名任务',
-          description: t.description as string | undefined,
-          type: (t.type as 'task' | 'event' | 'reminder') || 'task',
-          priority: (t.priority as 'urgent' | 'high' | 'medium' | 'low') || 'medium',
-          status: (t.status as 'todo' | 'in-progress' | 'done') || 'todo',
-          project: t.project as string | undefined,
-          tags: Array.isArray(t.tags) ? t.tags as string[] : [],
-          dueDate: t.dueDate ? new Date(t.dueDate as string) : undefined,
-          starred: t.starred as boolean | undefined,
-          estimatedPomodoros: t.estimatedPomodoros as number | undefined,
-          repeatRule: t.repeatRule as RepeatRule | undefined,
-        })
-        counts.tasks++
-      } catch { /* skip invalid tasks */ }
-    })
+  // 整体替换数组（保留原始 id，避免 habitCheckIns/goals/reminders 关联断裂）
+  const patch: Record<string, any> = {}
+
+  const tasks = asArray(data, 'tasks')
+  if (tasks.length > 0) {
+    patch.tasks = tasks.map((t) => ({
+      ...t,
+      title: (t.title as string) || '未命名任务',
+      type: (t.type as string) || 'task',
+      priority: (t.priority as string) || 'medium',
+      status: (t.status as string) || 'todo',
+      tags: Array.isArray(t.tags) ? t.tags : [],
+      completedPomodoros: typeof t.completedPomodoros === 'number' ? t.completedPomodoros : 0,
+      timeSpent: typeof t.timeSpent === 'number' ? t.timeSpent : 0,
+      dueDate: toDate(t.dueDate),
+      createdAt: toDate(t.createdAt) || new Date(),
+      completedAt: toDate(t.completedAt),
+      reminders: Array.isArray(t.reminders)
+        ? (t.reminders as Record<string, unknown>[]).map((r) => ({
+            ...r,
+            triggerAt: toDate(r.triggerAt),
+          }))
+        : undefined,
+    }))
+    counts.tasks = patch.tasks.length
   }
 
-  // 恢复习惯
-  if (data.habits && Array.isArray(data.habits)) {
-    data.habits.forEach((h: Record<string, unknown>) => {
-      try {
-        store.addHabit({
-          name: (h.name as string) || '未命名习惯',
-          icon: (h.icon as string) || '⭐',
-          color: (h.color as string) || '#4F46E5',
-          frequency: (h.frequency as 'daily' | 'weekly' | 'monthly' | 'custom') || 'daily',
-          category: h.category as string | undefined,
-          reminderTime: h.reminderTime as string | undefined,
-          reminderEnabled: h.reminderEnabled as boolean | undefined,
-          trackingType: (h.trackingType as 'boolean' | 'quantity') || 'boolean',
-          targetValue: h.targetValue as number | undefined,
-          unit: h.unit as string | undefined,
-          maxStreakFreezes: h.maxStreakFreezes as number | undefined,
-          linkedGoalId: h.linkedGoalId as string | undefined,
-        })
-        counts.habits++
-      } catch { /* skip invalid habits */ }
-    })
+  const habits = asArray(data, 'habits')
+  if (habits.length > 0) {
+    patch.habits = habits.map((h) => ({
+      ...h,
+      name: (h.name as string) || '未命名习惯',
+      icon: (h.icon as string) || '⭐',
+      color: (h.color as string) || '#4F46E5',
+      frequency: (h.frequency as string) || 'daily',
+      trackingType: (h.trackingType as string) || 'boolean',
+      targetValue: typeof h.targetValue === 'number' ? h.targetValue : undefined,
+      unit: typeof h.unit === 'string' ? h.unit : undefined,
+      streakFreezes: typeof h.streakFreezes === 'number' ? h.streakFreezes : 0,
+      maxStreakFreezes: typeof h.maxStreakFreezes === 'number' ? h.maxStreakFreezes : 3,
+      createdAt: toDate(h.createdAt) || new Date(),
+      archived: h.archived as boolean,
+    }))
+    counts.habits = patch.habits.length
   }
 
-  // 恢复习惯打卡记录
-  if (data.habitCheckIns && Array.isArray(data.habitCheckIns)) {
-    data.habitCheckIns.forEach((c: Record<string, unknown>) => {
-      try {
-        store.checkInHabit(
-          c.habitId as string,
-          c.date ? new Date(c.date as string) : new Date(),
-          c.completed as boolean,
-          c.note as string | undefined,
-          c.value as number | undefined,
-        )
-        counts.habitCheckIns++
-      } catch { /* skip invalid check-ins */ }
-    })
+  const habitCheckIns = asArray(data, 'habitCheckIns')
+  if (habitCheckIns.length > 0) {
+    patch.habitCheckIns = habitCheckIns.map((c) => ({
+      ...c,
+      habitId: c.habitId as string,
+      date: toDate(c.date) || new Date(),
+      completed: c.completed as boolean,
+      note: typeof c.note === 'string' ? c.note : undefined,
+      value: typeof c.value === 'number' ? c.value : undefined,
+    }))
+    counts.habitCheckIns = patch.habitCheckIns.length
   }
 
-  // 恢复纪念日
-  if (data.anniversaries && Array.isArray(data.anniversaries)) {
-    data.anniversaries.forEach((a: Record<string, unknown>) => {
-      try {
-        store.addAnniversary({
-          title: (a.title as string) || '未命名纪念日',
-          date: a.date ? new Date(a.date as string) : new Date(),
-          type: (a.type as 'birthday' | 'anniversary' | 'countdown' | 'custom' | 'festival') || 'custom',
-          repeat: (a.repeat as boolean) ?? true,
-          remindDays: (a.remindDays as number) ?? 1,
-          color: (a.color as string) || '#4F46E5',
-          icon: (a.icon as string) || '🎂',
-          note: a.note as string | undefined,
-        })
-        counts.anniversaries++
-      } catch { /* skip invalid anniversaries */ }
-    })
+  const anniversaries = asArray(data, 'anniversaries')
+  if (anniversaries.length > 0) {
+    patch.anniversaries = anniversaries.map((a) => ({
+      ...a,
+      title: (a.title as string) || '未命名纪念日',
+      date: toDate(a.date) || new Date(),
+      type: (a.type as string) || 'custom',
+      repeat: a.repeat as boolean,
+      remindDays: typeof a.remindDays === 'number' ? a.remindDays : 1,
+      createdAt: toDate(a.createdAt) || new Date(),
+    }))
+    counts.anniversaries = patch.anniversaries.length
   }
 
-  // 恢复项目
-  if (data.projects && Array.isArray(data.projects)) {
-    data.projects.forEach((p: Record<string, unknown>) => {
-      try {
-        store.addProject({
-          name: (p.name as string) || '未命名项目',
-          color: (p.color as string) || '#4F46E5',
-        })
-        counts.projects++
-      } catch { /* skip invalid projects */ }
-    })
+  const projects = asArray(data, 'projects')
+  if (projects.length > 0) {
+    patch.projects = projects.map((p) => ({
+      ...p,
+      name: (p.name as string) || '未命名项目',
+      color: (p.color as string) || '#4F46E5',
+      totalTime: typeof p.totalTime === 'number' ? p.totalTime : 0,
+    }))
+    counts.projects = patch.projects.length
   }
 
-  // 恢复目标
-  if (data.goals && Array.isArray(data.goals)) {
-    data.goals.forEach((g: Record<string, unknown>) => {
-      try {
-        store.addGoal({
-          title: (g.title as string) || '未命名目标',
-          description: g.description as string | undefined,
-          type: (g.type as 'yearly' | 'quarterly' | 'monthly' | 'weekly') || 'monthly',
-          category: (g.category as 'work' | 'personal' | 'health' | 'learning' | 'finance' | 'other') || 'other',
-          status: (g.status as 'not-started' | 'in-progress' | 'completed' | 'paused') || 'not-started',
-          progress: (g.progress as number) || 0,
-          targetValue: g.targetValue as number | undefined,
-          currentValue: g.currentValue as number | undefined,
-          unit: g.unit as string | undefined,
-          startDate: g.startDate ? new Date(g.startDate as string) : new Date(),
-          endDate: g.endDate ? new Date(g.endDate as string) : new Date(),
-          milestones: Array.isArray(g.milestones) ? (g.milestones as Array<{ id: string; title: string; completed: boolean; dueDate?: string; completedAt?: string }>).map(m => ({
-            id: m.id,
-            title: m.title,
-            completed: m.completed,
-            dueDate: m.dueDate ? new Date(m.dueDate) : undefined,
-            completedAt: m.completedAt ? new Date(m.completedAt) : undefined,
-          })) : [],
-          linkedTasks: Array.isArray(g.linkedTasks) ? g.linkedTasks as string[] : [],
-          linkedHabits: Array.isArray(g.linkedHabits) ? g.linkedHabits as string[] : undefined,
-        })
-        counts.goals++
-      } catch { /* skip invalid goals */ }
-    })
+  const goals = asArray(data, 'goals')
+  if (goals.length > 0) {
+    patch.goals = goals.map((g) => ({
+      ...g,
+      title: (g.title as string) || '未命名目标',
+      type: (g.type as string) || 'monthly',
+      category: (g.category as string) || 'other',
+      status: (g.status as string) || 'not-started',
+      progress: typeof g.progress === 'number' ? g.progress : 0,
+      startDate: toDate(g.startDate) || new Date(),
+      endDate: toDate(g.endDate) || new Date(),
+      createdAt: toDate(g.createdAt) || new Date(),
+      completedAt: toDate(g.completedAt),
+      linkedTasks: Array.isArray(g.linkedTasks) ? g.linkedTasks : [],
+      linkedHabits: Array.isArray(g.linkedHabits) ? g.linkedHabits : undefined,
+      milestones: Array.isArray(g.milestones)
+        ? (g.milestones as Record<string, unknown>[]).map((m) => ({
+            ...m,
+            dueDate: toDate(m.dueDate),
+            completedAt: toDate(m.completedAt),
+          }))
+        : [],
+    }))
+    counts.goals = patch.goals.length
   }
 
-  // 恢复标签
-  if (data.tags && Array.isArray(data.tags)) {
-    data.tags.forEach((t: Record<string, unknown>) => {
-      try {
-        store.addTag({
-          name: (t.name as string) || '未命名标签',
-          color: (t.color as string) || '#4F46E5',
-          category: t.category as string | undefined,
-        })
-        counts.tags++
-      } catch { /* skip invalid tags */ }
-    })
+  const tags = asArray(data, 'tags')
+  if (tags.length > 0) {
+    patch.tags = tags.map((t) => ({
+      ...t,
+      name: (t.name as string) || '未命名标签',
+      color: (t.color as string) || '#4F46E5',
+      usageCount: typeof t.usageCount === 'number' ? t.usageCount : 0,
+      createdAt: toDate(t.createdAt) || new Date(),
+    }))
+    counts.tags = patch.tags.length
   }
 
-  // 恢复提醒
-  if (data.reminders && Array.isArray(data.reminders)) {
-    data.reminders.forEach((r: Record<string, unknown>) => {
-      try {
-        store.addReminder({
-          type: (r.type as 'task' | 'habit' | 'goal' | 'custom') || 'custom',
-          referenceId: r.referenceId as string | undefined,
-          title: (r.title as string) || '提醒',
-          message: (r.message as string) || '',
-          scheduledTime: r.scheduledTime ? new Date(r.scheduledTime as string) : new Date(),
-          repeat: (r.repeat as 'daily' | 'weekly' | 'monthly' | 'none') || 'none',
-          enabled: (r.enabled as boolean) ?? true,
-        })
-        counts.reminders++
-      } catch { /* skip invalid reminders */ }
-    })
+  const reminders = asArray(data, 'reminders')
+  if (reminders.length > 0) {
+    patch.reminders = reminders.map((r) => ({
+      ...r,
+      type: (r.type as string) || 'custom',
+      title: (r.title as string) || '提醒',
+      message: typeof r.message === 'string' ? r.message : '',
+      scheduledTime: toDate(r.scheduledTime) || new Date(),
+      repeat: (r.repeat as string) || 'none',
+      enabled: r.enabled as boolean,
+      createdAt: toDate(r.createdAt) || new Date(),
+    }))
+    counts.reminders = patch.reminders.length
+  }
+
+  const timeEntries = asArray(data, 'timeEntries')
+  if (timeEntries.length > 0) {
+    patch.timeEntries = timeEntries.map((e) => ({
+      ...e,
+      project: (e.project as string) || '未分类',
+      duration: typeof e.duration === 'number' ? e.duration : 0,
+      startTime: toDate(e.startTime) || new Date(),
+      endTime: toDate(e.endTime),
+      tags: Array.isArray(e.tags) ? e.tags : undefined,
+      taskId: typeof e.taskId === 'string' ? e.taskId : undefined,
+      projectId: typeof e.projectId === 'string' ? e.projectId : undefined,
+    }))
+    counts.timeEntries = patch.timeEntries.length
+  }
+
+  const pomodoroSessions = asArray(data, 'pomodoroSessions')
+  if (pomodoroSessions.length > 0) {
+    patch.pomodoroSessions = pomodoroSessions.map((s) => ({
+      ...s,
+      type: (s.type as string) || 'work',
+      duration: typeof s.duration === 'number' ? s.duration : 0,
+      completedAt: toDate(s.completedAt) || new Date(),
+      taskId: typeof s.taskId === 'string' ? s.taskId : undefined,
+      note: typeof s.note === 'string' ? s.note : undefined,
+      tags: Array.isArray(s.tags) ? s.tags : undefined,
+    }))
+    counts.pomodoroSessions = patch.pomodoroSessions.length
+  }
+
+  if (data.pomodoroSettings && typeof data.pomodoroSettings === 'object') {
+    patch.pomodoroSettings = data.pomodoroSettings
+  }
+
+  for (const key of EXTRA_KEYS) {
+    if (data[key] !== undefined) {
+      patch[key] = deepRestoreDates(data[key])
+    }
+  }
+
+  if (data.pomodoroTimerState && typeof data.pomodoroTimerState === 'object') {
+    patch.pomodoroTimerState = { ...(deepRestoreDates(data.pomodoroTimerState) as object), isRunning: false }
+  }
+
+  if (Object.keys(patch).length > 0) {
+    ;(useAppStore.setState as (partial: unknown) => void)(patch)
   }
 
   return counts

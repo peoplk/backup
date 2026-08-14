@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useMemo, memo } from 'react'
+import { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react'
 import { useAppStore } from '@/lib/store'
 import type { Task, RepeatRule, SubTask, ScheduleItemType, TaskReminder } from '@/lib/types'
 import { isRepeatTaskCompletedToday } from '@/lib/hooks'
@@ -16,6 +16,7 @@ import { TaskReminders } from '@/components/task-reminders'
 import { TaskEfficiencyCard } from '@/components/task-efficiency-card'
 import { QuickDatePresets } from '@/components/quick-date-presets'
 import { SavedFiltersBar } from '@/components/saved-filters-bar'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 
 import {
   Dialog,
@@ -84,7 +85,7 @@ import {
   Zap,
   MessageCircle,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, isSameDay } from '@/lib/utils'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import { useShallow } from 'zustand/react/shallow'
@@ -207,6 +208,31 @@ const SortableKanbanCard = memo(function SortableKanbanCard({ task, today }: { t
 
 const timeSlots = TIME_SLOTS
 
+const WIP_STORAGE_KEY = 'focusflow-wip-limits'
+const DEFAULT_WIP_LIMITS: Record<string, number> = {
+  todo: 0,
+  'in-progress': 5,
+  done: 0,
+}
+
+function loadWipLimits(): Record<string, number> {
+  if (typeof window === 'undefined') return { ...DEFAULT_WIP_LIMITS }
+  try {
+    const stored = window.localStorage.getItem(WIP_STORAGE_KEY)
+    if (stored) {
+      const parsed = JSON.parse(stored)
+      return { ...DEFAULT_WIP_LIMITS, ...parsed }
+    }
+  } catch { /* ignore */ }
+  return { ...DEFAULT_WIP_LIMITS }
+}
+
+function saveWipLimits(limits: Record<string, number>) {
+  try {
+    window.localStorage.setItem(WIP_STORAGE_KEY, JSON.stringify(limits))
+  } catch { /* ignore */ }
+}
+
 export function TasksView() {
   const { 
     tasks, 
@@ -315,6 +341,9 @@ export function TasksView() {
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set())
   const [viewMode, setViewMode] = useState<'list' | 'kanban' | 'matrix'>('list')
   const [showTemplates, setShowTemplates] = useState(false)
+  const [wipLimits, setWipLimits] = useState<Record<string, number>>(loadWipLimits)
+  const [isWipDialogOpen, setIsWipDialogOpen] = useState(false)
+  const [wipEditValues, setWipEditValues] = useState<Record<string, number>>({})
   const editInputRef = useRef<HTMLInputElement>(null)
   
   const [newTask, setNewTask] = useState({
@@ -344,6 +373,23 @@ export function TasksView() {
   const [newTag, setNewTag] = useState('')
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>({})
   const [contextMenu, setContextMenu] = useState<{ taskId: string; x: number; y: number } | null>(null)
+
+  useEffect(() => {
+    const itemId = localStorage.getItem('focusflow-selected-item')
+    if (!itemId) return
+    localStorage.removeItem('focusflow-selected-item')
+    if (!tasks.some((t) => t.id === itemId)) return
+    const timer = setTimeout(() => {
+      const el = document.getElementById(`task-item-${itemId}`)
+      if (!el) return
+      setExpandedTasks((prev) => new Set(prev).add(itemId))
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.add('ring-2', 'ring-primary')
+      setTimeout(() => el.classList.remove('ring-2', 'ring-primary'), 2500)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [tasks, viewMode, filterStatus, filterPriority, filterTag, activeSmartList])
+
 
   const allTags = useMemo(() => [...new Set(tasks.flatMap((t) => t.tags))], [tasks])
   const { smartLists, getSmartListTasks } = useSmartLists()
@@ -386,6 +432,13 @@ export function TasksView() {
     !!filterDate
   , [searchQuery, filterPriority, filterStatus, filterTag, filterType, filterDate])
 
+  const isDoneVisibleToday = useCallback((t: Task) => {
+    if (t.status !== 'done' || !!t.repeatRule) return false
+    if (filterStatus === 'done') return true
+    if (!t.completedAt) return true
+    return isSameDay(t.completedAt, filterDate || today)
+  }, [filterStatus, filterDate, today])
+
   const groupedTasks = useMemo(() => {
     const sortTasks = (taskList: Task[]) => {
       if (taskOrder.length === 0) return taskList
@@ -400,23 +453,23 @@ export function TasksView() {
     }
 
     const isActiveTask = (t: Task) => t.status !== 'done' || !!t.repeatRule
-    
+
     return {
       urgent: sortTasks(filteredTasks.filter((t) => t.priority === 'urgent' && isActiveTask(t))),
       high: sortTasks(filteredTasks.filter((t) => t.priority === 'high' && isActiveTask(t))),
       medium: sortTasks(filteredTasks.filter((t) => t.priority === 'medium' && isActiveTask(t))),
       low: sortTasks(filteredTasks.filter((t) => t.priority === 'low' && isActiveTask(t))),
-      done: filteredTasks.filter((t) => t.status === 'done' && !t.repeatRule),
+      done: filteredTasks.filter(isDoneVisibleToday),
     }
-  }, [filteredTasks, taskOrder])
+  }, [filteredTasks, taskOrder, isDoneVisibleToday])
 
   const kanbanGroups = useMemo(() => {
     return {
       todo: filteredTasks.filter((t) => t.status === 'todo' || (t.status === 'done' && !!t.repeatRule)),
       'in-progress': filteredTasks.filter((t) => t.status === 'in-progress'),
-      done: filteredTasks.filter((t) => t.status === 'done' && !t.repeatRule),
+      done: filteredTasks.filter(isDoneVisibleToday),
     }
-  }, [filteredTasks])
+  }, [filteredTasks, isDoneVisibleToday])
 
   const matrixGroups = useMemo(() => {
     const activeTasks = filteredTasks.filter(t => t.status !== 'done' || !!t.repeatRule)
@@ -473,6 +526,12 @@ export function TasksView() {
     const overColumn = kanbanColumns.find(col => col.id === overId)
     if (overColumn) {
       if (activeTask.status !== overColumn.id) {
+        // WIP limit check
+        const wipLimit = wipLimits[overColumn.id] ?? 0
+        if (wipLimit > 0 && kanbanGroups[overColumn.id].length >= wipLimit) {
+          toast.error('该列已达WIP上限')
+          return
+        }
         if (overColumn.id === 'done') {
           handleCompleteTask(activeId)
         } else {
@@ -483,6 +542,12 @@ export function TasksView() {
     }
     const overTask = tasks.find(t => t.id === overId)
     if (overTask && activeTask.status !== overTask.status) {
+      // WIP limit check
+      const wipLimit = wipLimits[overTask.status] ?? 0
+      if (wipLimit > 0 && kanbanGroups[overTask.status as keyof typeof kanbanGroups]?.length >= wipLimit) {
+        toast.error('该列已达WIP上限')
+        return
+      }
       if (overTask.status === 'done') {
         handleCompleteTask(activeId)
       } else {
@@ -860,6 +925,7 @@ export function TasksView() {
         onToggleSelection={toggleTaskSelection}
       >
         <div
+          id={`task-item-${task.id}`}
           draggable
           onDragStart={() => handleListDragStart(task.id)}
           onDragOver={(e) => handleListDragOver(e, task.id)}
@@ -1102,6 +1168,7 @@ export function TasksView() {
                       size="icon"
                       className="h-8 w-8"
                       onClick={(e) => e.stopPropagation()}
+                      aria-label="任务依赖"
                     >
                       <Link2 className="h-4 w-4" />
                     </Button>
@@ -1116,6 +1183,7 @@ export function TasksView() {
                 e.stopPropagation()
                 openEditDialog(task)
               }}
+              aria-label="编辑任务"
             >
               <Edit className="h-4 w-4" />
             </Button>
@@ -1143,6 +1211,7 @@ export function TasksView() {
               variant="ghost"
               size="icon"
               className="h-8 w-8 text-destructive hover:text-destructive"
+              aria-label="删除任务"
               onClick={(e) => {
                 e.stopPropagation()
                 deleteTask(task.id)
@@ -1418,6 +1487,7 @@ export function TasksView() {
               variant="ghost"
               size="icon"
               className="h-6 w-6 md:opacity-0 md:group-hover:opacity-100 shrink-0"
+              aria-label="子任务选项"
             >
               <MoreHorizontal className="h-3 w-3 text-muted-foreground" />
             </Button>
@@ -1998,23 +2068,79 @@ export function TasksView() {
               onDragOver={handleKanbanDragOver}
               onDragEnd={handleKanbanDragEnd}
             >
+              <div className="flex items-center justify-end mb-2">
+                <Dialog open={isWipDialogOpen} onOpenChange={(open) => {
+                  setIsWipDialogOpen(open)
+                  if (open) {
+                    setWipEditValues({ ...wipLimits })
+                  }
+                }}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-1.5">
+                      <LayoutGrid className="h-3.5 w-3.5" />
+                      设置WIP
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[360px]">
+                    <DialogHeader>
+                      <DialogTitle>WIP 限制设置</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <p className="text-sm text-muted-foreground">设置每列的最大在制品数量，0 表示无限制</p>
+                      {kanbanColumns.map((col) => (
+                        <div key={col.id} className="flex items-center gap-3">
+                          <span className="text-sm font-medium w-20">{col.label}</span>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={99}
+                            value={wipEditValues[col.id] ?? 0}
+                            onChange={(e) => {
+                              const val = parseInt(e.target.value)
+                              setWipEditValues({ ...wipEditValues, [col.id]: Number.isFinite(val) ? val : 0 })
+                            }}
+                            className="w-24"
+                          />
+                          <span className="text-xs text-muted-foreground">{wipEditValues[col.id] === 0 ? '无限制' : `最多 ${wipEditValues[col.id]} 个`}</span>
+                        </div>
+                      ))}
+                      <Button className="w-full" onClick={() => {
+                        setWipLimits({ ...wipEditValues })
+                        saveWipLimits({ ...wipEditValues })
+                        setIsWipDialogOpen(false)
+                      }}>
+                        保存
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
               <div className="grid gap-4 md:grid-cols-3">
                 {kanbanColumns.map((column) => {
                   const ColumnIcon = column.icon
                   const columnTasks = kanbanGroups[column.id]
+                  const wipLimit = wipLimits[column.id] ?? 0
+                  const isWipExceeded = wipLimit > 0 && columnTasks.length >= wipLimit
                   return (
                     <div
                       key={column.id}
                       className={cn(
                         'rounded-2xl border border-t-4 bg-muted/30 p-4 transition-all duration-200 min-h-[300px]',
-                        column.color
+                        column.color,
+                        isWipExceeded && 'border-red-400 dark:border-red-600 bg-red-50/50 dark:bg-red-950/20'
                       )}
                     >
-                      <div className={cn('flex items-center gap-2 rounded-xl p-2 mb-3', column.headerBg)}>
+                      <div className={cn(
+                        'flex items-center gap-2 rounded-xl p-2 mb-3',
+                        isWipExceeded ? 'bg-red-100 dark:bg-red-900/30' : column.headerBg
+                      )}>
                         <ColumnIcon className="h-4 w-4" />
                         <span className="font-semibold text-sm">{column.label}</span>
-                        <Badge variant="secondary" className="ml-auto text-xs">
-                          {columnTasks.length}
+                        <Badge
+                          variant={isWipExceeded ? 'destructive' : 'secondary'}
+                          className="ml-auto text-xs"
+                        >
+                          {wipLimit > 0 ? `${columnTasks.length}/${wipLimit}` : columnTasks.length}
                         </Badge>
                       </div>
                       <SortableContext items={columnTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>

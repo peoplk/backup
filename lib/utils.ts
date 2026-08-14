@@ -37,3 +37,8 @@ export function throttle<T extends (...args: any[]) => any>(
     }
   }
 }
+
+export function isSameDay(a: Date | string | undefined, b: Date | string | undefined): boolean {
+  if (!a || !b) return false
+  return new Date(a).toDateString() === new Date(b).toDateString()
+}

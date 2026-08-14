@@ -60,6 +60,7 @@ import {
 import { cn } from '@/lib/utils'
 import { Textarea } from '@/components/ui/textarea'
 import { AchievementsWall } from '@/components/achievements-wall'
+import { COLOR_PALETTE } from '@/lib/palette'
 
 const goalTypeConfig = {
   yearly: { label: '年度目标', color: 'bg-chart-1', icon: Flag },
@@ -69,12 +70,12 @@ const goalTypeConfig = {
 }
 
 const goalCategoryConfig = {
-  work: { label: '工作', color: '#4A90E2', icon: '💼' },
-  personal: { label: '个人', color: '#7ED321', icon: '🌟' },
-  health: { label: '健康', color: '#E91E63', icon: '💪' },
-  learning: { label: '学习', color: '#9B59B6', icon: '📚' },
-  finance: { label: '财务', color: '#F5A623', icon: '💰' },
-  other: { label: '其他', color: '#607D8B', icon: '📌' },
+  work: { label: '工作', color: COLOR_PALETTE[0], icon: '💼' },
+  personal: { label: '个人', color: COLOR_PALETTE[1], icon: '🌟' },
+  health: { label: '健康', color: COLOR_PALETTE[3], icon: '💪' },
+  learning: { label: '学习', color: COLOR_PALETTE[4], icon: '📚' },
+  finance: { label: '财务', color: COLOR_PALETTE[2], icon: '💰' },
+  other: { label: '其他', color: COLOR_PALETTE[6], icon: '📌' },
 }
 
 const goalStatusConfig = {
@@ -310,6 +311,7 @@ export function GoalsView() {
           size="icon"
           className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
           onClick={() => deleteMilestone(goalId, milestone.id)}
+          aria-label="删除里程碑"
         >
           <X className="h-3 w-3" />
         </Button>
@@ -397,6 +399,7 @@ export function GoalsView() {
                 size="icon"
                 className="h-8 w-8"
                 onClick={() => openEditDialog(goal)}
+                aria-label="编辑目标"
               >
                 <Edit className="h-4 w-4" />
               </Button>
@@ -404,6 +407,7 @@ export function GoalsView() {
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 text-destructive hover:text-destructive"
+                aria-label="删除目标"
                 onClick={() => {
                   deleteGoal(goal.id)
                   toast.success('目标已删除', {

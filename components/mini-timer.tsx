@@ -153,6 +153,7 @@ export function MiniTimer() {
               size="icon"
               className="h-10 w-10 rounded-full"
               onClick={handleReset}
+              aria-label="重置"
             >
               <RotateCcw className="h-4 w-4" />
             </Button>
@@ -176,6 +177,7 @@ export function MiniTimer() {
               size="icon"
               className="h-10 w-10 rounded-full"
               onClick={handleSkip}
+              aria-label="跳过"
             >
               <SkipForward className="h-4 w-4" />
             </Button>

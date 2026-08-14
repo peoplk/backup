@@ -37,7 +37,7 @@ import { cn } from '@/lib/utils'
 import { APP_COLORS } from '@/lib/config'
 
 const anniversaryIcons = ['🎂', '💍', '📅', '🎉', '❤️', '🎓', '🏆', '🌟', '🎄', '🎃']
-const anniversaryColors = [APP_COLORS.pink, '#FF5722', APP_COLORS.blue, APP_COLORS.green, APP_COLORS.purple, APP_COLORS.orange, '#00CED1', APP_COLORS.gray]
+const anniversaryColors = [APP_COLORS.pink, APP_COLORS.amber, APP_COLORS.blue, APP_COLORS.green, APP_COLORS.purple, APP_COLORS.orange, APP_COLORS.cyan, APP_COLORS.gray]
 
 const typeLabels: Record<Anniversary['type'], string> = {
   birthday: '生日',
@@ -78,8 +78,8 @@ export function AnniversariesView() {
 
   const sortedAnniversaries = useMemo(() => {
     return [...anniversaries].sort((a, b) => {
-      const daysA = getDaysRemaining(a.date)
-      const daysB = getDaysRemaining(b.date)
+      const daysA = getDaysRemaining(a.date, a.repeat)
+      const daysB = getDaysRemaining(b.date, b.repeat)
       if (daysA < 0 && daysB >= 0) return 1
       if (daysA >= 0 && daysB < 0) return -1
       return Math.abs(daysA) - Math.abs(daysB)
@@ -87,15 +87,15 @@ export function AnniversariesView() {
   }, [anniversaries])
 
   const upcomingAnniversaries = useMemo(() => {
-    return sortedAnniversaries.filter((a) => getDaysRemaining(a.date) >= 0)
+    return sortedAnniversaries.filter((a) => getDaysRemaining(a.date, a.repeat) >= 0)
   }, [sortedAnniversaries])
 
   const pastAnniversaries = useMemo(() => {
-    return sortedAnniversaries.filter((a) => getDaysRemaining(a.date) < 0)
+    return sortedAnniversaries.filter((a) => getDaysRemaining(a.date, a.repeat) < 0)
   }, [sortedAnniversaries])
 
-  function getDaysRemaining(date: Date | string): number {
-    const targetDate = new Date(date)
+  function getDaysRemaining(date: Date | string, repeat: boolean = false): number {
+    const targetDate = repeat ? getNextOccurrence(date, true) : new Date(date)
     const todayCopy = new Date(today)
     targetDate.setHours(0, 0, 0, 0)
     const diffTime = targetDate.getTime() - todayCopy.getTime()
@@ -106,9 +106,10 @@ export function AnniversariesView() {
     const targetDate = new Date(date)
     if (!repeat) return targetDate
 
+    const source = new Date(date)
     const nextDate = new Date(today)
-    nextDate.setMonth(new Date(date).getMonth())
-    nextDate.setDate(new Date(date).getDate())
+    nextDate.setMonth(source.getMonth())
+    nextDate.setDate(source.getDate())
 
     if (nextDate < today) {
       nextDate.setFullYear(nextDate.getFullYear() + 1)
@@ -373,7 +374,7 @@ export function AnniversariesView() {
               <div>
                 <p className="text-sm text-muted-foreground">需要提醒</p>
                 <p className="text-xl font-bold tracking-tight">
-                  {upcomingAnniversaries.filter((a) => getDaysRemaining(a.date) <= a.remindDays).length}
+                  {upcomingAnniversaries.filter((a) => getDaysRemaining(a.date, a.repeat) <= a.remindDays).length}
                 </p>
               </div>
             </div>
@@ -396,7 +397,7 @@ export function AnniversariesView() {
           <h2 className="text-lg font-semibold">即将到来</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {upcomingAnniversaries.map((anniversary) => {
-              const daysRemaining = getDaysRemaining(anniversary.date)
+              const daysRemaining = getDaysRemaining(anniversary.date, anniversary.repeat)
               const TypeIcon = typeIcons[anniversary.type]
 
               return (
@@ -427,6 +428,7 @@ export function AnniversariesView() {
                           size="icon"
                           className="h-8 w-8"
                           onClick={() => openEditDialog(anniversary)}
+                          aria-label="编辑纪念日"
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -435,6 +437,7 @@ export function AnniversariesView() {
                           size="icon"
                           className="h-8 w-8 text-destructive hover:text-destructive"
                           onClick={() => deleteAnniversary(anniversary.id)}
+                          aria-label="删除纪念日"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -482,7 +485,7 @@ export function AnniversariesView() {
           <h2 className="text-lg font-semibold text-muted-foreground">已过期</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {pastAnniversaries.map((anniversary) => {
-              const daysRemaining = getDaysRemaining(anniversary.date)
+              const daysRemaining = getDaysRemaining(anniversary.date, anniversary.repeat)
               const TypeIcon = typeIcons[anniversary.type]
 
               return (
@@ -513,6 +516,7 @@ export function AnniversariesView() {
                           size="icon"
                           className="h-8 w-8"
                           onClick={() => openEditDialog(anniversary)}
+                          aria-label="编辑纪念日"
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -521,6 +525,7 @@ export function AnniversariesView() {
                           size="icon"
                           className="h-8 w-8 text-destructive hover:text-destructive"
                           onClick={() => deleteAnniversary(anniversary.id)}
+                          aria-label="删除纪念日"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>

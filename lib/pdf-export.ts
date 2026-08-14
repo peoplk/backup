@@ -21,7 +21,7 @@ function buildPrintHTML(title: string, innerHTML: string): string {
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8" />
-<title>${title}</title>
+<title>${escapeHTML(title)}</title>
 <style>
   @page {
     size: A4;
@@ -145,6 +145,11 @@ function buildPrintHTML(title: string, innerHTML: string): string {
     .report { max-width: 100%; }
     .no-print { display: none !important; }
     .page-break { page-break-before: always; }
+    svg { shape-rendering: geometricPrecision; }
+    * {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
   }
 </style>
 </head>
@@ -190,7 +195,7 @@ export function exportHTMLToPDF(opts: {
   // Electron 环境：使用 webContents.printToPDF（需要 IPC）
   // 浏览器环境：打开新窗口并触发打印
   if (typeof window !== 'undefined') {
-    const w = window.open('', '_blank', 'width=900,height=1100')
+    const w = window.open('', '_blank', 'width=1200,height=1600')
     if (!w) {
       alert('请允许弹窗以导出 PDF')
       return
@@ -211,7 +216,7 @@ export async function exportViaElectronPrint(opts: {
   fileName: string
 }): Promise<boolean> {
   if (typeof window === 'undefined') return false
-  const api = (window as any).electronAPI
+  const api = window.electronAPI
   if (!api?.printToPDF) return false
   try {
     const html = buildPrintHTML(opts.title, opts.innerHTML)
@@ -248,8 +253,8 @@ export function exportElementToPDF(opts: {
   exportHTMLToPDF({ title: opts.title, innerHTML, fileName: opts.fileName })
 }
 
-function escapeHTML(s: string): string {
-  return s
+export function escapeHTML(s: string): string {
+  return String(s)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -272,4 +277,150 @@ export function formatHM(minutes: number): string {
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
   return m > 0 ? `${h}h ${m}m` : `${h}h`
+}
+
+// ─── 专注报表 PDF 导出 ────────────────────────────────────────
+
+export interface FocusReportData {
+  /** 日期范围描述，如 "近30天" */
+  dateRange: string
+  /** 每日专注数据 */
+  dailyData: Array<{ date: string; minutes: number }>
+  /** 总专注时长（分钟） */
+  totalFocusMinutes: number
+  /** 完成番茄钟数 */
+  totalSessions: number
+  /** 平均每番茄钟时长（分钟） */
+  avgDuration: number
+  /** 涉及项目数 */
+  projectCount: number
+  /** 项目分布 */
+  projectData: Array<{
+    name: string
+    minutes: number
+    sessions: number
+    taskCount: number
+    color: string
+  }>
+  /** 标签分布 */
+  tagData: Array<{
+    name: string
+    minutes: number
+  }>
+}
+
+/**
+ * 导出专注报表为 PDF
+ * 使用浏览器原生 print API，不依赖第三方库
+ */
+export function exportFocusReportToPDF(data: FocusReportData): void {
+  const maxDailyMinutes = Math.max(...data.dailyData.map((d) => d.minutes), 1)
+
+  // 生成每日专注柱状图（SVG 矢量图，打印更清晰）
+  const barChartHTML = data.dailyData.length > 0
+    ? (() => {
+        const barCount = data.dailyData.length
+        const chartWidth = 760
+        const chartHeight = 150
+        const paddingBottom = 26
+        const gap = 4
+        const maxBarWidth = 18
+        const availableWidth = chartWidth - gap * (barCount - 1)
+        const barWidth = Math.min(maxBarWidth, availableWidth / barCount)
+        const totalBarsWidth = barWidth * barCount + gap * (barCount - 1)
+        const startX = (chartWidth - totalBarsWidth) / 2
+        const plotHeight = chartHeight - paddingBottom
+
+        const bars = data.dailyData
+          .map((d, i) => {
+            const height = maxDailyMinutes > 0 ? Math.max((d.minutes / maxDailyMinutes) * plotHeight, 2) : 2
+            const x = startX + i * (barWidth + gap)
+            const y = plotHeight - height
+            return `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${barWidth.toFixed(2)}" height="${height.toFixed(2)}" rx="2" fill="#3b82f6" ${d.minutes === 0 ? 'opacity="0.2"' : ''} />`
+          })
+          .join('')
+
+        const labels = data.dailyData
+          .map((d, i) => {
+            const x = startX + i * (barWidth + gap) + barWidth / 2
+            const y = chartHeight - 6
+            return `<text x="${x.toFixed(2)}" y="${y.toFixed(2)}" text-anchor="middle" font-size="9" fill="#9ca3af">${escapeHTML(d.date)}</text>`
+          })
+          .join('')
+
+        return `<svg width="100%" height="${chartHeight}" viewBox="0 0 ${chartWidth} ${chartHeight}" preserveAspectRatio="none" style="display:block;margin:8px 0 4px;">
+          <line x1="0" y1="${plotHeight}" x2="${chartWidth}" y2="${plotHeight}" stroke="#e5e7eb" stroke-width="1" />
+          ${bars}
+          ${labels}
+        </svg>`
+      })()
+    : '<p style="color:#9ca3af;font-size:12px;text-align:center;padding:20px 0;">暂无数据</p>'
+
+  // 项目分布表格
+  const projectTableHTML = data.projectData.length > 0
+    ? `<table>
+        <thead>
+          <tr><th>项目</th><th style="text-align:right">专注时长</th><th style="text-align:right">番茄钟</th><th style="text-align:right">任务数</th><th style="text-align:right">占比</th></tr>
+        </thead>
+        <tbody>
+          ${data.projectData.map((p) => {
+            const pct = data.totalFocusMinutes > 0 ? ((p.minutes / data.totalFocusMinutes) * 100).toFixed(1) : '0.0'
+            return `<tr>
+              <td><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:6px;vertical-align:middle;"></span>${escapeHTML(p.name)}</td>
+              <td style="text-align:right">${formatHM(p.minutes)}</td>
+              <td style="text-align:right">${p.sessions}</td>
+              <td style="text-align:right">${p.taskCount}</td>
+              <td style="text-align:right">${pct}%</td>
+            </tr>`
+          }).join('')}
+        </tbody>
+      </table>`
+    : '<p style="color:#9ca3af;font-size:12px;">暂无项目数据</p>'
+
+  // 标签分布列表
+  const tagListHTML = data.tagData.length > 0
+    ? `<ul>${data.tagData.map((t) => {
+        const pct = data.totalFocusMinutes > 0 ? ((t.minutes / data.totalFocusMinutes) * 100).toFixed(1) : '0.0'
+        return `<li>${escapeHTML(t.name)} — ${formatHM(t.minutes)}（${pct}%）</li>`
+      }).join('')}</ul>`
+    : '<p style="color:#9ca3af;font-size:12px;">暂无标签数据</p>'
+
+  const innerHTML = `
+    <h1>专注报表</h1>
+    <p class="subtitle">${escapeHTML(data.dateRange)}</p>
+
+    <h2>汇总统计</h2>
+    <div class="grid grid-4">
+      <div class="card">
+        <div class="stat-value">${formatHM(data.totalFocusMinutes)}</div>
+        <div class="stat-label">总专注时长</div>
+      </div>
+      <div class="card">
+        <div class="stat-value">${data.totalSessions}</div>
+        <div class="stat-label">完成番茄钟</div>
+      </div>
+      <div class="card">
+        <div class="stat-value">${data.avgDuration} 分钟</div>
+        <div class="stat-label">平均每番茄钟</div>
+      </div>
+      <div class="card">
+        <div class="stat-value">${data.projectCount}</div>
+        <div class="stat-label">涉及项目</div>
+      </div>
+    </div>
+
+    <h2>每日专注趋势</h2>
+    ${barChartHTML}
+
+    <h2>项目分布</h2>
+    ${projectTableHTML}
+
+    ${data.tagData.length > 0 ? `<h2>标签分布</h2>${tagListHTML}` : ''}
+  `
+
+  exportHTMLToPDF({
+    title: '专注报表',
+    innerHTML,
+    fileName: `专注报表_${data.dateRange}`,
+  })
 }

@@ -1,190 +1,219 @@
 ## 1. 架构设计
 
-本项目为纯前端应用，基于现有 Next.js 项目架构，仅对移动端视图层进行重新设计。数据层和业务逻辑层保持不变，仅重构 UI 组件层。
+新模块 `android-app/` 独立于现有 `android/`（Capacitor 壳）与桌面端代码，是一套**纯前端、可打包为 Android App** 的 H5 设计稿：
 
 ```mermaid
 flowchart TD
-    A["移动端应用层"] --> B["页面组件层"]
-    B --> B1["MobileApp 主框架"]
-    B --> B2["MobileDashboardView"]
-    B --> B3["MobileTasksView"]
-    B --> B4["MobileCalendarView"]
-    B --> B5["MobileAnalyticsView"]
-    B --> B6["MobileSettingsView"]
-    B --> B7["MobileFocusView"]
-    B --> B8["MobileHabitsView"]
-    A --> C["共享组件层"]
-    C --> C1["TaskCard"]
-    C --> C2["PrioritySelector"]
-    C --> C3["TagSelector"]
-    C --> C4["DatePicker"]
-    C --> C5["BottomSheet"]
-    C --> C6["StatCard"]
-    A --> D["状态管理层"]
-    D --> D1["Zustand Store"]
-    D --> D2["自定义 Hooks"]
-    A --> E["样式层"]
-    E --> E1["Tailwind CSS"]
-    E --> E2["CSS Variables"]
-    E --> E3["Glass Morphism"]
+    A["android-app/ (H5)"] --> B["Vite + React 19 + TS"]
+    B --> B1["App.tsx 路由"]
+    B --> B2["页面组件 15 个"]
+    B --> B3["布局组件 4 个"]
+    B --> B4["领域组件 5 组"]
+    A --> C["样式层"]
+    C --> C1["Tailwind 4 主题 + CSS Variables"]
+    C --> C2["Glass 玻璃拟态 utility"]
+    A --> D["状态层"]
+    D --> D1["Zustand 5 + persist (localStorage)"]
+    D --> D2["类型与桌面端 lib/types.ts 对齐"]
+    A --> E["可选打包"]
+    E --> E1["Capacitor 包装为 Android APK"]
+    E --> E2["PWA 离线 + 安装到桌面"]
 ```
 
-## 2. 技术说明
+## 2. 技术选型
 
-* **前端框架**：Next.js 16 + React 19 + TypeScript
-
-* **样式方案**：Tailwind CSS 4 + CSS Variables（主题色）
-
-* **状态管理**：Zustand 5（已有 store，保持不变）
-
-* **UI组件库**：Radix UI + shadcn/ui（已有组件，保持不变）
-
-* **图标库**：Lucide React
-
-* **图表**：Recharts（已有依赖）
-
-* **动画**：CSS Transitions + Tailwind 动画类
-
-* **后端**：无（纯前端，数据存储在 localStorage）
-
-* **数据库**：无（使用 Zustand persist 中间件持久化到 localStorage）
+| 维度   | 选择                                 | 理由                        |
+| ---- | ---------------------------------- | ------------------------- |
+| 构建工具 | **Vite 5**                         | 启动快，构建产物小，便于 Capacitor 打包 |
+| 框架   | **React 19 + TypeScript**          | 与桌面端同栈，类型可对齐              |
+| 样式   | **Tailwind CSS 4 + CSS Variables** | 主题切换友好，与 PRD 色板一致         |
+| 状态   | **Zustand 5 + persist**            | 与桌面端一致，localStorage 持久化   |
+| 路由   | **React Router 6**                 | 移动端多页面切换                  |
+| 图标   | **Lucide React**                   | 与桌面端一致                    |
+| 动效   | **Framer Motion 11**               | 抽屉/页面切换/粒子效果              |
+| 图表   | **Recharts**                       | 桌面端已使用，统计页直接用             |
+| 日期   | **date-fns**                       | 桌面端已使用                    |
+| 包大小  | 目标 gzip 后 < 200KB                  | Capacitor 启动速度            |
 
 ## 3. 路由定义
 
-本项目为单页应用，移动端视图通过 Tab 切换而非路由切换：
+| 路径               | 页面            | Tab    |
+| ---------------- | ------------- | ------ |
+| `/`              | Dashboard     | 概览     |
+| `/tasks`         | Tasks         | 任务     |
+| `/focus`         | Focus         | 专注     |
+| `/habits`        | Habits        | 习惯     |
+| `/me`            | Settings      | 我的     |
+| `/more`          | MoreGrid      | 我的（子页） |
+| `/calendar`      | Calendar      | 更多     |
+| `/time-block`    | TimeBlock     | 更多     |
+| `/goals`         | Goals         | 更多     |
+| `/anniversaries` | Anniversaries | 更多     |
+| `/journal`       | Journal       | 更多     |
+| `/analytics`     | Analytics     | 更多     |
+| `/task/:id`      | TaskDetail    | 浮层     |
+| `/task/new`      | AddTask       | 浮层     |
+| `/search`        | Search        | 浮层     |
+| `/notifications` | Notifications | 浮层     |
 
-| 视图ID          | 用途    | 组件                      |
-| ------------- | ----- | ----------------------- |
-| dashboard     | 概览仪表盘 | MobileDashboardView     |
-| tasks         | 任务列表  | MobileTasksView         |
-| focus         | 专注计时  | MobileFocusView         |
-| habits        | 习惯打卡  | MobileHabitsView        |
-| calendar      | 日历视图  | MobileCalendarView      |
-| goals         | 目标管理  | MobileGoalsView         |
-| anniversaries | 纪念日   | MobileAnniversariesView |
-| journal       | 日记    | JournalView             |
-| analytics     | 统计分析  | MobileAnalyticsView     |
-| settings      | 设置    | MobileSettingsView      |
+## 4. 核心组件
 
-## 4. API定义
+### 4.1 布局
 
-无后端API，所有数据操作通过 Zustand Store 完成。
+| 组件            | 职责                               |
+| ------------- | -------------------------------- |
+| `StatusBar`   | 顶部 44dp 系统状态栏（时间 / 信号 / 电量 mock） |
+| `AppHeader`   | 应用头：返回 / 标题 / 操作；玻璃背景            |
+| `TabBar`      | 底部 5 项 Tab + 中间凸起「专注」按钮          |
+| `MoreGrid`    | 9 宫格二级入口                         |
+| `BottomSheet` | 通用底部抽屉（任务详情/添加）                  |
+| `SafeArea`    | 处理顶部 / 底部安全区                     |
 
-## 5. 服务器架构图
+### 4.2 任务
 
-不适用（纯前端项目）
+| 组件                                                                    | 用途                              |
+| --------------------------------------------------------------------- | ------------------------------- |
+| `TaskListFilter`                                                      | 水平药丸标签：全部 / 今天 / 即将 / 星标 / 已完成  |
+| `TaskCard`                                                            | 任务卡（优先级色条 / 勾选 / 标题 / 元信息 / 星标） |
+| `QuickAddBar`                                                         | 底部快速添加（优先级切换 + 输入 + 提交）         |
+| `TaskDetailSheet`                                                     | 任务详情抽屉                          |
+| `PrioritySelector` / `DatePicker` / `TagSelector` / `ProjectSelector` | 属性选择器                           |
 
-## 6. 数据模型
+### 4.3 专注
 
-### 6.1 数据模型定义
+| 组件               | 用途               |
+| ---------------- | ---------------- |
+| `FocusRing`      | SVG 圆环进度 + 中心大数字 |
+| `ModeSwitcher`   | 专注 / 短休 / 长休 药丸  |
+| `TaskLink`       | 关联任务下拉           |
+| `WhiteNoiseGrid` | 9 宫格白噪音          |
+| `DistractionLog` | 分心记录             |
 
-数据模型已在现有 Store 中定义，本次重构不修改数据模型，仅重构 UI 展示层。
+### 4.4 习惯 / 统计
 
-```mermaid
-erDiagram
-    Task {
-        string id PK
-        string title
-        string description
-        string priority
-        string status
-        string project
-        string[] tags
-        date dueDate
-        string startTime
-        string endTime
-        string notes
-        object repeatRule
-        boolean starred
-        number estimatedPomodoros
-        number completedPomodoros
-        SubTask[] subTasks
-        boolean archived
-        date completedAt
-    }
-    Project {
-        string id PK
-        string name
-        string color
-        number totalTime
-    }
-    Tag {
-        string id PK
-        string name
-        string color
-    }
-    Habit {
-        string id PK
-        string name
-        string icon
-        boolean archived
-    }
-    PomodoroSession {
-        string id PK
-        string type
-        number duration
-        date completedAt
-    }
-    TimeBlock {
-        string id PK
-        string title
-        date date
-        string startTime
-        string endTime
-        string category
-    }
-    Anniversary {
-        string id PK
-        string title
-        date date
-        string type
-        boolean repeat
-        string icon
-    }
-    Task }o--|| Project : "belongs to"
-    Task }o--o{ Tag : "has tags"
+| 组件                | 用途                |
+| ----------------- | ----------------- |
+| `HabitCard`       | 习惯卡 + 连续天数 + 今日按钮 |
+| `WeekDots`        | 7 日打卡点            |
+| `StatCard`        | 2×2 指标卡           |
+| `TrendBar`        | 专注时长柱状图           |
+| `HourHeatmap`     | 24 小时热力           |
+| `AchievementWall` | 3 列成就             |
+
+## 5. 状态管理
+
+```typescript
+// store/useStore.ts
+interface AppState {
+  activeTab: 'dashboard' | 'tasks' | 'focus' | 'habits' | 'me'
+  theme: 'light' | 'dark' | 'system'
+  tasks: Task[]
+  projects: Project[]
+  tags: Tag[]
+  habits: Habit[]
+  habitLogs: Record<string, string[]>   // habitId -> [dateISO, ...]
+  pomodoroSessions: PomodoroSession[]
+  timeBlocks: TimeBlock[]
+  anniversaries: Anniversary[]
+  goals: Goal[]
+  journalEntries: JournalEntry[]
+  notifications: Notification[]
+  focus: {
+    mode: 'focus' | 'short' | 'long'
+    isRunning: boolean
+    remainingSec: number
+    linkedTaskId?: string
+    whiteNoise?: string
+  }
+  // actions ...
+}
 ```
 
-### 6.2 数据定义语言
+持久化：`persist` 中间件 + `localStorage`，key = `focusflow-android-v1`。
 
-不适用（使用 Zustand Store 内存数据结构，通过 persist 中间件序列化到 localStorage）
+## 6. 样式系统
 
-## 7. 重构策略
+### 6.1 CSS Variables
 
-### 7.1 文件组织
+```css
+:root {
+  --bg: #eaf0f6;
+  --ink: #1d2230;
+  --muted: #7a8194;
+  --blue: #2b6df0;
+  --blue-2: #4a8af7;
+  --blue-soft: #e8f0ff;
+  --card: #ffffff;
+  --green: #22c55e;
+  --orange: #f59e0b;
+  --red: #ef4444;
+  --shadow-sm: 0 4px 12px -4px rgba(20,30,60,.08);
+  --shadow-md: 0 10px 30px -10px rgba(20,30,60,.18);
+  --shadow-phone: 0 40px 80px -30px rgba(20,30,60,.35);
+  --radius-card: 18px;
+  --radius-btn: 14px;
+}
+[data-theme="dark"] {
+  --bg: #0f1419;
+  --card: #1a1f2e;
+  --ink: #f1f5f9;
+  --muted: #94a3b8;
+  --blue-soft: rgba(43,109,240,.16);
+}
+```
 
-所有移动端视图组件位于 `components/views/mobile/` 目录下，保持现有目录结构不变，仅替换组件内容。
+### 6.2 工具类
 
-### 7.2 组件拆分原则
+* `.glass` / `.glass-strong`：玻璃背景
 
-* 每个视图组件保持在 300 行以内
+* `.safe-top` / `.safe-bottom`：安全区
 
-* 提取可复用的子组件到 `components/mobile/` 目录
+* `.text-num`：`tabular-nums` 等宽数字
 
-* 共享的 UI 模式（如底部抽屉、任务卡片）提取为独立组件
+* `.scrollbar-hide`：隐藏滚动条
 
-### 7.3 新增共享组件
+## 7. 关键交互
 
-| 组件名                 | 用途         | 位置                                          |
-| ------------------- | ---------- | ------------------------------------------- |
-| MobileTaskCard      | 任务列表中的任务卡片 | components/mobile/mobile-task-card.tsx      |
-| MobileBottomSheet   | 通用底部抽屉面板   | components/mobile/mobile-bottom-sheet.tsx   |
-| MobilePriorityDot   | 优先级色点指示器   | components/mobile/mobile-priority-dot.tsx   |
-| MobileStatCard      | 统计数据卡片     | components/mobile/mobile-stat-card.tsx      |
-| MobileEmptyState    | 空状态占位组件    | components/mobile/mobile-empty-state.tsx    |
-| MobileSectionHeader | 分组标题组件     | components/mobile/mobile-section-header.tsx |
+| 交互     | 实现                                                             |
+| ------ | -------------------------------------------------------------- |
+| 番茄钟计时  | `setInterval` + `requestAnimationFrame` 平滑进度环                  |
+| 抽屉     | Framer Motion `AnimatePresence` + `cubic-bezier(.2,.8,.2,1)`   |
+| 列表入场   | IntersectionObserver + `style={{ animationDelay: i*40+'ms' }}` |
+| 主题切换   | 写入 `data-theme` + 监听系统                                         |
+| Tab 切换 | React Router + 状态栏颜色同步                                         |
 
-### 7.4 样式系统
+## 8. Android 打包路径
 
-* 使用 CSS Variables 定义主题色，支持深色模式切换
+* **方案 A（推荐）**：Capacitor 包装（项目已具备 `capacitor.config.ts` 与 `android/`）
 
-* Glass Morphism 效果通过 `glass-card`、`glass-sheet`、`glass-header`、`glass-nav` 等现有工具类实现
+  * `npx cap add android`（已存在）
 
-* 新增移动端专用 CSS 类：
+  * `npx cap copy android`
 
-  * `.safe-area-top`：顶部安全区域 padding
+  * 在 `android/app/src/main/assets/public` 放入 `android-app/dist` 产物
 
-  * `.safe-area-bottom`：底部安全区域 padding
+  * 修改 `MainActivity` 加载 `file:///android_asset/public/index.html`
 
-  * `.touch-manipulation`：禁用双击缩放
+* **方案 B**：TWA / PWA standalone 添加到桌面
+
+## 9. 性能预算
+
+| 指标     | 目标                  |
+| ------ | ------------------- |
+| 首屏 LCP | < 1.5s（Android 中端机） |
+| 交互 FID | < 100ms             |
+| 包大小    | < 200KB gzip        |
+| 主线程长任务 | 无 > 50ms            |
+
+## 10. 开发顺序
+
+1. 脚手架：Vite + React + TS + Tailwind + 路由 + Zustand
+2. 布局：StatusBar / AppHeader / TabBar / BottomSheet
+3. 全局样式 + 主题
+4. 数据 mock（基于桌面端 types 写种子数据）
+5. 页面：Dashboard → Tasks → Focus → Habits → MoreGrid → 各 More 子页
+6. 浮层：TaskDetail / Search / Notifications
+7. 动效与微交互
+8. 浅/深主题
+9. 构建并验证
 

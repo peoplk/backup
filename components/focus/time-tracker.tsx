@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import { useAppStore } from '@/lib/store'
+import { COLOR_PALETTE } from '@/lib/palette'
 import type { Project } from '@/lib/types'
 import { useShallow } from 'zustand/react/shallow'
 import { useDataLink } from '@/lib/data-link-service'
@@ -70,10 +71,7 @@ import {
   Cell,
 } from 'recharts'
 
-const projectColors = [
-  '#4A90E2', '#7ED321', '#F5A623', '#9B59B6', '#E91E63', 
-  '#00CED1', '#FF5722', '#607D8B', '#8BC34A', '#FF9800'
-]
+const projectColors = COLOR_PALETTE
 
 const formatTime = (seconds: number) => {
   const hours = Math.floor(seconds / 3600)
@@ -124,13 +122,16 @@ export function TimeTracker() {
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false)
   const [isManualEntryOpen, setIsManualEntryOpen] = useState(false)
   const [editingProject, setEditingProject] = useState<Project | null>(null)
-  const [newProject, setNewProject] = useState({ name: '', color: '#4A90E2' })
+  const [newProject, setNewProject] = useState({ name: '', color: COLOR_PALETTE[0] })
   const [deleteConfirmProject, setDeleteConfirmProject] = useState<Project | null>(null)
   const [manualEntryError, setManualEntryError] = useState<string | null>(null)
   const [manualEntry, setManualEntry] = useState({
     projectId: '',
     description: '',
-    date: new Date().toISOString().split('T')[0],
+    date: (() => {
+      const d = new Date()
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    })(),
     startTime: '09:00',
     endTime: '10:00',
   })
@@ -195,7 +196,7 @@ export function TimeTracker() {
       const matched = projects.find(p => p.name === newProject.name)
       if (matched) setSelectedProjectId(matched.id)
     }
-    setNewProject({ name: '', color: '#4A90E2' })
+    setNewProject({ name: '', color: COLOR_PALETTE[0] })
     setIsProjectDialogOpen(false)
   }
 
@@ -203,7 +204,7 @@ export function TimeTracker() {
     if (!editingProject || !newProject.name.trim()) return
     updateProject(editingProject.id, { name: newProject.name, color: newProject.color })
     setEditingProject(null)
-    setNewProject({ name: '', color: '#4A90E2' })
+    setNewProject({ name: '', color: COLOR_PALETTE[0] })
     setIsProjectDialogOpen(false)
   }
 
@@ -299,7 +300,7 @@ export function TimeTracker() {
       result.push({
         name: getDayName(date),
         hours: Math.round(hours * 10) / 10,
-        color: isToday ? '#7ED321' : isWeekend ? '#F5A623' : '#4A90E2',
+        color: isToday ? COLOR_PALETTE[1] : isWeekend ? COLOR_PALETTE[2] : COLOR_PALETTE[0],
       })
     }
     return result
@@ -390,10 +391,11 @@ export function TimeTracker() {
       if (newEntry) dataLink.handleTimeEntryAdded(newEntry)
     }
     setIsManualEntryOpen(false)
+    const resetDate = new Date()
     setManualEntry({
       projectId: projects[0]?.id || '',
       description: '',
-      date: new Date().toISOString().split('T')[0],
+      date: `${resetDate.getFullYear()}-${String(resetDate.getMonth() + 1).padStart(2, '0')}-${String(resetDate.getDate()).padStart(2, '0')}`,
       startTime: '09:00',
       endTime: '10:00',
     })
@@ -510,9 +512,10 @@ export function TimeTracker() {
                   className="h-12 w-12"
                   onClick={() => {
                     setEditingProject(null)
-                    setNewProject({ name: '', color: '#4A90E2' })
+                    setNewProject({ name: '', color: COLOR_PALETTE[0] })
                     setIsProjectDialogOpen(true)
                   }}
+                  aria-label="新建项目"
                 >
                   <Plus className="h-5 w-5" />
                 </Button>
@@ -668,7 +671,7 @@ export function TimeTracker() {
               className="h-8 gap-1"
               onClick={() => {
                 setEditingProject(null)
-                setNewProject({ name: '', color: '#4A90E2' })
+                setNewProject({ name: '', color: COLOR_PALETTE[0] })
                 setIsProjectDialogOpen(true)
               }}
             >
@@ -712,7 +715,7 @@ export function TimeTracker() {
                       </div>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
+                          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" aria-label="项目选项">
                             <MoreVertical className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
@@ -759,6 +762,7 @@ export function TimeTracker() {
                 size="icon"
                 className="h-8 w-8"
                 onClick={() => navigateDate('prev')}
+                aria-label="前一天"
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -776,6 +780,7 @@ export function TimeTracker() {
                 className="h-8 w-8"
                 onClick={() => navigateDate('next')}
                 disabled={selectedDate.toDateString() === new Date().toDateString()}
+                aria-label="后一天"
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
@@ -842,7 +847,7 @@ export function TimeTracker() {
         setIsProjectDialogOpen(open)
         if (!open) {
           setEditingProject(null)
-          setNewProject({ name: '', color: '#4A90E2' })
+          setNewProject({ name: '', color: COLOR_PALETTE[0] })
         }
       }}>
         <DialogContent>

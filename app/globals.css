@@ -186,9 +186,6 @@
 .status-bar-safe {
   padding-top: env(safe-area-inset-top, 0px);
 }
-.capacitor-native .status-bar-safe {
-  padding-top: max(env(safe-area-inset-top, 0px), 28px);
-}
 
 /* Windows 11 style titlebar with Mica blur effect */
 .win11-titlebar {
@@ -604,4 +601,70 @@ body:fullscreen .immersive-fullscreen {
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   pointer-events: none;
+}
+
+/* ============ 移动端弹层设计 Tokens ============
+ * 弹层体系分三类，全端统一：
+ * 1. 底部弹层（Sheet）: rounded-t-3xl + glass-sheet + 下滑动效 + 高度上限 85vh
+ * 2. 居中弹窗（Dialog）: rounded-2xl + glass-card + 高度上限 70vh
+ * 3. 全屏页（Page）  : 整页替换 + glass-header 顶栏
+ * 遮罩统一 .sheet-overlay；手柄统一 .sheet-handle
+ */
+
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: oklch(0 0 0 / 0.4);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: sheet-fade-in 0.2s ease-out;
+}
+
+@keyframes sheet-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.sheet-panel {
+  border-radius: 1.5rem 1.5rem 0 0;
+  overflow: hidden;
+}
+
+.sheet-handle {
+  width: 2.5rem;
+  height: 0.25rem;
+  margin-left: auto;
+  margin-right: auto;
+  border-radius: 9999px;
+  background: oklch(0.5 0.02 260 / 0.25);
+}
+
+.dialog-card {
+  border-radius: 1rem;
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  background: oklch(1 0 0 / 0.88);
+  border: 1px solid oklch(1 0 0 / 0.3);
+  box-shadow: 0 16px 48px oklch(0 0 0 / 0.18);
+}
+
+.dark .dialog-card {
+  background: oklch(0.18 0.02 260 / 0.88);
+  border: 1px solid oklch(1 0 0 / 0.1);
+  box-shadow: 0 16px 48px oklch(0 0 0 / 0.4);
+}
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: oklch(0 0 0 / 0.5);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: sheet-fade-in 0.2s ease-out;
 }

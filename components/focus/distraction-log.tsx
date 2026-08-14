@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { useAppStore } from '@/lib/store'
 import { useShallow } from 'zustand/react/shallow'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -107,21 +107,23 @@ export function DistractionLog({ taskId, pomodoroSessionId, isTimerRunning = fal
   const [customReason, setCustomReason] = useState('')
   const [showQuickReasons, setShowQuickReasons] = useState(false)
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
-  const [recentReasons, setRecentReasons] = useState<string[]>([])
   const panelRef = useRef<HTMLDivElement>(null)
 
-  const todayDistractions = distractions.filter(d => {
-    const dDate = new Date(d.timestamp).toDateString()
-    return dDate === new Date().toDateString()
-  })
-  const sessionDistractions = pomodoroSessionId
-    ? todayDistractions.filter(d => d.pomodoroSessionId === pomodoroSessionId)
-    : todayDistractions
-
-  useEffect(() => {
-    const recent = [...new Set(todayDistractions.slice(0, 10).map(d => d.reason))].slice(0, 5)
-    setRecentReasons(recent)
-  }, [todayDistractions])
+  const today = useMemo(() => new Date().toDateString(), [])
+  const todayDistractions = useMemo(() =>
+    distractions.filter(d => new Date(d.timestamp).toDateString() === today),
+    [distractions, today]
+  )
+  const sessionDistractions = useMemo(() =>
+    pomodoroSessionId
+      ? todayDistractions.filter(d => d.pomodoroSessionId === pomodoroSessionId)
+      : todayDistractions,
+    [pomodoroSessionId, todayDistractions]
+  )
+  const recentReasons = useMemo(() =>
+    [...new Set(todayDistractions.slice(0, 10).map(d => d.reason))].slice(0, 5),
+    [todayDistractions]
+  )
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -466,6 +468,7 @@ export function DistractionLog({ taskId, pomodoroSessionId, isTimerRunning = fal
                 size="icon"
                 className="h-5 w-5 shrink-0 opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
                 onClick={() => deleteDistraction(d.id)}
+                aria-label="删除分心记录"
               >
                 <X className="h-3 w-3" />
               </Button>

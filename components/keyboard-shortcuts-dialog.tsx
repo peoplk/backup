@@ -15,6 +15,13 @@ export function KeyboardShortcutsDialog() {
   const [open, setOpen] = useState(false)
 
   useEffect(() => {
+    window.__openKeyboardShortcuts = () => setOpen(true)
+    return () => {
+      window.__openKeyboardShortcuts = undefined
+    }
+  }, [])
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return

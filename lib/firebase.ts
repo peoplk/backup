@@ -114,21 +114,24 @@ export { db, auth }
 
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error' | 'offline'
 
+import type { SyncConflict } from '@/lib/types'
+
 export interface SyncState {
   status: SyncStatus
   lastSyncAt: Date | null
   error: string | null
+  conflicts: SyncConflict[]
   userId: string | null
   isEnabled: boolean
 }
 
-let syncStatusCallback: ((status: SyncState) => void) | null = null
+let syncStatusCallback: ((status: Partial<SyncState>) => void) | null = null
 
-export function setSyncStatusCallback(callback: (status: SyncState) => void) {
+export function setSyncStatusCallback(callback: (status: Partial<SyncState>) => void) {
   syncStatusCallback = callback
 }
 
-function notifyStatus(status: SyncState) {
+function notifyStatus(status: Partial<SyncState>) {
   syncStatusCallback?.(status)
 }
 
@@ -191,7 +194,7 @@ export async function signInWithGoogle(): Promise<User | null> {
     return result.user
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Google 登录失败'
-    notifyStatus({ status: 'error', lastSyncAt: null, error: message, userId: null, isEnabled: false })
+    notifyStatus({ status: 'error', lastSyncAt: null, error: message, userId: null, isEnabled: false, conflicts: [] })
     return null
   }
 }
@@ -213,7 +216,7 @@ export function isGoogleUser(): boolean {
 
 export async function syncToCloud(userId: string, data: Record<string, unknown>): Promise<void> {
   if (!db || !getIsFirebaseConfigured()) return
-  notifyStatus({ status: 'syncing', lastSyncAt: null, error: null, userId, isEnabled: true })
+  notifyStatus({ status: 'syncing', lastSyncAt: null, error: null, userId, isEnabled: true, conflicts: [] })
   try {
     const userDoc = doc(db, 'users', userId)
     const serialized = datesToTimestamps(data)
@@ -221,10 +224,10 @@ export async function syncToCloud(userId: string, data: Record<string, unknown>)
       data: serialized,
       updatedAt: Timestamp.now(),
     })
-    notifyStatus({ status: 'synced', lastSyncAt: new Date(), error: null, userId, isEnabled: true })
+    notifyStatus({ status: 'synced', lastSyncAt: new Date(), error: null, userId, isEnabled: true, conflicts: [] })
   } catch (err) {
     const message = err instanceof Error ? err.message : '同步失败'
-    notifyStatus({ status: 'error', lastSyncAt: null, error: message, userId, isEnabled: true })
+    notifyStatus({ status: 'error', lastSyncAt: null, error: message, userId, isEnabled: true, conflicts: [] })
     throw err
   }
 }
@@ -259,6 +262,7 @@ export function subscribeToCloud(
         error: err.message,
         userId,
         isEnabled: true,
+        conflicts: [],
       })
     }
   )
@@ -268,7 +272,7 @@ export async function setOfflineMode(offline: boolean): Promise<void> {
   if (!db) return
   if (offline) {
     await disableNetwork(db)
-    notifyStatus({ status: 'offline', lastSyncAt: null, error: null, userId: null, isEnabled: false })
+    notifyStatus({ status: 'offline', lastSyncAt: null, error: null, userId: null, isEnabled: false, conflicts: [] })
   } else {
     await enableNetwork(db)
   }
@@ -305,6 +309,12 @@ export async function mergeLocalAndCloud(
             : 0
           if (localTime > cloudTime) {
             mergedMap.set(id, localItem)
+          } else if (localTime === 0 && cloudTime === 0) {
+            const localStr = JSON.stringify(localItem, (k, v) => v instanceof Date ? v.toISOString() : v)
+            const cloudStr = JSON.stringify(cloudItem, (k, v) => v instanceof Date ? v.toISOString() : v)
+            if (localStr !== cloudStr) {
+              mergedMap.set(id, localItem)
+            }
           }
         }
       }
@@ -315,6 +325,10 @@ export async function mergeLocalAndCloud(
     }
   }
 
-  await syncToCloud(userId, merged)
+  const mergedStr = JSON.stringify(merged, (k, v) => v instanceof Date ? v.toISOString() : v)
+  const cloudStr = JSON.stringify(cloudData, (k, v) => v instanceof Date ? v.toISOString() : v)
+  if (mergedStr !== cloudStr) {
+    await syncToCloud(userId, merged)
+  }
   return merged
 }

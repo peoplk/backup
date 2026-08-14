@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useAppStore } from '@/lib/store'
+import { useDataLink } from '@/lib/data-link-service'
 import type { TimeBlock } from '@/lib/types'
 import { useShallow } from 'zustand/react/shallow'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -158,6 +159,16 @@ export function CalendarView() {
     setIsAddDialogOpen(false)
   }
 
+  const dataLink = useDataLink()
+
+  const handleCompleteTask = (taskId: string) => {
+    const task = tasks.find((t) => t.id === taskId)
+    if (task && task.status !== 'done') {
+      completeTask(taskId)
+      dataLink.handleTaskCompletion(taskId)
+    }
+  }
+
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear()
     const month = date.getMonth()
@@ -293,6 +304,67 @@ export function CalendarView() {
 
   const isCurrentMonth = currentDate.getMonth() === today.getMonth() && currentDate.getFullYear() === today.getFullYear()
 
+  const currentDateStr = currentDate.toDateString()
+  const currentHour = new Date().getHours()
+  const currentMinute = new Date().getMinutes()
+  const isViewingToday = currentDate.toDateString() === today.toDateString()
+
+  const dayBlocks = useMemo(() => {
+    return timeBlocks
+      .filter(b => new Date(b.date).toDateString() === currentDateStr)
+      .sort((a, b) => a.startTime.localeCompare(b.startTime))
+  }, [timeBlocks, currentDateStr])
+
+  const DEFAULT_START = 6
+  const DEFAULT_END = 21
+
+  const dayViewEvents = getEventsForDate(currentDate)
+
+  const dynamicStartHour = useMemo(() => {
+    let minHour = DEFAULT_START
+    dayBlocks.forEach(b => {
+      const h = parseInt(b.startTime.split(':')[0])
+      if (h < minHour) minHour = h
+    })
+    dayViewEvents.forEach(e => {
+      if (e.time) {
+        const h = parseInt(e.time.split(':')[0])
+        if (h < minHour) minHour = h
+      }
+    })
+    return minHour
+  }, [dayBlocks, dayViewEvents])
+
+  const dynamicEndHour = useMemo(() => {
+    let maxHour = DEFAULT_END
+    dayBlocks.forEach(b => {
+      const h = parseInt(b.endTime.split(':')[0])
+      if (h > maxHour) maxHour = h
+    })
+    dayViewEvents.forEach(e => {
+      if (e.time) {
+        const h = parseInt(e.time.split(':')[0])
+        if (h > maxHour) maxHour = h
+      }
+    })
+    return maxHour
+  }, [dayBlocks, dayViewEvents])
+
+  const dayHours = useMemo(() =>
+    Array.from({ length: dynamicEndHour - dynamicStartHour + 1 }, (_, i) => i + dynamicStartHour),
+    [dynamicStartHour, dynamicEndHour]
+  )
+  const HOUR_HEIGHT = 52
+
+  const timelineRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (isViewingToday && timelineRef.current) {
+      const currentScrollTop = (currentHour - dynamicStartHour + currentMinute / 60) * HOUR_HEIGHT - 120
+      timelineRef.current.scrollTo({ top: Math.max(0, currentScrollTop), behavior: 'smooth' })
+    }
+  }, [isViewingToday, currentHour, currentMinute, dynamicStartHour, HOUR_HEIGHT])
+
   const renderMonthView = () => (
     <div className="grid gap-5 lg:grid-cols-4">
       <div className="lg:col-span-3">
@@ -308,13 +380,13 @@ export function CalendarView() {
             )}
           </div>
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigateMonth('prev')}>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigateMonth('prev')} aria-label="上一个月">
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <Button variant="ghost" size="sm" onClick={() => { setCurrentDate(new Date()); setSelectedDate(new Date()) }} className="text-xs h-8 px-3">
               今天
             </Button>
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigateMonth('next')}>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigateMonth('next')} aria-label="下一个月">
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
@@ -469,7 +541,7 @@ export function CalendarView() {
                   <div key={task.id} className="flex items-center gap-2.5 rounded-lg border border-border/40 px-2.5 py-2 hover:bg-muted/30 transition-colors">
                     <Checkbox
                       checked={task.status === 'done'}
-                      onCheckedChange={() => completeTask(task.id)}
+                      onCheckedChange={() => handleCompleteTask(task.id)}
                     />
                     <span className="text-sm truncate flex-1">{task.title}</span>
                     {task.priority && (
@@ -686,7 +758,7 @@ export function CalendarView() {
                   if (event.status === 'done') {
                     uncompleteTask(event.task!.id)
                   } else {
-                    completeTask(event.task!.id)
+                    handleCompleteTask(event.task!.id)
                   }
                 }}
                 className={cn(
@@ -726,13 +798,13 @@ export function CalendarView() {
               <span className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-chart-1" />{weekStats.totalHours.toFixed(1)}h</span>
             </div>
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigateWeek('prev')}>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigateWeek('prev')} aria-label="上一周">
                 <ChevronLeft className="h-4 w-4" />
               </Button>
               <Button variant="ghost" size="sm" onClick={() => { setCurrentDate(new Date()); setSelectedDate(new Date()) }} className="text-xs h-8 px-3">
                 本周
               </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigateWeek('next')}>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigateWeek('next')} aria-label="下一周">
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
@@ -1012,7 +1084,7 @@ export function CalendarView() {
                         <div key={task.id} className="flex items-center gap-2 p-2 rounded-lg bg-background/60 hover:bg-background/80 transition-colors">
                           <Checkbox
                             checked={task.status === 'done'}
-                            onCheckedChange={() => completeTask(task.id)}
+                            onCheckedChange={() => handleCompleteTask(task.id)}
                             className="h-3.5 w-3.5"
                           />
                           <span className="text-xs truncate flex-1">{task.title}</span>
@@ -1038,57 +1110,7 @@ export function CalendarView() {
   const renderDayView = () => {
     const events = getEventsForDate(currentDate)
     const stats = getStatsForDate(currentDate)
-    const currentHour = new Date().getHours()
-    const currentMinute = new Date().getMinutes()
-    const isViewingToday = currentDate.toDateString() === today.toDateString()
-
-    const currentDateStr = currentDate.toDateString()
-    const dayBlocks = useMemo(() => {
-      return timeBlocks
-        .filter(b => new Date(b.date).toDateString() === currentDateStr)
-        .sort((a, b) => a.startTime.localeCompare(b.startTime))
-    }, [timeBlocks, currentDateStr])
-
     const activeTasks = tasks.filter(t => t.status !== 'done')
-
-    const DEFAULT_START = 6
-    const DEFAULT_END = 21
-
-    const dynamicStartHour = useMemo(() => {
-      let minHour = DEFAULT_START
-      dayBlocks.forEach(b => {
-        const h = parseInt(b.startTime.split(':')[0])
-        if (h < minHour) minHour = h
-      })
-      events.forEach(e => {
-        if (e.time) {
-          const h = parseInt(e.time.split(':')[0])
-          if (h < minHour) minHour = h
-        }
-      })
-      return minHour
-    }, [dayBlocks, events])
-
-    const dynamicEndHour = useMemo(() => {
-      let maxHour = DEFAULT_END
-      dayBlocks.forEach(b => {
-        const h = parseInt(b.endTime.split(':')[0])
-        if (h > maxHour) maxHour = h
-      })
-      events.forEach(e => {
-        if (e.time) {
-          const h = parseInt(e.time.split(':')[0])
-          if (h > maxHour) maxHour = h
-        }
-      })
-      return maxHour
-    }, [dayBlocks, events])
-
-    const hours = useMemo(() =>
-      Array.from({ length: dynamicEndHour - dynamicStartHour + 1 }, (_, i) => i + dynamicStartHour),
-      [dynamicStartHour, dynamicEndHour]
-    )
-    const HOUR_HEIGHT = 52
 
     const getBlockStyle = (startTime: string, endTime: string) => {
       const startHour = parseInt(startTime.split(':')[0])
@@ -1117,14 +1139,6 @@ export function CalendarView() {
     }, 0)
 
     const completedBlocks = dayBlocks.filter(b => b.completed).length
-    const timelineRef = useRef<HTMLDivElement>(null)
-
-    useEffect(() => {
-      if (isViewingToday && timelineRef.current) {
-        const currentScrollTop = (currentHour - dynamicStartHour + currentMinute / 60) * HOUR_HEIGHT - 120
-        timelineRef.current.scrollTo({ top: Math.max(0, currentScrollTop), behavior: 'smooth' })
-      }
-    }, [isViewingToday, currentHour, currentMinute, dynamicStartHour, HOUR_HEIGHT])
 
     return (
       <div className="grid gap-5 lg:grid-cols-3">
@@ -1251,13 +1265,13 @@ export function CalendarView() {
                 </Dialog>
 
                 <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigateDay('prev')}>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigateDay('prev')} aria-label="前一天">
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => { setCurrentDate(new Date()); setSelectedDate(new Date()) }} className="text-xs h-8 px-3">
                     今天
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigateDay('next')}>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => navigateDay('next')} aria-label="后一天">
                     <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>
@@ -1309,7 +1323,7 @@ export function CalendarView() {
                 })}
 
                 <div className="space-y-0">
-                  {hours.map((hour) => {
+                  {dayHours.map((hour) => {
                     const hourEvents = events.filter((e) => {
                       const eh = getEventHour(e.time)
                       return eh === hour
@@ -1468,7 +1482,7 @@ export function CalendarView() {
                     <div key={task.id} className="flex items-center gap-2.5 rounded-lg border border-border/40 px-2.5 py-2 hover:bg-muted/30 transition-colors">
                       <Checkbox
                         checked={task.status === 'done'}
-                        onCheckedChange={() => completeTask(task.id)}
+                        onCheckedChange={() => handleCompleteTask(task.id)}
                       />
                       <span className="text-sm truncate flex-1">{task.title}</span>
                       <Badge variant="outline" className={cn('text-[10px] shrink-0 h-5',

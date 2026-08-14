@@ -59,18 +59,48 @@ export function NotificationBell() {
     markNotificationRead, 
     markAllNotificationsRead,
     clearNotifications,
-    setActiveView 
+    removeNotification,
+    setActiveView,
+    tasks,
+    habits,
+    anniversaries,
+    goals,
   } = useAppStore(useShallow((s) => ({
     notifications: s.notifications,
     markNotificationRead: s.markNotificationRead,
     markAllNotificationsRead: s.markAllNotificationsRead,
     clearNotifications: s.clearNotifications,
+    removeNotification: s.removeNotification,
     setActiveView: s.setActiveView,
+    tasks: s.tasks,
+    habits: s.habits,
+    anniversaries: s.anniversaries,
+    goals: s.goals,
   })))
 
   const unreadCount = notifications.filter(n => !n.read).length
 
+  const entityExists = (notification: Notification): boolean => {
+    if (!notification.relatedType || !notification.relatedId) return true
+    switch (notification.relatedType) {
+      case 'task':
+        return tasks.some((t) => t.id === notification.relatedId)
+      case 'habit':
+        return habits.some((h) => h.id === notification.relatedId)
+      case 'anniversary':
+        return anniversaries.some((a) => a.id === notification.relatedId)
+      case 'goal':
+        return goals.some((g) => g.id === notification.relatedId)
+      default:
+        return true
+    }
+  }
+
   const handleNotificationClick = (notification: Notification) => {
+    if (!entityExists(notification)) {
+      removeNotification(notification.id)
+      return
+    }
     markNotificationRead(notification.id)
     const route = notification.actionUrl || notificationRoutes[notification.type]
     if (route) {
@@ -81,7 +111,7 @@ export function NotificationBell() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative">
+        <Button variant="ghost" size="icon" className="relative" aria-label={`通知，${unreadCount > 0 ? unreadCount + ' 条未读' : '无未读'}`}>
           <Bell className="h-5 w-5" />
           {unreadCount > 0 && (
             <Badge className="absolute -right-1 -top-1 h-5 w-5 justify-center rounded-full p-0 text-xs">

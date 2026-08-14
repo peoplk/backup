@@ -1,12 +1,17 @@
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
 /** @type {import('next').NextConfig} */
-const isCapacitor = process.env.BUILD_MODE === 'capacitor'
 const isTauri = process.env.BUILD_MODE === 'tauri'
-const isStatic = isCapacitor || isTauri
+const isStatic = isTauri
 
 const nextConfig = {
   output: isStatic ? 'export' : 'standalone',
+  outputFileTracingRoot: __dirname,
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
   images: {
     unoptimized: true,
@@ -23,11 +28,7 @@ const nextConfig = {
     pagesBufferLength: 2,
   },
   trailingSlash: isStatic,
-  assetPrefix: isStatic ? '.' : undefined,
-  distDir: isCapacitor ? 'out' : '.next',
-  env: {
-    NEXT_PUBLIC_IS_CAPACITOR: isCapacitor ? 'true' : '',
-  },
+  assetPrefix: isStatic && process.env.NODE_ENV === 'production' ? '.' : undefined,
 }
 
 export default nextConfig

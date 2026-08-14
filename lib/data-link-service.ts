@@ -156,11 +156,9 @@ class DataLinkService {
           payload: { entry, taskId: entry.taskId, duration: entry.duration },
           timestamp: new Date(),
         })
-        if (task.project) {
-          this.updateProjectTime(task.project, entry.duration)
-        }
       }
     }
+    // 项目时长只按一个来源累加，避免同一 entry 双计
     const projectId = entry.projectId
       ?? (entry.project ? state.projects.find(p => p.name === entry.project)?.id : undefined)
     if (projectId) {
@@ -238,6 +236,8 @@ class DataLinkService {
         type: 'achievement',
         title: '任务进度达成',
         message: `「${task.title}」已完成预估番茄钟数`,
+        relatedType: 'task',
+        relatedId: task.id,
       })
     }
   }
@@ -274,6 +274,8 @@ class DataLinkService {
         type: 'achievement',
         title: '目标达成',
         message: `恭喜完成目标「${goal.title}」！`,
+        relatedType: 'goal',
+        relatedId: goal.id,
       })
       state.addPoints(50)
     }
@@ -312,9 +314,12 @@ class DataLinkService {
     const timeEntries = state.timeEntries.filter(e => e.taskId === taskId)
 
     const totalPomodoros = sessions.length
-    const totalTime = sessions.reduce((acc, s) => acc + s.duration, 0) + 
-                      timeEntries.reduce((acc, e) => acc + e.duration, 0)
-    const avgSessionDuration = sessions.length > 0 ? totalTime / sessions.length : 0
+    const sessionTime = sessions.reduce((acc, s) => acc + s.duration, 0)
+    const manualEntryTime = timeEntries.reduce((acc, e) => acc + e.duration, 0)
+    // 番茄钟会同时写入 session 和 timeEntry（pomodoro-completion.ts），
+    // 取两者较大值避免同一段专注被双计；手动计时只写 timeEntry。
+    const totalTime = Math.max(sessionTime, manualEntryTime)
+    const avgSessionDuration = sessions.length > 0 ? sessionTime / sessions.length : 0
     const lastSession = sessions.sort((a, b) => 
       new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()
     )[0]

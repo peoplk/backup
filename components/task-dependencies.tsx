@@ -146,6 +146,7 @@ export function TaskDependencyManager({ taskId, trigger }: TaskDependencyManager
                       size="icon"
                       className="h-8 w-8"
                       onClick={() => handleRemoveDependency(depTask.id)}
+                      aria-label="移除依赖"
                     >
                       <X className="h-4 w-4" />
                     </Button>

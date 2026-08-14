@@ -22,12 +22,14 @@ export function usePomodoroControls() {
   const {
     pomodoroTimerState,
     pomodoroSettings,
+    pomodoroStrictMode,
     updatePomodoroTimerState,
     tasks,
     pomodoroSessions,
   } = useAppStore(useShallow((state) => ({
     pomodoroTimerState: state.pomodoroTimerState,
     pomodoroSettings: state.pomodoroSettings,
+    pomodoroStrictMode: state.pomodoroStrictMode,
     updatePomodoroTimerState: state.updatePomodoroTimerState,
     tasks: state.tasks,
     pomodoroSessions: state.pomodoroSessions,
@@ -45,7 +47,7 @@ export function usePomodoroControls() {
     return pomodoroSettings.longBreakDuration
   }, [mode, pomodoroSettings])
 
-  const progress = ((totalDuration - timeLeft) / totalDuration) * 100
+  const progress = totalDuration > 0 ? ((totalDuration - timeLeft) / totalDuration) * 100 : 0
   const selectedTask = tasks.find((t) => t.id === selectedTaskId)
   const label = MODE_CONFIG[mode].label
 
@@ -56,16 +58,24 @@ export function usePomodoroControls() {
     ).length
   }, [pomodoroSessions])
 
+  const isLocked =
+    pomodoroStrictMode.enabled &&
+    pomodoroStrictMode.lockUntilSessionEnd &&
+    mode === 'work' &&
+    (isRunning || timeLeft < totalDuration)
+
   const handleReset = useCallback(() => {
+    if (isLocked) return
     updatePomodoroTimerState({
       isRunning: false,
       timeLeft: totalDuration,
     })
-  }, [totalDuration, updatePomodoroTimerState])
+  }, [isLocked, totalDuration, updatePomodoroTimerState])
 
   const handleSkip = useCallback(() => {
+    if (isLocked) return
     if (mode === 'work') {
-      const nextBreak = (completedSessions + 1) % pomodoroSettings.sessionsBeforeLongBreak === 0
+      const nextBreak = (completedSessions + 1) % (pomodoroSettings.sessionsBeforeLongBreak || 4) === 0
       updatePomodoroTimerState({
         isRunning: false,
         mode: nextBreak ? 'long-break' : 'short-break',
@@ -78,11 +88,21 @@ export function usePomodoroControls() {
         timeLeft: pomodoroSettings.workDuration,
       })
     }
-  }, [mode, completedSessions, pomodoroSettings, updatePomodoroTimerState])
+  }, [isLocked, mode, completedSessions, pomodoroSettings, updatePomodoroTimerState])
 
   const handleToggle = useCallback(() => {
+    // 锁定期间允许暂停/继续（无作弊收益），仅禁止 reset/skip
+    if (
+      !isRunning &&
+      mode === 'work' &&
+      pomodoroStrictMode.enabled &&
+      pomodoroStrictMode.maxSessionsPerDay > 0 &&
+      todaySessions >= pomodoroStrictMode.maxSessionsPerDay
+    ) {
+      return
+    }
     updatePomodoroTimerState({ isRunning: !isRunning })
-  }, [isRunning, updatePomodoroTimerState])
+  }, [isRunning, mode, pomodoroStrictMode, todaySessions, updatePomodoroTimerState])
 
   return {
     mode,
@@ -95,6 +115,7 @@ export function usePomodoroControls() {
     progress,
     label,
     todaySessions,
+    isLocked,
     handleReset,
     handleSkip,
     handleToggle,

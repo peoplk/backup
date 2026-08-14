@@ -13,8 +13,6 @@ interface Shortcut {
 export function useKeyboardShortcuts() {
   const {
     setActiveView,
-    tasks,
-    addTask,
     stopTimeEntry,
     activeTimeEntry,
     toggleSidebar,
@@ -23,6 +21,7 @@ export function useKeyboardShortcuts() {
     pomodoroTimerState,
     updatePomodoroTimerState,
     pomodoroSettings,
+    pomodoroStrictMode,
     isFullscreen,
     setIsFullscreen,
   } = useAppStore()
@@ -148,7 +147,7 @@ export function useKeyboardShortcuts() {
       shift: true,
       action: () => {
         if (typeof window !== 'undefined') {
-          ;(window as any).__openQuickCapture?.()
+           window.__openQuickCapture?.()
         }
       },
       description: '快速捕获任务',
@@ -156,12 +155,19 @@ export function useKeyboardShortcuts() {
   ]
 
   // 番茄钟快捷键（仅在专注页生效，且不在全屏模式时由全屏页内部处理）
+  const isStrictLocked =
+    pomodoroStrictMode.enabled &&
+    pomodoroStrictMode.lockUntilSessionEnd &&
+    pomodoroTimerState.mode === 'work' &&
+    pomodoroTimerState.isRunning
+
   const pomodoroShortcuts: Shortcut[] = [
     {
       key: ' ',
       action: () => {
         if (isFullscreen) return
         if (activeView !== 'focus') return
+        if (isStrictLocked) return
         updatePomodoroTimerState({ isRunning: !pomodoroTimerState.isRunning })
       },
       description: '开始/暂停番茄钟',
@@ -171,6 +177,7 @@ export function useKeyboardShortcuts() {
       action: () => {
         if (isFullscreen) return
         if (activeView !== 'focus') return
+        if (isStrictLocked) return
         const mode = pomodoroTimerState.mode
         const totalDuration =
           mode === 'work'
@@ -187,6 +194,7 @@ export function useKeyboardShortcuts() {
       action: () => {
         if (isFullscreen) return
         if (activeView !== 'focus') return
+        if (isStrictLocked) return
         const mode = pomodoroTimerState.mode
         const completedSessions = pomodoroTimerState.completedSessions
         if (mode === 'work') {
@@ -237,6 +245,7 @@ export function useKeyboardShortcuts() {
       action: () => {
         if (isFullscreen) return
         if (activeView !== 'focus') return
+        if (isStrictLocked) return
         updatePomodoroTimerState({
           mode: 'work',
           timeLeft: pomodoroSettings.workDuration,
@@ -249,6 +258,7 @@ export function useKeyboardShortcuts() {
       action: () => {
         if (isFullscreen) return
         if (activeView !== 'focus') return
+        if (isStrictLocked) return
         updatePomodoroTimerState({
           mode: 'short-break',
           timeLeft: pomodoroSettings.shortBreakDuration,
@@ -261,6 +271,7 @@ export function useKeyboardShortcuts() {
       action: () => {
         if (isFullscreen) return
         if (activeView !== 'focus') return
+        if (isStrictLocked) return
         updatePomodoroTimerState({
           mode: 'long-break',
           timeLeft: pomodoroSettings.longBreakDuration,
@@ -291,7 +302,7 @@ export function useKeyboardShortcuts() {
         break
       }
     }
-  }, [shortcuts, pomodoroShortcuts, activeTimeEntry, stopTimeEntry, activeView, pomodoroTimerState, pomodoroSettings, isFullscreen])
+  }, [shortcuts, pomodoroShortcuts, activeTimeEntry, stopTimeEntry, activeView, pomodoroTimerState, pomodoroSettings, pomodoroStrictMode, isFullscreen])
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)

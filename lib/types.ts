@@ -121,6 +121,8 @@ export interface PomodoroSession {
   tags?: string[]
 }
 
+export type TreeState = 'seed' | 'sprout' | 'sapling' | 'growing' | 'mature' | 'withered'
+
 export interface WorkingHours {
   workStartTime: string
   workEndTime: string
@@ -133,6 +135,11 @@ export interface PomodoroSettings {
   shortBreakDuration: number
   longBreakDuration: number
   sessionsBeforeLongBreak: number
+  autoStartBreak?: boolean
+  autoStartWork?: boolean
+  soundEnabled?: boolean
+  /** 完成音效预设 ID，默认 'classic' */
+  notificationSound?: string
 }
 
 export interface Project {
@@ -140,6 +147,9 @@ export interface Project {
   name: string
   color: string
   totalTime: number
+  parentId?: string
+  /** 每周预算（分钟） */
+  budgetMinutes?: number
 }
 
 export interface Habit {
@@ -148,6 +158,10 @@ export interface Habit {
   icon: string
   color: string
   frequency: 'daily' | 'weekly' | 'monthly' | 'custom'
+  /** 自定义星期模式（0=周日..6=周六），frequency='custom' 时生效 */
+  weeklyPattern?: number[]
+  /** 每 N 天完成一次（frequency='custom' 且未设置 weeklyPattern 时生效） */
+  intervalDays?: number
   category?: string
   reminderTime?: string
   reminderEnabled?: boolean
@@ -192,6 +206,10 @@ export interface Notification {
   read: boolean
   actionUrl?: string
   icon?: string
+  /** 关联实体类型：删除实体时级联清理该实体通知 */
+  relatedType?: 'task' | 'habit' | 'anniversary' | 'goal' | 'project'
+  /** 关联实体 id */
+  relatedId?: string
 }
 
 export interface Goal {
@@ -365,4 +383,29 @@ export interface FocusPreset {
   soundEnabled: boolean
   color: string
   createdAt: Date
+}
+
+export interface SyncConflict {
+  id: string
+  type: 'task' | 'habit' | 'goal' | 'anniversary' | 'project' | 'tag' | 'other'
+  name: string
+  localData: unknown
+  remoteData: unknown
+  localUpdatedAt?: Date
+  remoteUpdatedAt?: Date
+}
+
+export interface FocusShieldItem {
+  id: string
+  type: 'website' | 'app'
+  name: string
+  pattern: string
+  enabled: boolean
+}
+
+export type FocusShieldMode = 'blacklist' | 'whitelist'
+
+export interface FocusShieldConfig {
+  mode: FocusShieldMode
+  items: FocusShieldItem[]
 }

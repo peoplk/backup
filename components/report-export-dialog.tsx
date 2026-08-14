@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { FileText, Download, Loader2 } from 'lucide-react'
-import { exportHTMLToPDF, formatHM, formatNumber } from '@/lib/pdf-export'
+import { exportHTMLToPDF, formatHM, formatNumber, escapeHTML } from '@/lib/pdf-export'
 import { toast } from 'sonner'
 
 type ReportType = 'weekly' | 'monthly' | 'custom'
@@ -344,7 +344,7 @@ function renderReportHTML({
       ${report.topProjects
         .map(
           ([name, v]: any) =>
-            `<tr><td>${name}</td><td>${v.count}</td><td>${v.minutes} 分钟</td></tr>`
+            `<tr><td>${escapeHTML(name)}</td><td>${v.count}</td><td>${v.minutes} 分钟</td></tr>`
         )
         .join('')}
     </table>`
@@ -372,7 +372,7 @@ function renderReportHTML({
     <ul>
       ${report.unlocked
         .slice(0, 10)
-        .map((a: any) => `<li>${a.name} — ${a.description}</li>`)
+        .map((a: any) => `<li>${escapeHTML(a.name)} — ${escapeHTML(a.description)}</li>`)
         .join('')}
     </ul>`
         : ''

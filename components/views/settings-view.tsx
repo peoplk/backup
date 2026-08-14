@@ -6,8 +6,6 @@ import { useS3SyncStore, pushDataToS3, pullDataFromS3, resolveS3Conflict } from 
 import { getIsFirebaseConfigured, getFirebaseConfig } from '@/lib/firebase'
 import type { FirebaseConfigInput } from '@/lib/firebase'
 import { getIsS3Configured, getS3Config, saveS3Config, S3_PRESET_SERVICES, type S3ConfigInput } from '@/lib/s3-sync'
-import { CalendarBridge, isNativePlatform } from '@/lib/calendar-bridge'
-import type { CalendarInfo } from '@/lib/calendar-bridge'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { useShallow } from 'zustand/react/shallow'
 import { Button } from '@/components/ui/button'
@@ -21,6 +19,7 @@ import { DataBackup } from '@/components/data-backup'
 import { PrivacyLock } from '@/components/privacy-lock'
 import { SHORTCUT_LIST } from '@/lib/shortcuts'
 import { generateICS, downloadICS } from '@/lib/ics-export'
+import { tasksToCSV, downloadCSV, importTasksFromCSV } from '@/lib/csv'
 import {
   Database,
   Palette,
@@ -52,23 +51,28 @@ import {
   Settings,
   Eye,
   EyeOff,
-  Smartphone,
-  CalendarDays,
   Flame,
-  HardDrive,
-  Power,
+HardDrive,
+Power,
+Sparkles,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 import { getStoredTheme, setTheme, type ThemeMode } from '@/lib/theme'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
+import { COLOR_PALETTE } from '@/lib/palette'
+import { getLLMConfig, setLLMConfig, parseTaskIntent, type LLMConfig } from '@/lib/llm-assistant'
+import { getIdleMinutes, setIdleMinutes } from '@/lib/use-idle-detector'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
-const PROJECT_COLORS = [
-  '#4A90E2', '#7ED321', '#F5A623', '#9B59B6', '#E91E63',
-  '#00CED1', '#FF5722', '#607D8B', '#8BC34A', '#FF9800',
-  '#3F51B5', '#E4075E', '#009688', '#795548', '#CDDC39',
-]
+const PROJECT_COLORS = COLOR_PALETTE
 
 const SYNC_DATA_KEYS = [
   'tasks', 'habits', 'habitCheckIns', 'timeEntries', 'pomodoroSessions',
@@ -77,35 +81,53 @@ const SYNC_DATA_KEYS = [
 ] as const
 
 function ProjectManager({ projects, addProject, updateProject, deleteProject, tasks }: {
-  projects: { id: string; name: string; color: string; totalTime: number }[]
-  addProject: (p: { name: string; color: string }) => void
-  updateProject: (id: string, updates: { name?: string; color?: string }) => void
+  projects: { id: string; name: string; color: string; totalTime: number; parentId?: string; budgetMinutes?: number }[]
+  addProject: (p: { name: string; color: string; parentId?: string; budgetMinutes?: number }) => void
+  updateProject: (id: string, updates: { name?: string; color?: string; parentId?: string; budgetMinutes?: number }) => void
   deleteProject: (id: string) => void
   tasks: { project?: string; status: string }[]
 }) {
   const [newName, setNewName] = useState('')
   const [newColor, setNewColor] = useState(PROJECT_COLORS[0])
+  const [newParentId, setNewParentId] = useState<string>('')
+  const [newBudget, setNewBudget] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState('')
   const [editColor, setEditColor] = useState('')
+  const [editParentId, setEditParentId] = useState<string>('')
+  const [editBudget, setEditBudget] = useState('')
 
   const handleAdd = () => {
     if (!newName.trim()) return
-    addProject({ name: newName.trim(), color: newColor })
+    addProject({
+      name: newName.trim(),
+      color: newColor,
+      parentId: newParentId === 'none' ? undefined : newParentId || undefined,
+      budgetMinutes: newBudget ? Math.max(1, parseInt(newBudget) || 1) : undefined,
+    })
     setNewName('')
     setNewColor(PROJECT_COLORS[Math.floor(Math.random() * PROJECT_COLORS.length)])
+    setNewParentId('')
+    setNewBudget('')
     toast.success('项目已创建')
   }
 
-  const handleStartEdit = (id: string, name: string, color: string) => {
+  const handleStartEdit = (id: string, name: string, color: string, parentId?: string, budgetMinutes?: number) => {
     setEditingId(id)
     setEditName(name)
     setEditColor(color)
+    setEditParentId(parentId ?? '')
+    setEditBudget(budgetMinutes ? String(budgetMinutes) : '')
   }
 
   const handleSaveEdit = () => {
     if (!editingId || !editName.trim()) return
-    updateProject(editingId, { name: editName.trim(), color: editColor })
+    updateProject(editingId, {
+      name: editName.trim(),
+      color: editColor,
+      parentId: editParentId === 'none' ? undefined : editParentId || undefined,
+      budgetMinutes: editBudget ? Math.max(1, parseInt(editBudget) || 0) : undefined,
+    })
     setEditingId(null)
     toast.success('项目已更新')
   }
@@ -116,19 +138,24 @@ function ProjectManager({ projects, addProject, updateProject, deleteProject, ta
       toast.error(`该项目下有 ${taskCount} 个任务，请先移动或删除任务`)
       return
     }
+    const childCount = projects.filter(p => p.parentId === id).length
+    if (childCount > 0) {
+      toast.error(`该项目下有 ${childCount} 个子项目，请先移除子项目`)
+      return
+    }
     deleteProject(id)
     toast.success('项目已删除')
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         <Input
           placeholder="新项目名称..."
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
-          className="flex-1 h-9"
+          className="flex-1 min-w-[140px] h-9"
         />
         <div className="flex items-center gap-1.5">
           {PROJECT_COLORS.slice(0, 5).map((color) => (
@@ -143,6 +170,28 @@ function ProjectManager({ projects, addProject, updateProject, deleteProject, ta
             />
           ))}
         </div>
+        <Select value={newParentId} onValueChange={setNewParentId}>
+          <SelectTrigger className="h-9 w-[140px]">
+            <SelectValue placeholder="父项目（可选）" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">无（顶级项目）</SelectItem>
+            {projects.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Input
+          type="number"
+          min={1}
+          placeholder="周预算(分)"
+          value={newBudget}
+          onChange={(e) => setNewBudget(e.target.value)}
+          className="w-[100px] h-9"
+          title="每周投入预算（分钟）"
+        />
         <Button size="sm" className="gap-1.5 h-9" onClick={handleAdd}>
           <Plus className="h-3.5 w-3.5" />
           添加
@@ -189,10 +238,31 @@ function ProjectManager({ projects, addProject, updateProject, deleteProject, ta
                       className="flex-1 h-8"
                       autoFocus
                     />
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleSaveEdit}>
+                    <Select value={editParentId} onValueChange={setEditParentId}>
+                      <SelectTrigger className="h-8 w-[130px]">
+                        <SelectValue placeholder="父项目" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">无（顶级）</SelectItem>
+                        {projects.filter((p) => p.id !== editingId).map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="number"
+                      min={1}
+                      placeholder="周预算(分)"
+                      value={editBudget}
+                      onChange={(e) => setEditBudget(e.target.value)}
+                      className="w-[90px] h-8"
+                    />
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleSaveEdit} aria-label="保存修改">
                       <Check className="h-4 w-4 text-chart-2" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingId(null)}>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingId(null)} aria-label="取消编辑">
                       <X className="h-4 w-4 text-muted-foreground" />
                     </Button>
                   </>
@@ -212,7 +282,8 @@ function ProjectManager({ projects, addProject, updateProject, deleteProject, ta
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7"
-                      onClick={() => handleStartEdit(project.id, project.name, project.color)}
+                      onClick={() => handleStartEdit(project.id, project.name, project.color, project.parentId, project.budgetMinutes)}
+                      aria-label="编辑项目"
                     >
                       <Edit className="h-3.5 w-3.5" />
                     </Button>
@@ -221,6 +292,7 @@ function ProjectManager({ projects, addProject, updateProject, deleteProject, ta
                       size="icon"
                       className="h-7 w-7 text-destructive hover:text-destructive"
                       onClick={() => handleDelete(project.id, project.name)}
+                      aria-label="删除项目"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -290,6 +362,27 @@ export function SettingsView() {
   
   const syncStore = useSyncStore()
   const s3SyncStore = useS3SyncStore()
+  const [llmConfig, setLLMConfigState] = useState(() => getLLMConfig())
+  const [showLLMKey, setShowLLMKey] = useState(false)
+  const [llmTesting, setLLMTesting] = useState(false)
+  const updateLLMConfig = (patch: Partial<LLMConfig>) => {
+    setLLMConfigState(setLLMConfig(patch))
+  }
+  const handleLLMTest = async () => {
+    setLLMTesting(true)
+    try {
+      const result = await parseTaskIntent('明天下午3点提醒我交房租')
+      if (result.tasks.length > 0) {
+        toast.success(`连接成功，识别到 ${result.tasks.length} 个任务`)
+      } else {
+        toast.success('连接成功')
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '连接失败，请检查配置')
+    } finally {
+      setLLMTesting(false)
+    }
+  }
   const [firebaseConfigForm, setFirebaseConfigForm] = useState<FirebaseConfigInput>({
     apiKey: '',
     authDomain: '',
@@ -300,6 +393,7 @@ export function SettingsView() {
   })
   const [showFirebaseConfig, setShowFirebaseConfig] = useState(false)
   const [showApiKey, setShowApiKey] = useState(false)
+  const [idleMinutes, setStateIdleMinutes] = useState(() => getIdleMinutes())
 
   // 统一的云同步面板状态
   const [selectedProvider, setSelectedProvider] = useState<'none' | 'firebase' | 's3'>(() => {
@@ -321,6 +415,10 @@ export function SettingsView() {
   const [s3TestResult, setS3TestResult] = useState<{ success: boolean; message: string } | null>(null)
 
   useEffect(() => {
+    // 恢复加密/密封存储的 LLM API Key，使表单反映已保存状态
+    void import('@/lib/llm-assistant').then(({ initLLMConfig, getLLMConfig }) =>
+      initLLMConfig().then(() => setLLMConfigState(getLLMConfig()))
+    )
     const config = getFirebaseConfig()
     if (config) {
       setFirebaseConfigForm(config)
@@ -360,38 +458,17 @@ export function SettingsView() {
   const [themeMode, setThemeModeState] = useState<ThemeMode>('system')
   const [autoStart, setAutoStart] = useState(false)
   const [isElectron, setIsElectron] = useState(false)
-  const [isNative, setIsNative] = useState(false)
-  const [calendarPermission, setCalendarPermission] = useState(false)
-  const [calendars, setCalendars] = useState<CalendarInfo[]>([])
-  const [selectedCalendarId, setSelectedCalendarId] = useState<number | null>(null)
-  const [calendarSyncEnabled, setCalendarSyncEnabled] = useState(false)
   const { confirm: showConfirm, DialogComponent: ConfirmDialog } = useConfirm()
 
   useEffect(() => {
     const savedSound = localStorage.getItem('sound-enabled')
     const savedNotif = localStorage.getItem('notification-enabled')
     const savedAutoStart = localStorage.getItem('auto-start')
-    const savedCalendarSync = localStorage.getItem('calendar-sync-enabled')
-    const savedCalendarId = localStorage.getItem('calendar-sync-id')
     if (savedSound !== null) setSoundEnabled(savedSound === 'true')
     if (savedNotif !== null) setNotificationEnabled(savedNotif === 'true')
     if (savedAutoStart !== null) setAutoStart(savedAutoStart === 'true')
-    if (savedCalendarSync !== null) setCalendarSyncEnabled(savedCalendarSync === 'true')
-    if (savedCalendarId !== null) setSelectedCalendarId(Number(savedCalendarId))
     setThemeModeState(getStoredTheme())
     setIsElectron(!!window.electronAPI)
-    setIsNative(isNativePlatform())
-
-    if (isNativePlatform()) {
-      CalendarBridge.checkPermission().then(res => {
-        setCalendarPermission(res.granted)
-        if (res.granted) {
-          CalendarBridge.getCalendars().then(data => {
-            setCalendars(data.calendars)
-          })
-        }
-      })
-    }
   }, [])
 
   const toggleSound = () => {
@@ -436,6 +513,75 @@ export function SettingsView() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-violet-500" />
+              AI 智能助手
+            </CardTitle>
+            <CardDescription>配置 OpenAI 兼容 API，用自然语言快速创建任务</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">启用</p>
+                <p className="text-xs text-muted-foreground">在仪表盘显示 AI 助手卡片</p>
+              </div>
+              <Switch
+                checked={llmConfig.enabled}
+                onCheckedChange={(v) => updateLLMConfig({ enabled: v })}
+              />
+            </div>
+            <Separator />
+            <div className="space-y-2">
+              <label htmlFor="llm-api-key" className="text-sm font-medium">接口密钥（API Key）</label>
+              <div className="flex gap-2">
+                <Input
+                  id="llm-api-key"
+                  type={showLLMKey ? 'text' : 'password'}
+                  placeholder="sk-..."
+                  value={llmConfig.apiKey}
+                  onChange={(e) => updateLLMConfig({ apiKey: e.target.value })}
+                  className="flex-1 h-9 font-mono text-xs"
+                />
+                <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => setShowLLMKey(!showLLMKey)} aria-label={showLLMKey ? '隐藏 API Key' : '显示 API Key'}>
+                  <Eye className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="llm-base-url" className="text-sm font-medium">接口地址（Base URL）</label>
+              <Input
+                id="llm-base-url"
+                placeholder="https://api.openai.com/v1"
+                value={llmConfig.baseUrl}
+                onChange={(e) => updateLLMConfig({ baseUrl: e.target.value })}
+                className="h-9 text-xs font-mono"
+              />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="llm-model" className="text-sm font-medium">模型（Model）</label>
+              <Input
+                id="llm-model"
+                placeholder="gpt-4o-mini"
+                value={llmConfig.model}
+                onChange={(e) => updateLLMConfig({ model: e.target.value })}
+                className="h-9 text-xs font-mono"
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              disabled={!llmConfig.enabled || !llmConfig.apiKey || llmTesting}
+              onClick={handleLLMTest}
+            >
+              {llmTesting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+              测试连接
+            </Button>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -566,7 +712,7 @@ export function SettingsView() {
                 size="sm"
                 onClick={() => {
                   if (typeof window !== 'undefined') {
-                    ;(window as any).__openDailyReview?.()
+                     window.__openDailyReview?.()
                   }
                 }}
               >
@@ -855,6 +1001,28 @@ export function SettingsView() {
                 <span className="text-sm text-muted-foreground">累计追踪时长</span>
                 <span className="font-medium">{Math.floor(totalTrackedTime / 3600)} 小时</span>
               </div>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-sm text-muted-foreground">无操作自动暂停</span>
+                  <p className="text-[10px] text-muted-foreground/70">番茄钟运行中超过该时长无操作将自动暂停（0=关闭）</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={120}
+                    value={idleMinutes}
+                    onChange={(e) => {
+                      const v = Math.max(0, Math.min(120, parseInt(e.target.value) || 0))
+                      setStateIdleMinutes(v)
+                      setIdleMinutes(v)
+                    }}
+                    className="w-16 h-7 text-center text-sm"
+                  />
+                  <span className="text-sm text-muted-foreground">分钟</span>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -1127,6 +1295,66 @@ export function SettingsView() {
               </div>
             </div>
 
+            {activeSyncStore.conflicts.length > 0 && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-amber-600" />
+                    <span className="text-sm font-semibold text-amber-600">
+                      {activeSyncStore.conflicts.length} 个同步冲突待解决
+                    </span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-xs text-muted-foreground"
+                    onClick={() => activeSyncStore.clearConflicts()}
+                  >
+                    全部忽略
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {activeSyncStore.conflicts.map((conflict) => (
+                    <div key={conflict.id} className="rounded-lg border border-border/50 bg-background/60 p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{conflict.name}</p>
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            {conflict.type} · {conflict.localUpdatedAt ? `本地 ${new Date(conflict.localUpdatedAt).toLocaleString('zh-CN')}` : '本地无时间'} ·
+                            {conflict.remoteUpdatedAt ? ` 远端 ${new Date(conflict.remoteUpdatedAt).toLocaleString('zh-CN')}` : ' 远端无时间'}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => {
+                              activeSyncStore.resolveConflictItem(conflict.id)
+                              toast.success(`「${conflict.name}」已保留本地版本`)
+                            }}
+                          >
+                            保留本地
+                          </Button>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => {
+                              activeSyncStore.resolveConflictItem(conflict.id)
+                              toast.success(`「${conflict.name}」已保留远端版本`)
+                            }}
+                          >
+                            保留远端
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* 提供方选择器：3 列分段控件 */}
             <div>
               <p className="text-sm font-medium mb-2">服务提供商</p>
@@ -1226,9 +1454,10 @@ export function SettingsView() {
                 {showFirebaseConfig && (
                   <div className="space-y-3 rounded-xl border border-border/50 p-3">
                     <div className="space-y-2">
-                      <label className="text-xs font-medium">API Key *</label>
+                      <label htmlFor="fb-api-key" className="text-xs font-medium">接口密钥（API Key）*</label>
                       <div className="relative">
                         <Input
+                          id="fb-api-key"
                           type={showApiKey ? 'text' : 'password'}
                           placeholder="AIzaSy..."
                           value={firebaseConfigForm.apiKey}
@@ -1245,8 +1474,9 @@ export function SettingsView() {
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-medium">Auth Domain *</label>
+                      <label htmlFor="fb-auth-domain" className="text-xs font-medium">认证域名（Auth Domain）*</label>
                       <Input
+                        id="fb-auth-domain"
                         placeholder="your-project.firebaseapp.com"
                         value={firebaseConfigForm.authDomain}
                         onChange={(e) => setFirebaseConfigForm(prev => ({ ...prev, authDomain: e.target.value }))}
@@ -1254,8 +1484,9 @@ export function SettingsView() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-medium">Project ID *</label>
+                      <label htmlFor="fb-project-id" className="text-xs font-medium">项目 ID（Project ID）*</label>
                       <Input
+                        id="fb-project-id"
                         placeholder="your-project-id"
                         value={firebaseConfigForm.projectId}
                         onChange={(e) => setFirebaseConfigForm(prev => ({ ...prev, projectId: e.target.value }))}
@@ -1263,8 +1494,9 @@ export function SettingsView() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-medium">Storage Bucket</label>
+                      <label htmlFor="fb-storage-bucket" className="text-xs font-medium">存储桶（Storage Bucket）</label>
                       <Input
+                        id="fb-storage-bucket"
                         placeholder="your-project.appspot.com"
                         value={firebaseConfigForm.storageBucket}
                         onChange={(e) => setFirebaseConfigForm(prev => ({ ...prev, storageBucket: e.target.value }))}
@@ -1272,8 +1504,9 @@ export function SettingsView() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-medium">Messaging Sender ID</label>
+                      <label htmlFor="fb-messaging-id" className="text-xs font-medium">消息发送 ID（Messaging Sender ID）</label>
                       <Input
+                        id="fb-messaging-id"
                         placeholder="123456789"
                         value={firebaseConfigForm.messagingSenderId}
                         onChange={(e) => setFirebaseConfigForm(prev => ({ ...prev, messagingSenderId: e.target.value }))}
@@ -1281,8 +1514,9 @@ export function SettingsView() {
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-xs font-medium">App ID</label>
+                      <label htmlFor="fb-app-id" className="text-xs font-medium">应用 ID（App ID）</label>
                       <Input
+                        id="fb-app-id"
                         placeholder="1:123...:web:abc..."
                         value={firebaseConfigForm.appId}
                         onChange={(e) => setFirebaseConfigForm(prev => ({ ...prev, appId: e.target.value }))}
@@ -1506,8 +1740,9 @@ export function SettingsView() {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-xs font-medium">Endpoint *</label>
+                      <label htmlFor="s3-endpoint" className="text-xs font-medium">接口地址（Endpoint）*</label>
                       <Input
+                        id="s3-endpoint"
                         type="text"
                         placeholder="https://s3.amazonaws.com"
                         value={s3ConfigForm.endpoint}
@@ -1518,8 +1753,9 @@ export function SettingsView() {
 
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-2">
-                        <label className="text-xs font-medium">Region *</label>
+                        <label htmlFor="s3-region" className="text-xs font-medium">区域（Region）*</label>
                         <Input
+                          id="s3-region"
                           type="text"
                           placeholder="us-east-1"
                           value={s3ConfigForm.region}
@@ -1528,8 +1764,9 @@ export function SettingsView() {
                         />
                       </div>
                       <div className="space-y-2">
-                        <label className="text-xs font-medium">Bucket *</label>
+                        <label htmlFor="s3-bucket" className="text-xs font-medium">存储桶（Bucket）*</label>
                         <Input
+                          id="s3-bucket"
                           type="text"
                           placeholder="my-bucket"
                           value={s3ConfigForm.bucket}
@@ -1540,8 +1777,9 @@ export function SettingsView() {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-xs font-medium">AccessKey ID *</label>
+                      <label htmlFor="s3-access-key-id" className="text-xs font-medium">访问密钥 ID（AccessKey ID）*</label>
                       <Input
+                        id="s3-access-key-id"
                         type="text"
                         placeholder="LTAI5t..."
                         value={s3ConfigForm.accessKeyId}
@@ -1551,9 +1789,10 @@ export function SettingsView() {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-xs font-medium">Secret Access Key *</label>
+                      <label htmlFor="s3-secret-key" className="text-xs font-medium">密钥（Secret Access Key）*</label>
                       <div className="relative">
                         <Input
+                          id="s3-secret-key"
                           type={showS3Secret ? 'text' : 'password'}
                           placeholder="••••••"
                           value={s3ConfigForm.secretAccessKey}
@@ -1654,7 +1893,7 @@ export function SettingsView() {
                     )}
 
                     <div className="rounded-lg bg-amber-500/5 border border-amber-500/20 p-2.5 text-[11px] text-amber-600 dark:text-amber-400">
-                      ⚠ Secret Access Key 明文存储在本地，建议使用 RAM 子账号 + 只读权限以提升安全性
+                      ⚠ AccessKey Secret 已通过操作系统安全存储加密（Electron 桌面端），浏览器端建议使用 RAM 子账号 + 最小权限以提升安全性
                     </div>
                   </div>
                 )}
@@ -1786,6 +2025,51 @@ export function SettingsView() {
             <Separator />
             <div className="flex items-center justify-between">
               <div>
+                <p className="text-sm font-medium">导出任务 CSV</p>
+                <p className="text-xs text-muted-foreground">任务列表导出为 CSV，可用 Excel 打开</p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => {
+                  downloadCSV(`focusflow-tasks-${new Date().toISOString().slice(0, 10)}.csv`, tasksToCSV(tasks))
+                  toast.success('任务 CSV 已导出')
+                }}
+              >
+                <Download className="h-3.5 w-3.5" />
+                导出 CSV
+              </Button>
+            </div>
+            <Separator />
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">导入任务 CSV</p>
+                <p className="text-xs text-muted-foreground">从 CSV 文件批量导入任务（追加模式）</p>
+              </div>
+              <label className="cursor-pointer">
+                <input
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    e.target.value = ''
+                    if (!file) return
+                    const content = await file.text()
+                    const count = importTasksFromCSV(content, (task) => useAppStore.getState().addTask(task))
+                    toast.success(`已导入 ${count} 个任务`)
+                  }}
+                />
+                <Button variant="outline" size="sm" className="gap-1.5">
+                  <Upload className="h-3.5 w-3.5" />
+                  导入 CSV
+                </Button>
+              </label>
+            </div>
+            <Separator />
+            <div className="flex items-center justify-between">
+              <div>
                 <p className="text-sm font-medium">备份管理</p>
                 <p className="text-xs text-muted-foreground">创建和恢复本地备份</p>
               </div>
@@ -1816,109 +2100,6 @@ export function SettingsView() {
           </CardContent>
         </Card>
       </div>
-
-      {isNative && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Smartphone className="h-5 w-5" />
-              Android 日历同步
-            </CardTitle>
-            <CardDescription>将任务同步到手机系统日历</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CalendarDays className="h-4 w-4 text-chart-2" />
-                <div>
-                  <p className="text-sm font-medium">启用日历同步</p>
-                  <p className="text-xs text-muted-foreground">将任务自动写入系统日历</p>
-                </div>
-              </div>
-              <Switch
-                checked={calendarSyncEnabled}
-                onCheckedChange={async (checked) => {
-                  if (checked && !calendarPermission) {
-                    const res = await CalendarBridge.requestPermission()
-                    if (res.granted) {
-                      setCalendarPermission(true)
-                      const data = await CalendarBridge.getCalendars()
-                      setCalendars(data.calendars)
-                      setCalendarSyncEnabled(true)
-                      localStorage.setItem('calendar-sync-enabled', 'true')
-                      toast.success('日历权限已获取')
-                    } else {
-                      toast.error('需要日历权限才能同步')
-                      return
-                    }
-                  } else {
-                    setCalendarSyncEnabled(checked)
-                    localStorage.setItem('calendar-sync-enabled', String(checked))
-                    if (checked) toast.success('日历同步已启用')
-                    else toast.info('日历同步已关闭')
-                  }
-                }}
-              />
-            </div>
-
-            {calendarSyncEnabled && calendarPermission && (
-              <>
-                <Separator />
-                <div className="space-y-2">
-                  <label className="text-xs font-medium">选择同步日历</label>
-                  {calendars.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">未找到系统日历</p>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {calendars.map(cal => (
-                        <button
-                          key={cal.id}
-                          onClick={() => {
-                            setSelectedCalendarId(cal.id)
-                            localStorage.setItem('calendar-sync-id', String(cal.id))
-                            toast.success(`已选择：${cal.name}`)
-                          }}
-                          className={cn(
-                            "w-full flex items-center justify-between rounded-lg border px-3 py-2 text-left transition-all",
-                            selectedCalendarId === cal.id
-                              ? "border-chart-2 bg-chart-2/5"
-                              : "border-border/40 hover:border-primary/20 hover:bg-muted/30"
-                          )}
-                        >
-                          <div>
-                            <p className="text-sm font-medium">{cal.name}</p>
-                            <p className="text-[11px] text-muted-foreground">{cal.account}</p>
-                          </div>
-                          {selectedCalendarId === cal.id && (
-                            <CheckCircle2 className="h-4 w-4 text-chart-2 shrink-0" />
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="rounded-xl bg-muted/30 p-3">
-                  <p className="text-xs text-muted-foreground">
-                    💡 启用后，新建的任务将自动同步到所选日历。已有任务不会自动回溯同步。
-                  </p>
-                </div>
-              </>
-            )}
-
-            {!calendarPermission && isNative && (
-              <div className="rounded-xl bg-amber-500/5 border border-amber-500/20 p-3">
-                <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">
-                  需要日历权限
-                </p>
-                <p className="text-[11px] text-muted-foreground mt-1">
-                  点击上方开关申请权限，以便读写系统日历
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
       <Card>
         <CardHeader>
@@ -1966,7 +2147,21 @@ export function SettingsView() {
                   variant: 'destructive',
                 })
                 if (confirmed) {
-                  localStorage.removeItem('productivity-app-storage')
+                  // 标记已清除，防止 demo 数据复活并覆盖云端备份
+                  try {
+                    localStorage.setItem('focusflow-data-cleared', 'true')
+                  } catch {
+                    // 忽略写入失败
+                  }
+                  // 清理应用相关的全部本地键（含密封凭据、主题、同步配置等）
+                  const keysToRemove: string[] = []
+                  for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i)
+                    if (key && (key === 'productivity-app-storage' || key.startsWith('focusflow-'))) {
+                      keysToRemove.push(key)
+                    }
+                  }
+                  keysToRemove.forEach((k) => localStorage.removeItem(k))
                   window.location.reload()
                 }
               }}

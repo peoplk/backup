@@ -41,6 +41,21 @@ export function sendBrowserNotification(
     onClick?: () => void
   }
 ): void {
+  const electronAPI = (typeof window !== 'undefined' ? window.electronAPI : null) as
+    | { notify?: (opts: { title: string; body?: string; tag?: string }) => Promise<boolean> }
+    | null
+
+  if (electronAPI?.notify) {
+    electronAPI
+      .notify({
+        title,
+        body: options?.body,
+        tag: options?.tag,
+      })
+      .catch(() => { /* notification may be blocked */ })
+    return
+  }
+
   if (!isNotificationGranted()) return
 
   try {

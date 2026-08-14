@@ -1,5 +1,8 @@
 // S3 compatible sync layer using AWS Signature V4
+import { sealSecret, unsealSecret } from '@/lib/credential-vault'
+
 const S3_CONFIG_KEY = 'focusflow-s3-config'
+const S3_SECRET_KEY = 'focusflow-s3-secret' // 密封后的 AccessKey Secret，安全存储
 const DEFAULT_REMOTE_KEY = 'focusflow-sync.json'
 const DEFAULT_POLL_INTERVAL = 30
 
@@ -35,10 +38,13 @@ export type S3Preset = {
 
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error' | 'offline'
 
+import type { SyncConflict } from '@/lib/types'
+
 export interface SyncState {
   status: SyncStatus
   lastSyncAt: Date | null
   error: string | null
+  conflicts: SyncConflict[]
   userId: string | null
   isEnabled: boolean
 }
@@ -63,14 +69,17 @@ let currentConfig: StoredConfig | null = (() => {
   try {
     const raw = localStorage.getItem(S3_CONFIG_KEY)
     if (!raw) return null
-    const parsed = JSON.parse(raw) as Partial<StoredConfig>
-    if (!parsed.endpoint || !parsed.bucket || !parsed.accessKeyId || !parsed.secretAccessKey) return null
+    const parsed = JSON.parse(raw) as Partial<StoredConfig> & { secretAccessKey?: unknown }
+    // 旧版本可能内联了 Secret；新版本将 Secret 单独密封存储（focusflow-s3-secret）
+    if (!parsed.endpoint || !parsed.bucket || !parsed.accessKeyId) return null
+    const legacySecret =
+      typeof parsed.secretAccessKey === 'string' && parsed.secretAccessKey ? parsed.secretAccessKey : ''
     return {
       endpoint: parsed.endpoint,
       region: parsed.region || 'us-east-1',
       bucket: parsed.bucket,
       accessKeyId: parsed.accessKeyId,
-      secretAccessKey: parsed.secretAccessKey,
+      secretAccessKey: legacySecret,
       forcePathStyle: parsed.forcePathStyle ?? true,
       remoteKey: parsed.remoteKey || DEFAULT_REMOTE_KEY,
       syncInterval: parsed.syncInterval || DEFAULT_POLL_INTERVAL,
@@ -79,6 +88,36 @@ let currentConfig: StoredConfig | null = (() => {
     return null
   }
 })()
+
+// 惰性解析的明文 Secret（safeStorage 不可用时为明文，可无缝兼容）
+let resolvedSecret: string | null = null
+let secretResolvePromise: Promise<string> | null = null
+
+async function resolveActiveSecret(): Promise<string> {
+  if (resolvedSecret !== null) return resolvedSecret
+  if (secretResolvePromise) return secretResolvePromise
+  secretResolvePromise = (async () => {
+    if (typeof window === 'undefined') return (resolvedSecret = currentConfig?.secretAccessKey || '')
+    try {
+      const sealed = localStorage.getItem(S3_SECRET_KEY)
+      if (sealed) {
+        resolvedSecret = await unsealSecret(sealed)
+        return resolvedSecret
+      }
+      // 无独立 Secret：回退到旧版内联明文，并立即迁移存储
+      const legacy = currentConfig?.secretAccessKey || ''
+      if (legacy) {
+        localStorage.setItem(S3_SECRET_KEY, await sealSecret(legacy))
+      }
+      resolvedSecret = legacy
+      return resolvedSecret
+    } catch {
+      resolvedSecret = currentConfig?.secretAccessKey || ''
+      return resolvedSecret
+    }
+  })()
+  return secretResolvePromise
+}
 
 function initS3(config: S3ConfigInput): boolean {
   if (!config.endpoint?.trim() || !config.bucket?.trim() || !config.accessKeyId?.trim() || !config.secretAccessKey?.trim()) {
@@ -94,6 +133,8 @@ function initS3(config: S3ConfigInput): boolean {
     remoteKey: config.remoteKey?.trim() || DEFAULT_REMOTE_KEY,
     syncInterval: config.syncInterval || DEFAULT_POLL_INTERVAL,
   }
+  resolvedSecret = config.secretAccessKey
+  secretResolvePromise = null
   return true
 }
 
@@ -107,17 +148,29 @@ export function getS3Config(): S3ConfigInput | null {
 }
 
 export function saveS3Config(config: S3ConfigInput): boolean {
+  // 表单未填写 Secret 时保持已保存的 Secret 不变，避免修其他字段时误清空凭据
+  if (!config.secretAccessKey?.trim() && currentConfig) {
+    config = { ...config, secretAccessKey: resolvedSecret || currentConfig.secretAccessKey || '' }
+  }
   if (!initS3(config)) return false
   if (typeof window !== 'undefined') {
-    localStorage.setItem(S3_CONFIG_KEY, JSON.stringify(currentConfig))
+    const { secretAccessKey, ...rest } = currentConfig as StoredConfig
+    localStorage.setItem(S3_CONFIG_KEY, JSON.stringify(rest))
+    // 敏感字段单独密封存储，提升落盘安全性
+    void (async () => {
+      localStorage.setItem(S3_SECRET_KEY, await sealSecret(secretAccessKey))
+    })()
   }
   return true
 }
 
 export function clearS3Config(): void {
   currentConfig = null
+  resolvedSecret = null
+  secretResolvePromise = null
   if (typeof window !== 'undefined') {
     localStorage.removeItem(S3_CONFIG_KEY)
+    localStorage.removeItem(S3_SECRET_KEY)
   }
 }
 
@@ -126,18 +179,22 @@ export function reinitializeS3(): boolean {
   const raw = localStorage.getItem(S3_CONFIG_KEY)
   if (!raw) return false
   try {
-    const parsed = JSON.parse(raw) as Partial<StoredConfig>
-    if (!parsed.endpoint || !parsed.bucket || !parsed.accessKeyId || !parsed.secretAccessKey) return false
+    const parsed = JSON.parse(raw) as Partial<StoredConfig> & { secretAccessKey?: unknown }
+    if (!parsed.endpoint || !parsed.bucket || !parsed.accessKeyId) return false
     currentConfig = {
       endpoint: parsed.endpoint,
       region: parsed.region || 'us-east-1',
       bucket: parsed.bucket,
       accessKeyId: parsed.accessKeyId,
-      secretAccessKey: parsed.secretAccessKey,
+      secretAccessKey: typeof parsed.secretAccessKey === 'string' ? parsed.secretAccessKey : '',
       forcePathStyle: parsed.forcePathStyle ?? true,
       remoteKey: parsed.remoteKey || DEFAULT_REMOTE_KEY,
       syncInterval: parsed.syncInterval || DEFAULT_POLL_INTERVAL,
     }
+    // 触发懒解析，从密封存储中恢复明文 Secret
+    resolvedSecret = null
+    secretResolvePromise = null
+    void resolveActiveSecret()
     return true
   } catch {
     return false
@@ -283,7 +340,9 @@ async function s3Request(
     await sha256Hex(canonicalRequest),
   ].join('\n')
 
-  const signingKey = await getSigningKey(config.secretAccessKey, dateStamp, region, service)
+  // Secret 优先取调用方明文（如测试连接），否则回落到当前启用的已解密 Secret
+  const secretForSign = config.secretAccessKey || (await resolveActiveSecret())
+  const signingKey = await getSigningKey(secretForSign, dateStamp, region, service)
   const signatureBuffer = await hmacSha256(signingKey, stringToSign)
   const signature = Array.from(signatureBuffer).map(b => b.toString(16).padStart(2, '0')).join('')
 
@@ -430,7 +489,13 @@ export function subscribeToS3(userId: string, callback: (data: Record<string, un
 }
 
 export async function mergeLocalAndS3(userId: string, localData: Record<string, unknown>): Promise<Record<string, unknown>> {
-  const cloud = await syncFromS3(userId)
+  let cloud: Record<string, unknown> | null = null
+  try {
+    cloud = await syncFromS3(userId)
+  } catch (err) {
+    // 拉取失败不阻断本地数据，上层可触发冲突提示
+    emitStatus({ status: 'error', error: err instanceof Error ? err.message : '读取云端数据失败' })
+  }
   if (!cloud) {
     await syncToS3(userId, localData)
     return localData
@@ -452,7 +517,15 @@ export async function mergeLocalAndS3(userId: string, localData: Record<string, 
         } else {
           const localTime = localItem.updatedAt ? new Date(localItem.updatedAt).getTime() : 0
           const cloudTime = (cloudItem as { updatedAt?: Date | string }).updatedAt ? new Date((cloudItem as { updatedAt?: Date | string }).updatedAt!).getTime() : 0
-          if (localTime > cloudTime) mergedMap.set(id, localItem)
+          if (localTime > cloudTime) {
+            mergedMap.set(id, localItem)
+          } else if (localTime === 0 && cloudTime === 0) {
+            const localStr = JSON.stringify(localItem, (k, v) => v instanceof Date ? v.toISOString() : v)
+            const cloudStr = JSON.stringify(cloudItem, (k, v) => v instanceof Date ? v.toISOString() : v)
+            if (localStr !== cloudStr) {
+              mergedMap.set(id, localItem)
+            }
+          }
         }
       }
       merged[key] = Array.from(mergedMap.values())
@@ -461,7 +534,11 @@ export async function mergeLocalAndS3(userId: string, localData: Record<string, 
     }
   }
 
-  await syncToS3(userId, merged)
+  const mergedStr = JSON.stringify(merged, (k, v) => v instanceof Date ? v.toISOString() : v)
+  const cloudStr = JSON.stringify(cloud, (k, v) => v instanceof Date ? v.toISOString() : v)
+  if (mergedStr !== cloudStr) {
+    await syncToS3(userId, merged)
+  }
   return merged
 }
 

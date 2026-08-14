@@ -1,17 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-
-interface ElectronAPI {
-  shieldStart?: (websites: string[], apps: string[]) => Promise<{ success: boolean; mode: string }>
-  shieldStop?: () => Promise<{ success: boolean; mode: string }>
-  shieldStatus?: () => Promise<{ active: boolean; websitesBlocked: string[]; appsBlocked: string[] }>
-  shieldUpdate?: (websites: string[], apps: string[]) => Promise<{ success: boolean }>
-}
+import type { ElectronAPI } from '@/lib/types/electron'
 
 function getElectronAPI(): ElectronAPI | null {
   if (typeof window === 'undefined') return null
-  return (window as any).electronAPI as ElectronAPI | null
+  return window.electronAPI ?? null
 }
 
 export function isElectronWithShield(): boolean {
@@ -35,27 +29,25 @@ export function useFocusShield() {
   }, [])
 
   const start = useCallback(
-    async (websites: string[], apps: string[]) => {
+    async (websites: string[], apps: string[], mode?: string) => {
       const api = getElectronAPI()
       if (!api?.shieldStart) return
       refCount.current += 1
-      if (refCount.current === 1) {
-        setPending(true)
-        try {
-          const res = await api.shieldStart(websites, apps)
-          if (res?.success) setActive(true)
-        } catch (e) {
-          console.warn('shield start failed', e)
-        } finally {
-          setPending(false)
+      const lastCount = refCount.current
+      setPending(true)
+      try {
+        const res = await api.shieldStart(websites, apps, mode)
+        if (res?.success) {
+          setActive(true)
+        } else if (lastCount === 1) {
+          // 首次启动失败则回滚计数，避免后续 stop 时计数失衡
+          refCount.current = 0
         }
-      } else {
-        // 已经在跑，必要时更新规则
-        if (api.shieldUpdate) {
-          try {
-            await api.shieldUpdate(websites, apps)
-          } catch {}
-        }
+      } catch (e) {
+        console.warn('shield start failed', e)
+        if (lastCount === 1) refCount.current = 0
+      } finally {
+        setPending(false)
       }
     },
     []
@@ -95,6 +87,27 @@ const DEFAULT_BLOCKED_WEBSITES = [
 
 const DEFAULT_BLOCKED_APPS: string[] = []
 
+// 读取用户在专注屏蔽页配置的规则（与 focus-shield.tsx 的存储 key 保持一致）
+function getUserShieldConfig(): { websites: string[]; apps: string[]; mode: 'blacklist' | 'whitelist' } {
+  if (typeof window === 'undefined') {
+    return { websites: DEFAULT_BLOCKED_WEBSITES, apps: DEFAULT_BLOCKED_APPS, mode: 'blacklist' }
+  }
+  try {
+    const mode = localStorage.getItem('focusflow-shield-mode') === 'whitelist' ? 'whitelist' : 'blacklist'
+    const storageKey = mode === 'blacklist' ? 'focusflow-focus-shield-v2' : 'focusflow-focus-shield-whitelist-v2'
+    const raw = localStorage.getItem(storageKey)
+    const items = raw ? JSON.parse(raw) : []
+    const enabled = Array.isArray(items) ? items.filter((i: any) => i && i.enabled) : []
+    return {
+      websites: enabled.filter((i: any) => i.type === 'website').map((i: any) => i.pattern),
+      apps: enabled.filter((i: any) => i.type === 'app').map((i: any) => i.pattern),
+      mode,
+    }
+  } catch {
+    return { websites: DEFAULT_BLOCKED_WEBSITES, apps: DEFAULT_BLOCKED_APPS, mode: 'blacklist' }
+  }
+}
+
 /**
  * 便捷 hook：开始/结束专注时自动屏蔽
  * 仅在 isRunning 变化时触发
@@ -110,9 +123,10 @@ export function useAutoShield(
   useEffect(() => {
     if (!supported) return
     if (isRunning && isWork) {
-      const websites = customWebsites && customWebsites.length > 0 ? customWebsites : DEFAULT_BLOCKED_WEBSITES
-      const apps = customApps && customApps.length > 0 ? customApps : DEFAULT_BLOCKED_APPS
-      start(websites, apps)
+      const user = getUserShieldConfig()
+      const websites = customWebsites && customWebsites.length > 0 ? customWebsites : user.websites
+      const apps = customApps && customApps.length > 0 ? customApps : user.apps
+      start(websites, apps, user.mode)
       return () => {
         stop()
       }

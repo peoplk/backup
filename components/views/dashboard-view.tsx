@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useAppStore } from '@/lib/store'
+import { useDataLink } from '@/lib/data-link-service'
 import { useShallow } from 'zustand/react/shallow'
 import {
   useStats,
@@ -67,6 +68,16 @@ export function DashboardView() {
     habitCheckIns: state.habitCheckIns,
     checkInHabit: state.checkInHabit,
   })))
+
+  const dataLink = useDataLink()
+
+  const handleCompleteTask = (taskId: string) => {
+    const task = tasks.find((t) => t.id === taskId)
+    if (task && task.status !== 'done') {
+      completeTask(taskId)
+      dataLink.handleTaskCompletion(taskId)
+    }
+  }
 
   const stats = useStats()
   const streak = useStreak()
@@ -413,7 +424,7 @@ export function DashboardView() {
                   >
                     <Checkbox
                       checked={false}
-                      onCheckedChange={() => completeTask(task.id)}
+                      onCheckedChange={() => handleCompleteTask(task.id)}
                       className="border-destructive/50 data-[state=checked]:bg-destructive data-[state=checked]:border-destructive h-4 w-4"
                     />
                     <p className="text-sm font-medium truncate flex-1">{task.title}</p>
@@ -437,7 +448,7 @@ export function DashboardView() {
                     >
                       <Checkbox
                         checked={completedToday}
-                        onCheckedChange={() => { if (!completedToday) completeTask(task.id) }}
+                        onCheckedChange={() => { if (!completedToday) handleCompleteTask(task.id) }}
                         className={cn(
                           "h-4 w-4",
                           completedToday

@@ -1,5 +1,5 @@
 const { ipcMain } = require('electron')
-const { spawn, exec } = require('child_process')
+const { spawn } = require('child_process')
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
@@ -22,6 +22,77 @@ let blockedAppsCache = new Set()
 let blockedWebsitesCache = new Set()
 let isShieldActive = false
 
+// 白名单模式下，屏蔽这些常见干扰站点中不在白名单里的
+const DEFAULT_DISTRACTING_WEBSITES = [
+  'weibo.com',
+  'douyin.com',
+  'bilibili.com',
+  'zhihu.com',
+  'xiaohongshu.com',
+  'taobao.com',
+  'jd.com',
+  'v.qq.com',
+  'iqiyi.com',
+  'youku.com',
+  'tiktok.com',
+  'instagram.com',
+  'twitter.com',
+  'facebook.com',
+  'youtube.com',
+  'reddit.com',
+]
+
+const DEFAULT_DISTRACTING_APPS = [
+  'wechat',
+  'qq',
+  'dingtalk',
+  'wxwork',
+  'taobao',
+  'jd',
+  'douyin',
+]
+
+function normalizeDomain(site) {
+  return site.trim().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0].toLowerCase()
+}
+
+// 校验单个域名：仅允许 [a-z0-9.-]，且是合法域名形式（防止换行/空格/控制字符注入 hosts）
+function sanitizeDomain(site) {
+  const raw = String(site || '')
+    .replace(/[\r\n\t\s]+/g, '')
+    .replace(/^https?:\/\//, '')
+    .replace(/^www\./, '')
+    .split('/')[0]
+    .toLowerCase()
+  if (!raw || raw.length > 253) return ''
+  if (!/^(?!-)([a-z0-9-]{1,63}\.)*[a-z0-9]{2,63}$/.test(raw)) return ''
+  if (/(--)/.test(raw)) return ''
+  return raw
+}
+
+// 校验进程名：仅允许安全字符（防止命令注入）
+function sanitizeAppName(appName) {
+  const name = String(appName || '').replace(/\.exe$/i, '').trim().toLowerCase()
+  if (!name || name.length < 2 || name.length > 64) return ''
+  if (!/^[a-z0-9 _\-\.]+$/.test(name)) return ''
+  return name
+}
+
+// 白名单模式下，求"需要屏蔽的"列表：默认干扰列表 - 白名单
+function computeBlockLists(websites, apps, mode) {
+  if (mode !== 'whitelist') {
+    return {
+      websites: (websites || []).map(sanitizeDomain).filter(Boolean),
+      apps: (apps || []).map(sanitizeAppName).filter(Boolean),
+    }
+  }
+  const allowedWebsites = new Set((websites || []).map(sanitizeDomain).filter(Boolean))
+  const allowedApps = new Set((apps || []).map(sanitizeAppName).filter(Boolean))
+  const blockedWebsites = DEFAULT_DISTRACTING_WEBSITES.filter(d => !allowedWebsites.has(d))
+  const blockedApps = DEFAULT_DISTRACTING_APPS.filter(d => !allowedApps.has(d))
+  return { websites: blockedWebsites, apps: blockedApps }
+}
+
 // Get hosts file backup path
 function getHostsBackupPath() {
   const backupDir = path.join(os.homedir(), '.focusflow')
@@ -32,12 +103,12 @@ function getHostsBackupPath() {
 }
 
 // Backup original hosts file
+// 先移除自身残留的屏蔽块，确保备份的是"干净"版本
 function backupHosts() {
   try {
     const backupPath = getHostsBackupPath()
-    if (!fs.existsSync(backupPath)) {
-      fs.copyFileSync(HOSTS_FILE, backupPath)
-    }
+    removeShieldFromHosts()
+    fs.copyFileSync(HOSTS_FILE, backupPath)
     return true
   } catch (err) {
     console.error('Failed to backup hosts file:', err)
@@ -97,9 +168,9 @@ function removeShieldFromHosts() {
 // Flush DNS cache
 function flushDns() {
   if (isWindows) {
-    exec('ipconfig /flushdns', { windowsHide: true }, () => {})
+    spawn('ipconfig', ['/flushdns'], { windowsHide: true })
   } else if (isMac) {
-    exec('sudo killall -HUP mDNSResponder', () => {})
+    spawn('killall', ['-HUP', 'mDNSResponder'])
   }
 }
 
@@ -132,13 +203,12 @@ function applyWebsiteBlocks(websites) {
     entries.push(FOCUSFLOW_MARKER_START)
     entries.push('# FocusFlow System Shield - Do not edit manually')
     for (const site of websites) {
-      const domain = site.trim().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0]
-      if (domain) {
-        entries.push(`0.0.0.0 ${domain}`)
-        entries.push(`0.0.0.0 www.${domain}`)
-        entries.push(`:: ${domain}`)
-        entries.push(`:: www.${domain}`)
-      }
+      const domain = sanitizeDomain(site)
+      if (!domain) continue
+      entries.push(`0.0.0.0 ${domain}`)
+      entries.push(`0.0.0.0 www.${domain}`)
+      entries.push(`:: ${domain}`)
+      entries.push(`:: www.${domain}`)
     }
     entries.push(FOCUSFLOW_MARKER_END)
 
@@ -160,23 +230,21 @@ function killBlockedApps(apps) {
   if (!isWindows) return
 
   for (const appName of apps) {
-    const normalized = appName.toLowerCase().replace('.exe', '')
-    // Try to kill by process name
-    exec(`taskkill /F /IM "${normalized}.exe" /FI "STATUS eq RUNNING" 2>nul`, { windowsHide: true }, (err) => {
-      if (err && err.code !== 128) {
-        // 128 = no matching processes found
-        // Try without .exe suffix
-        exec(`taskkill /F /IM "${normalized}" /FI "STATUS eq RUNNING" 2>nul`, { windowsHide: true }, () => {})
-      }
-    })
+    const normalized = sanitizeAppName(appName)
+    if (!normalized) continue
+    // Try to kill by process name（使用 spawn argv 数组，不经 shell，杜绝注入）
+    spawn('taskkill', ['/F', '/IM', `${normalized}.exe`, '/FI', 'STATUS eq RUNNING'], { windowsHide: true })
   }
 }
 
 // Get running process list and kill blocked ones (more aggressive)
+// 使用精确的进程名匹配，避免 "QQ" 匹配到 QQBrowser/QQMusic 等误杀
 function scanAndKillBlockedApps(apps) {
   if (!isWindows) return
 
-  exec('tasklist /FO CSV /NH', { windowsHide: true }, (err, stdout) => {
+  const exactNames = new Set((apps || []).map(sanitizeAppName).filter(Boolean))
+
+  spawn('tasklist', ['/FO', 'CSV', '/NH'], { windowsHide: true }, (err, stdout) => {
     if (err || !stdout) return
 
     const lines = stdout.split('\n')
@@ -185,29 +253,28 @@ function scanAndKillBlockedApps(apps) {
       if (parts.length < 2) continue
       const processName = parts[0].replace('"', '').toLowerCase()
 
-      for (const blockedApp of apps) {
-        const blocked = blockedApp.toLowerCase().replace('.exe', '')
-        if (processName.includes(blocked) || blocked.includes(processName.replace('.exe', ''))) {
-          const pid = parts[1].replace('"', '')
-          exec(`taskkill /F /PID ${pid} 2>nul`, { windowsHide: true }, () => {})
-        }
+      if (exactNames.has(processName) || exactNames.has(processName.replace('.exe', ''))) {
+        const pid = String(parts[1].replace('"', '')).trim()
+        if (!/^\d+$/.test(pid)) continue
+        spawn('taskkill', ['/F', '/PID', pid], { windowsHide: true })
       }
     }
   })
 }
 
 // Start system shield
-function startSystemShield(websites, apps) {
+function startSystemShield(websites, apps, mode) {
+  const lists = computeBlockLists(websites, apps, mode)
   if (isShieldActive) {
     // Update existing shield
-    blockedWebsitesCache = new Set(websites)
-    blockedAppsCache = new Set(apps)
+    blockedWebsitesCache = new Set(lists.websites)
+    blockedAppsCache = new Set(lists.apps)
     applyWebsiteBlocks(Array.from(blockedWebsitesCache))
     return { success: true, mode: 'updated' }
   }
 
-  blockedWebsitesCache = new Set(websites)
-  blockedAppsCache = new Set(apps)
+  blockedWebsitesCache = new Set(lists.websites)
+  blockedAppsCache = new Set(lists.apps)
 
   // Apply hosts file blocks
   const hostsSuccess = applyWebsiteBlocks(Array.from(blockedWebsitesCache))
@@ -247,9 +314,10 @@ function stopSystemShield() {
 }
 
 // Update shield rules while active
-function updateShieldRules(websites, apps) {
-  blockedWebsitesCache = new Set(websites)
-  blockedAppsCache = new Set(apps)
+function updateShieldRules(websites, apps, mode) {
+  const lists = computeBlockLists(websites, apps, mode)
+  blockedWebsitesCache = new Set(lists.websites)
+  blockedAppsCache = new Set(lists.apps)
 
   if (isShieldActive) {
     applyWebsiteBlocks(Array.from(blockedWebsitesCache))
@@ -280,16 +348,16 @@ function getShieldStatus() {
 
 // Register IPC handlers
 function registerSystemShieldIPC() {
-  ipcMain.handle('shield-start', (_event, { websites, apps }) => {
-    return startSystemShield(websites || [], apps || [])
+  ipcMain.handle('shield-start', (_event, { websites, apps, mode }) => {
+    return startSystemShield(websites || [], apps || [], mode || 'blacklist')
   })
 
   ipcMain.handle('shield-stop', () => {
     return stopSystemShield()
   })
 
-  ipcMain.handle('shield-update', (_event, { websites, apps }) => {
-    return updateShieldRules(websites || [], apps || [])
+  ipcMain.handle('shield-update', (_event, { websites, apps, mode }) => {
+    return updateShieldRules(websites || [], apps || [], mode || 'blacklist')
   })
 
   ipcMain.handle('shield-status', () => {

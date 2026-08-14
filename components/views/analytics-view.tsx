@@ -1062,13 +1062,31 @@ function DayAnalyticsSection({ selectedDate, isSelectedToday, isSelectedFuture, 
   const totalProjectMinutes = dailyStats.dayProjectBreakdown.reduce((acc, p) => acc + p.minutes, 0)
   const totalSessionMinutes = dailyStats.sessionList.reduce((acc, s) => acc + s.duration, 0) / 60
 
+  const allProjects = useAppStore((s) => s.projects)
+  const allTasks = useAppStore((s) => s.tasks)
+  const allSessions = useAppStore((s) => s.pomodoroSessions)
+  const weekProjectMinutes = useMemo(() => {
+    const weekStart = new Date()
+    weekStart.setDate(weekStart.getDate() - 6)
+    weekStart.setHours(0, 0, 0, 0)
+    const map: Record<string, number> = {}
+    for (const s of allSessions) {
+      if (s.type !== 'work') continue
+      if (new Date(s.completedAt) < weekStart) continue
+      const t = s.taskId ? allTasks.find((tk) => tk.id === s.taskId) : undefined
+      const key = t?.project || '未分类'
+      map[key] = (map[key] ?? 0) + s.duration / 60
+    }
+    return map
+  }, [allSessions, allTasks])
+
   return (
     <div className="space-y-6">
       {/* 日期导航 */}
       <Card>
         <CardContent className="p-4">
           <div className="flex items-center justify-between gap-3">
-            <Button variant="outline" size="icon" onClick={onPrevDay} className="shrink-0"><ChevronLeft className="h-4 w-4" /></Button>
+            <Button variant="outline" size="icon" onClick={onPrevDay} className="shrink-0" aria-label="前一天"><ChevronLeft className="h-4 w-4" /></Button>
             <div className="flex-1 text-center min-w-0">
               <div className="text-xl sm:text-2xl font-bold tracking-tight truncate">{format(selectedDate, 'yyyy年M月d日', { locale: zhCN })}</div>
               <div className="text-sm text-muted-foreground flex items-center justify-center gap-2 mt-1 flex-wrap">
@@ -1079,7 +1097,7 @@ function DayAnalyticsSection({ selectedDate, isSelectedToday, isSelectedFuture, 
             </div>
             <div className="flex items-center gap-1 shrink-0">
               {!isSelectedToday && !isSelectedFuture && <Button variant="ghost" size="sm" onClick={onToday} className="text-xs">回到今天</Button>}
-              <Button variant="outline" size="icon" onClick={onNextDay} disabled={isSelectedFuture}><ChevronRight className="h-4 w-4" /></Button>
+              <Button variant="outline" size="icon" onClick={onNextDay} disabled={isSelectedFuture} aria-label="后一天"><ChevronRight className="h-4 w-4" /></Button>
             </div>
           </div>
         </CardContent>
@@ -1216,6 +1234,11 @@ function DayAnalyticsSection({ selectedDate, isSelectedToday, isSelectedFuture, 
                   <div className="space-y-3">
                     {dailyStats.dayProjectBreakdown.map(p => {
                       const pct = totalProjectMinutes > 0 ? (p.minutes / totalProjectMinutes) * 100 : 0
+                      const projectDef = allProjects.find(pr => pr.name === p.name)
+                      const budget = projectDef?.budgetMinutes
+                      const weekMinutes = Math.round(weekProjectMinutes[p.name] ?? 0)
+                      const budgetPct = budget ? Math.min(100, (weekMinutes / budget) * 100) : null
+                      const overBudget = budget !== undefined && weekMinutes > budget
                       return (
                         <div key={p.name} className="space-y-1.5">
                           <div className="flex items-center justify-between text-sm">
@@ -1233,6 +1256,20 @@ function DayAnalyticsSection({ selectedDate, isSelectedToday, isSelectedFuture, 
                           <div className="h-1.5 bg-muted rounded-full overflow-hidden">
                             <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: p.color }} />
                           </div>
+                          {budget !== undefined && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-muted-foreground shrink-0">
+                                周预算 {weekMinutes}/{budget} 分钟
+                              </span>
+                              <div className="h-1 flex-1 bg-muted rounded-full overflow-hidden">
+                                <div
+                                  className={cn('h-full rounded-full transition-all', overBudget ? 'bg-destructive' : 'bg-chart-2/70')}
+                                  style={{ width: `${budgetPct}%` }}
+                                />
+                              </div>
+                              {overBudget && <span className="text-[10px] text-destructive shrink-0">超预算</span>}
+                            </div>
+                          )}
                         </div>
                       )
                     })}

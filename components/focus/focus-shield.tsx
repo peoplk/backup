@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -20,9 +20,6 @@ import {
   AppWindow,
   Clock,
   AlertTriangle,
-  CheckCircle2,
-  X,
-  Zap,
   Monitor,
   Cpu,
 } from 'lucide-react'
@@ -35,6 +32,8 @@ interface BlockedItem {
   pattern: string
   enabled: boolean
 }
+
+type ShieldMode = 'blacklist' | 'whitelist'
 
 const DEFAULT_BLOCKED_WEBSITES = [
   { id: '1', type: 'website' as const, name: '微博', pattern: 'weibo.com', enabled: true },
@@ -54,16 +53,45 @@ const DEFAULT_BLOCKED_APPS = [
   { id: 'a4', type: 'app' as const, name: '企业微信', pattern: 'WXWork', enabled: false },
 ]
 
-const STORAGE_KEY = 'focusflow-focus-shield-v2'
+const DEFAULT_ALLOWED_WEBSITES = [
+  { id: 'w1', type: 'website' as const, name: 'Notion', pattern: 'notion.so', enabled: true },
+  { id: 'w2', type: 'website' as const, name: 'GitHub', pattern: 'github.com', enabled: true },
+  { id: 'w3', type: 'website' as const, name: 'Google Docs', pattern: 'docs.google.com', enabled: true },
+  { id: 'w4', type: 'website' as const, name: 'Figma', pattern: 'figma.com', enabled: true },
+  { id: 'w5', type: 'website' as const, name: '飞书文档', pattern: 'feishu.cn', enabled: true },
+  { id: 'w6', type: 'website' as const, name: '语雀', pattern: 'yuque.com', enabled: true },
+]
+
+const DEFAULT_ALLOWED_APPS = [
+  { id: 'wa1', type: 'app' as const, name: 'VS Code', pattern: 'Code', enabled: true },
+  { id: 'wa2', type: 'app' as const, name: '飞书', pattern: 'Feishu', enabled: true },
+  { id: 'wa3', type: 'app' as const, name: '企业微信', pattern: 'WXWork', enabled: true },
+  { id: 'wa4', type: 'app' as const, name: '钉钉', pattern: 'DingTalk', enabled: true },
+]
+
+const STORAGE_KEY_BLACKLIST = 'focusflow-focus-shield-v2'
+const STORAGE_KEY_WHITELIST = 'focusflow-focus-shield-whitelist-v2'
+const SHIELD_MODE_KEY = 'focusflow-shield-mode'
 const SHIELD_ACTIVE_KEY = 'focusflow-shield-active'
 const SHIELD_UNTIL_KEY = 'focusflow-shield-until'
 
+function getStorageKey(mode: ShieldMode) {
+  return mode === 'blacklist' ? STORAGE_KEY_BLACKLIST : STORAGE_KEY_WHITELIST
+}
+
+function getDefaultItems(mode: ShieldMode): BlockedItem[] {
+  return mode === 'blacklist'
+    ? [...DEFAULT_BLOCKED_WEBSITES, ...DEFAULT_BLOCKED_APPS]
+    : [...DEFAULT_ALLOWED_WEBSITES, ...DEFAULT_ALLOWED_APPS]
+}
+
 function isElectron() {
-  return typeof window !== 'undefined' && !!(window as any).electronAPI?.shieldStart
+  return typeof window !== 'undefined' && !!window.electronAPI?.shieldStart
 }
 
 export function FocusShield() {
   const [items, setItems] = useState<BlockedItem[]>([])
+  const [mode, setMode] = useState<ShieldMode>('blacklist')
   const [isActive, setIsActive] = useState(false)
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [newItemName, setNewItemName] = useState('')
@@ -80,15 +108,19 @@ export function FocusShield() {
   }, [])
 
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY)
+    const savedMode = localStorage.getItem(SHIELD_MODE_KEY)
+    const initialMode: ShieldMode = savedMode === 'whitelist' ? 'whitelist' : 'blacklist'
+    setMode(initialMode)
+
+    const saved = localStorage.getItem(getStorageKey(initialMode))
     if (saved) {
       try {
         setItems(JSON.parse(saved))
       } catch {
-        setItems([...DEFAULT_BLOCKED_WEBSITES, ...DEFAULT_BLOCKED_APPS])
+        setItems(getDefaultItems(initialMode))
       }
     } else {
-      setItems([...DEFAULT_BLOCKED_WEBSITES, ...DEFAULT_BLOCKED_APPS])
+      setItems(getDefaultItems(initialMode))
     }
 
     const active = localStorage.getItem(SHIELD_ACTIVE_KEY) === 'true'
@@ -104,15 +136,40 @@ export function FocusShield() {
       } else {
         localStorage.removeItem(SHIELD_ACTIVE_KEY)
         localStorage.removeItem(SHIELD_UNTIL_KEY)
+        // 过期后同步恢复系统屏蔽（hosts 文件），避免残留屏蔽块
+        if (isElectron()) {
+          window.electronAPI?.shieldStop?.()
+        }
       }
     }
   }, [])
 
   useEffect(() => {
     if (items.length > 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
+      localStorage.setItem(getStorageKey(mode), JSON.stringify(items))
     }
-  }, [items])
+  }, [items, mode])
+
+  const switchMode = (newMode: ShieldMode) => {
+    if (newMode === mode) return
+    // 保存当前模式下的列表
+    if (items.length > 0) {
+      localStorage.setItem(getStorageKey(mode), JSON.stringify(items))
+    }
+    // 加载新模式下的列表
+    const saved = localStorage.getItem(getStorageKey(newMode))
+    if (saved) {
+      try {
+        setItems(JSON.parse(saved))
+      } catch {
+        setItems(getDefaultItems(newMode))
+      }
+    } else {
+      setItems(getDefaultItems(newMode))
+    }
+    setMode(newMode)
+    localStorage.setItem(SHIELD_MODE_KEY, newMode)
+  }
 
   useEffect(() => {
     if (!isActive || !shieldUntil) {
@@ -178,15 +235,14 @@ export function FocusShield() {
       setSystemShieldStatus('applying')
       const websites = items.filter(i => i.enabled && i.type === 'website').map(i => i.pattern)
       const apps = items.filter(i => i.enabled && i.type === 'app').map(i => i.pattern)
-      const result = await (window as any).electronAPI.shieldStart(websites, apps)
+      const result = await window.electronAPI!.shieldStart(websites, apps, mode)
       if (result.success) {
         setSystemShieldStatus('active')
         return true
       }
       setSystemShieldStatus('error')
       return false
-    } catch (err) {
-      console.error('Failed to start system shield:', err)
+    } catch {
       setSystemShieldStatus('error')
       return false
     }
@@ -195,15 +251,15 @@ export function FocusShield() {
   const stopSystemShield = async () => {
     if (!isElectronApp) return
     try {
-      await (window as any).electronAPI.shieldStop()
+      await window.electronAPI!.shieldStop()
       setSystemShieldStatus('idle')
-    } catch (err) {
-      console.error('Failed to stop system shield:', err)
+    } catch {
     }
   }
 
   const activateShield = async (durationMinutes: number) => {
-    const until = new Date(Date.now() + durationMinutes * 60 * 1000)
+    const capped = Math.min(Math.max(1, Math.round(durationMinutes)), 24 * 60)
+    const until = new Date(Date.now() + capped * 60 * 1000)
     setIsActive(true)
     setShieldUntil(until)
     localStorage.setItem(SHIELD_ACTIVE_KEY, 'true')
@@ -230,18 +286,17 @@ export function FocusShield() {
     try {
       const websites = items.filter(i => i.enabled && i.type === 'website').map(i => i.pattern)
       const apps = items.filter(i => i.enabled && i.type === 'app').map(i => i.pattern)
-      await (window as any).electronAPI.shieldUpdate(websites, apps)
-    } catch (err) {
-      console.error('Failed to update shield rules:', err)
+      await window.electronAPI!.shieldUpdate(websites, apps, mode)
+    } catch {
     }
   }
 
-  // Update system shield when items change while active
+  // Update system shield when items or mode change while active
   useEffect(() => {
     if (isActive && isElectronApp) {
       updateSystemShieldRules()
     }
-  }, [items])
+  }, [items, mode])
 
   const enabledCount = items.filter(i => i.enabled).length
   const websiteCount = items.filter(i => i.enabled && i.type === 'website').length
@@ -301,7 +356,14 @@ export function FocusShield() {
                 <Button
                   variant="outline"
                   className="flex-1"
-                  onClick={() => activateShield(25)}
+                  onClick={() => {
+                    const remainingMs = shieldUntil ? shieldUntil.getTime() - Date.now() : 0
+                    const extendBy = 25
+                    const next = remainingMs > 0
+                      ? Math.ceil(remainingMs / 60000) + extendBy
+                      : extendBy
+                    activateShield(next)
+                  }}
                 >
                   +25分钟
                 </Button>
@@ -360,16 +422,40 @@ export function FocusShield() {
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <p className="text-xs font-medium text-muted-foreground">屏蔽列表</p>
-              <div className="flex gap-2 text-[10px] text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Globe className="h-3 w-3" />
-                  {websiteCount}
-                </span>
-                <span className="flex items-center gap-1">
-                  <AppWindow className="h-3 w-3" />
-                  {appCount}
-                </span>
+              <p className="text-xs font-medium text-muted-foreground">
+                {mode === 'blacklist' ? '黑名单（屏蔽列表中的项目）' : '白名单（仅允许列表中的项目）'}
+              </p>
+              <div className="flex items-center gap-2">
+                <div className="flex gap-2 text-[10px] text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <Globe className="h-3 w-3" />
+                    {websiteCount}
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <AppWindow className="h-3 w-3" />
+                    {appCount}
+                  </span>
+                </div>
+                <div className="flex gap-1">
+                  <Button
+                    variant={mode === 'blacklist' ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-6 text-[10px] px-2"
+                    onClick={() => switchMode('blacklist')}
+                    disabled={isActive}
+                  >
+                    黑名单
+                  </Button>
+                  <Button
+                    variant={mode === 'whitelist' ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-6 text-[10px] px-2"
+                    onClick={() => switchMode('whitelist')}
+                    disabled={isActive}
+                  >
+                    白名单
+                  </Button>
+                </div>
               </div>
             </div>
             <div className="space-y-1 max-h-[200px] overflow-y-auto">

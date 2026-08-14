@@ -21,14 +21,31 @@ import {
   AlertTriangle,
   CheckCircle2,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { hashPassword, verifyPassword } from '@/lib/crypto'
+import { hashPassword, verifyPassword, encryptData, decryptData } from '@/lib/crypto'
+import { toast } from 'sonner'
+import { Download, Upload } from 'lucide-react'
+import { Separator } from '@/components/ui/separator'
 
 const PRIVACY_KEY = 'focusflow-privacy-enabled'
 const PRIVACY_HASH_KEY = 'focusflow-privacy-hash'
 const PRIVACY_AUTO_LOCK_KEY = 'focusflow-privacy-auto-lock'
 const PRIVACY_LOCK_TIMEOUT_KEY = 'focusflow-privacy-lock-timeout'
+const PRIVACY_LOCKED_KEY = 'focusflow-privacy-locked'
 const LAST_ACTIVITY_KEY = 'focusflow-last-activity'
+
+const LOCK_STATE_EVENT = 'focusflow:privacy-lock-state'
+
+function dispatchLockState() {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent(LOCK_STATE_EVENT))
+}
+
+function setLocked(locked: boolean) {
+  try {
+    localStorage.setItem(PRIVACY_LOCKED_KEY, String(locked))
+  } catch { /* non-critical */ }
+  dispatchLockState()
+}
 
 export function PrivacyLock() {
   const [isEnabled, setIsEnabled] = useState(false)
@@ -47,14 +64,22 @@ export function PrivacyLock() {
     const enabled = localStorage.getItem(PRIVACY_KEY) === 'true'
     setIsEnabled(enabled)
     if (enabled) {
-      setIsLocked(true)
+      setIsLocked(localStorage.getItem(PRIVACY_LOCKED_KEY) === 'true')
     }
+
+    const sync = () => {
+      setIsEnabled(localStorage.getItem(PRIVACY_KEY) === 'true')
+      setIsLocked(localStorage.getItem(PRIVACY_LOCKED_KEY) === 'true')
+    }
+    window.addEventListener(LOCK_STATE_EVENT, sync)
 
     const savedAutoLock = localStorage.getItem(PRIVACY_AUTO_LOCK_KEY)
     if (savedAutoLock) setAutoLock(savedAutoLock === 'true')
 
     const savedTimeout = localStorage.getItem(PRIVACY_LOCK_TIMEOUT_KEY)
     if (savedTimeout) setLockTimeout(parseInt(savedTimeout))
+
+    return () => window.removeEventListener(LOCK_STATE_EVENT, sync)
   }, [])
 
   useEffect(() => {
@@ -103,6 +128,7 @@ export function PrivacyLock() {
     localStorage.setItem(PRIVACY_HASH_KEY, hash)
     localStorage.setItem(PRIVACY_KEY, 'true')
     setIsEnabled(true)
+    setLocked(true)
     setShowSetupDialog(false)
     setPassword('')
     setConfirmPassword('')
@@ -121,6 +147,7 @@ export function PrivacyLock() {
     const valid = await verifyPassword(password, hash)
     if (valid) {
       setIsLocked(false)
+      setLocked(false)
       setShowUnlockDialog(false)
       setPassword('')
       setError('')
@@ -128,6 +155,11 @@ export function PrivacyLock() {
     } else {
       setError('密码错误')
     }
+  }
+
+  const handleLockNow = () => {
+    setShowUnlockDialog(false)
+    setLocked(true)
   }
 
   const handleDisablePrivacy = async () => {
@@ -144,8 +176,10 @@ export function PrivacyLock() {
     localStorage.removeItem(PRIVACY_HASH_KEY)
     localStorage.removeItem(PRIVACY_AUTO_LOCK_KEY)
     localStorage.removeItem(PRIVACY_LOCK_TIMEOUT_KEY)
+    localStorage.removeItem(PRIVACY_LOCKED_KEY)
     setIsEnabled(false)
     setIsLocked(false)
+    setLocked(false)
     setPassword('')
     setError('')
     setSuccess('隐私保护已关闭')
@@ -155,6 +189,76 @@ export function PrivacyLock() {
   const toggleAutoLock = (value: boolean) => {
     setAutoLock(value)
     localStorage.setItem(PRIVACY_AUTO_LOCK_KEY, String(value))
+  }
+
+  const DATA_KEYS = [
+    'productivity-app-storage',
+    'sync-provider-selected',
+    'focusflow-firebase-config',
+    'focusflow-s3-config',
+    'focusflow-s3-secret',
+    'focusflow-llm-config',
+    'focusflow-llm-api-key',
+  ]
+
+  const handleExportEncrypted = async () => {
+    if (isLocked) {
+      toast.error('请先解锁再导出')
+      return
+    }
+    let exportPassword = password
+    if (!exportPassword) {
+      const p = window.prompt('请输入隐私密码用于加密备份')
+      exportPassword = p || ''
+    }
+    if (!exportPassword) return
+    try {
+      const bundle: Record<string, string> = {}
+      for (const key of DATA_KEYS) {
+        const value = localStorage.getItem(key)
+        if (value) bundle[key] = value
+      }
+      const payload = JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), data: bundle })
+      const encrypted = await encryptData(payload, exportPassword)
+      const blob = new Blob([encrypted], { type: 'application/octet-stream' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `focusflow-encrypted-backup-${new Date().toISOString().slice(0, 10)}.ffb`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      toast.success('加密备份已导出')
+    } catch {
+      toast.error('导出失败，请重试')
+    }
+  }
+
+  const handleRestoreEncrypted = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    const restorablePassword = password || (await (async () => {
+      const p = window.prompt('请输入隐私密码以解密备份')
+      return p || ''
+    })())
+    if (!restorablePassword) return
+    try {
+      const content = await file.text()
+      const decrypted = await decryptData(content, restorablePassword)
+      const parsed = JSON.parse(decrypted)
+      if (!parsed?.data || typeof parsed.data !== 'object') {
+        throw new Error('Invalid bundle')
+      }
+      for (const [key, value] of Object.entries(parsed.data)) {
+        localStorage.setItem(key, String(value))
+      }
+      toast.success('备份已恢复，正在重新加载...')
+      setTimeout(() => window.location.reload(), 800)
+    } catch {
+      toast.error('恢复失败：密码错误或文件损坏')
+    }
   }
 
   const updateLockTimeout = (value: number) => {
@@ -201,9 +305,13 @@ export function PrivacyLock() {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      setPassword('')
-                      setError('')
-                      setShowUnlockDialog(true)
+                      if (isLocked) {
+                        setPassword('')
+                        setError('')
+                        setShowUnlockDialog(true)
+                      } else {
+                        handleLockNow()
+                      }
                     }}
                   >
                     {isLocked ? '解锁' : '重新锁定'}
@@ -263,6 +371,41 @@ export function PrivacyLock() {
                     ))}
                   </div>
                 </div>
+              )}
+
+              <Separator />
+
+              <div>
+                <p className="text-sm font-medium">E2E 加密备份</p>
+                <p className="text-xs text-muted-foreground">
+                  用你的密码加密导出全部数据，即使文件泄露也无法读取
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={handleExportEncrypted}
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  导出加密备份
+                </Button>
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept=".ffb"
+                    className="hidden"
+                    onChange={handleRestoreEncrypted}
+                  />
+                  <Button variant="outline" size="sm" className="gap-1.5">
+                    <Upload className="h-3.5 w-3.5" />
+                    恢复加密备份
+                  </Button>
+                </label>
+              </div>
+              {isLocked && (
+                <p className="text-xs text-muted-foreground/70">导出前请先解锁</p>
               )}
             </>
           )}
@@ -365,40 +508,6 @@ export function PrivacyLock() {
           </div>
         </DialogContent>
       </Dialog>
-
-      {isEnabled && isLocked && (
-        <div className="fixed inset-0 z-50 bg-background/95 backdrop-blur-sm flex items-center justify-center">
-          <Card className="w-full max-w-sm mx-4">
-            <CardContent className="p-6 space-y-4">
-              <div className="flex justify-center">
-                <div className="rounded-full bg-primary/10 p-4">
-                  <Lock className="h-8 w-8 text-primary" />
-                </div>
-              </div>
-              <div className="text-center">
-                <h3 className="font-semibold text-lg">已锁定</h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  数据已加密保护，请输入密码解锁
-                </p>
-              </div>
-              <Input
-                type="password"
-                placeholder="输入密码"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleUnlock()}
-                autoFocus
-              />
-              {error && (
-                <p className="text-xs text-destructive text-center">{error}</p>
-              )}
-              <Button onClick={handleUnlock} className="w-full">
-                解锁
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </>
   )
 }

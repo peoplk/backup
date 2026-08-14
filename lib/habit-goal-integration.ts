@@ -121,12 +121,16 @@ export class HabitGoalIntegration {
           type: 'achievement',
           title: '目标达成',
           message: `恭喜！目标「${goal.title}」已完成！`,
+          relatedType: 'goal',
+          relatedId: goal.id,
         })
       } else if (newProgress >= 75 && goal.progress < 75) {
         addNotification({
           type: 'achievement',
           title: '目标进度更新',
           message: `目标「${goal.title}」已完成 75%！`,
+          relatedType: 'goal',
+          relatedId: goal.id,
         })
       }
     })

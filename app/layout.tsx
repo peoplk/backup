@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from 'next'
 import { Analytics } from '@vercel/analytics/next'
-import Script from 'next/script'
 import { TitleBar } from '@/components/title-bar'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { WhiteNoiseProvider } from '@/lib/white-noise-context'
@@ -21,6 +20,10 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       {
+        url: '/icon.svg',
+        type: 'image/svg+xml',
+      },
+      {
         url: '/icon-light-32x32.png',
         media: '(prefers-color-scheme: light)',
       },
@@ -28,12 +31,8 @@ export const metadata: Metadata = {
         url: '/icon-dark-32x32.png',
         media: '(prefers-color-scheme: dark)',
       },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
     ],
-    apple: '/apple-icon.png',
+    apple: '/icon.png',
   },
 }
 
@@ -47,34 +46,6 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 }
 
-const themeScript = `
-  (function() {
-    try {
-      var mode = localStorage.getItem('theme-mode') || 'system';
-      var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      var isDark = mode === 'dark' || (mode === 'system' && prefersDark);
-      if (isDark) document.documentElement.classList.add('dark');
-    } catch(e) {}
-  })();
-`
-
-const capacitorScript = `
-  (function() {
-    window.__IS_CAPACITOR__ = false;
-    var checkCapacitor = function() {
-      if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) {
-        window.__IS_CAPACITOR__ = true;
-        document.documentElement.classList.add('capacitor-native');
-      }
-    };
-    checkCapacitor();
-    if (!window.__IS_CAPACITOR__) {
-      setTimeout(checkCapacitor, 0);
-      setTimeout(checkCapacitor, 100);
-    }
-  })();
-`
-
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -86,27 +57,13 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
-        {process.env.NEXT_PUBLIC_IS_CAPACITOR === 'true' && (
-          <>
-            <meta httpEquiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-            <meta httpEquiv="Pragma" content="no-cache" />
-            <meta httpEquiv="Expires" content="0" />
-          </>
-        )}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var m=localStorage.getItem('theme-mode')||'system';var d=window.matchMedia('(prefers-color-scheme: dark)').matches;if(m==='dark'||(m==='system'&&d))document.documentElement.classList.add('dark')}catch(e){}})();`,
+          }}
+        />
       </head>
       <body className="font-sans antialiased bg-background">
-        <Script
-          id="theme-script"
-          strategy="beforeInteractive"
-        >
-          {themeScript}
-        </Script>
-        <Script
-          id="capacitor-script"
-          strategy="beforeInteractive"
-        >
-          {capacitorScript}
-        </Script>
         <WhiteNoiseProvider>
           <TitleBar />
           <ErrorBoundary>
