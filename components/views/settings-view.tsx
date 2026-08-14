@@ -6,6 +6,7 @@ import { useS3SyncStore, pushDataToS3, pullDataFromS3, resolveS3Conflict } from 
 import { getIsFirebaseConfigured, getFirebaseConfig } from '@/lib/firebase'
 import type { FirebaseConfigInput } from '@/lib/firebase'
 import { getIsS3Configured, getS3Config, saveS3Config, S3_PRESET_SERVICES, type S3ConfigInput } from '@/lib/s3-sync'
+import { getCredentialVaultStatus } from '@/lib/credential-vault'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { useShallow } from 'zustand/react/shallow'
 import { Button } from '@/components/ui/button'
@@ -363,6 +364,8 @@ export function SettingsView() {
   const syncStore = useSyncStore()
   const s3SyncStore = useS3SyncStore()
   const [llmConfig, setLLMConfigState] = useState(() => getLLMConfig())
+  const vaultStatus = getCredentialVaultStatus()
+  const isPlainStorage = vaultStatus.engine === 'none'
   const [showLLMKey, setShowLLMKey] = useState(false)
   const [llmTesting, setLLMTesting] = useState(false)
   const updateLLMConfig = (patch: Partial<LLMConfig>) => {
@@ -522,6 +525,11 @@ export function SettingsView() {
             <CardDescription>配置 OpenAI 兼容 API，用自然语言快速创建任务</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {isPlainStorage && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+                当前运行在浏览器模式，密钥将以明文存储在本机，建议仅限 Electron 桌面端使用。
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium">启用</p>
@@ -1697,6 +1705,11 @@ export function SettingsView() {
             {/* === S3 === */}
             {selectedProvider === 's3' && (
               <div className="space-y-4">
+                {isPlainStorage && (
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+                    当前运行在浏览器模式，密钥将以明文存储在本机，建议仅限 Electron 桌面端使用。
+                  </div>
+                )}
                 {!getIsS3Configured() && (
                   <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
                     <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">S3 未配置</p>

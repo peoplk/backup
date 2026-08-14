@@ -98,18 +98,41 @@ export function generateRandomPassword(length: number = 16): string {
   return Array.from(array, byte => chars[byte % chars.length]).join('')
 }
 
+const PBKDF2_ITERATIONS = 210000
+
+async function pbkdf2Hash(password: string, salt: Uint8Array): Promise<string> {
+  const passwordKey = await getPasswordKey(password)
+  const derived = await crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt,
+      iterations: PBKDF2_ITERATIONS,
+      hash: 'SHA-256',
+    },
+    passwordKey,
+    256
+  )
+  const hashArray = Array.from(new Uint8Array(derived))
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
 export async function hashPassword(password: string): Promise<string> {
   const salt = crypto.getRandomValues(new Uint8Array(16))
   const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, '0')).join('')
-  const encoder = new TextEncoder()
-  const data = encoder.encode(saltHex + password)
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
-  return `${saltHex}:${hashHex}`
+  const hashHex = await pbkdf2Hash(password, salt)
+  return `pbkdf2:${saltHex}:${hashHex}`
 }
 
 export async function verifyPassword(password: string, stored: string): Promise<boolean> {
+  const parts = stored.split(':')
+  if (parts.length === 3 && parts[0] === 'pbkdf2') {
+    const saltHex = parts[1]
+    const hashHex = parts[2]
+    const salt = Uint8Array.from(saltHex.match(/.{2}/g)?.map(h => parseInt(h, 16)) ?? [])
+    const computedHash = await pbkdf2Hash(password, salt)
+    return computedHash === hashHex
+  }
+  // 兼容旧版 SHA-256 格式（salt:hash）
   const colonIndex = stored.indexOf(':')
   if (colonIndex === -1) return false
   const saltHex = stored.slice(0, colonIndex)

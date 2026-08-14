@@ -115,8 +115,8 @@ export function PrivacyLock() {
   }, [isEnabled, autoLock, lockTimeout, isLocked])
 
   const handleEnablePrivacy = async () => {
-    if (password.length < 4) {
-      setError('密码至少需要4位')
+    if (password.length < 6) {
+      setError('密码至少需要6位')
       return
     }
     if (password !== confirmPassword) {
@@ -433,7 +433,7 @@ export function PrivacyLock() {
               <div className="relative">
                 <Input
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="至少4位"
+                  placeholder="至少6位"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />

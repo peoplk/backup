@@ -25,6 +25,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatRelativeTime } from '@/lib/format'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 
 const notificationIcons: Record<Notification['type'], React.ComponentType<{ className?: string }>> = {
   'task-due': Calendar,
@@ -80,6 +81,19 @@ export function NotificationBell() {
 
   const unreadCount = notifications.filter(n => !n.read).length
 
+  const { confirm: confirmClear, DialogComponent: ConfirmClearDialog } = useConfirm()
+
+  const handleClearNotifications = async () => {
+    const confirmed = await confirmClear({
+      title: '清空全部通知',
+      description: '确定要清空所有通知吗？此操作不可恢复。',
+      confirmText: '清空',
+      cancelText: '取消',
+      variant: 'destructive',
+    })
+    if (confirmed) clearNotifications()
+  }
+
   const entityExists = (notification: Notification): boolean => {
     if (!notification.relatedType || !notification.relatedId) return true
     switch (notification.relatedType) {
@@ -109,7 +123,8 @@ export function NotificationBell() {
   }
 
   return (
-    <DropdownMenu>
+    <>
+      <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="relative" aria-label={`通知，${unreadCount > 0 ? unreadCount + ' 条未读' : '无未读'}`}>
           <Bell className="h-5 w-5" />
@@ -140,7 +155,7 @@ export function NotificationBell() {
                 variant="ghost"
                 size="sm"
                 className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-                onClick={clearNotifications}
+                onClick={handleClearNotifications}
               >
                 <Trash2 className="h-3 w-3 mr-1" />
                 清空
@@ -198,5 +213,7 @@ export function NotificationBell() {
         )}
       </DropdownMenuContent>
     </DropdownMenu>
+      {ConfirmClearDialog}
+    </>
   )
 }

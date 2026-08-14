@@ -144,7 +144,9 @@ export function getIsS3Configured(): boolean {
 
 export function getS3Config(): S3ConfigInput | null {
   if (!currentConfig) return null
-  return { ...currentConfig }
+  // 不返回明文 Secret，仅由签名/密封逻辑内部持有，缩小泄露面
+  const { secretAccessKey: _secret, ...rest } = currentConfig
+  return rest as S3ConfigInput
 }
 
 export function saveS3Config(config: S3ConfigInput): boolean {

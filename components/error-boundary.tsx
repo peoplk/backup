@@ -34,9 +34,9 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         return this.props.fallback
       }
       return (
-        <div className="flex flex-col items-center justify-center min-h-[200px] gap-4 p-8">
+        <div role="alert" className="flex flex-col items-center justify-center min-h-[200px] gap-4 p-8">
           <p className="text-lg font-medium text-muted-foreground">此区域出错了</p>
-          {this.state.error && (
+          {this.state.error && process.env.NODE_ENV === 'development' && (
             <p className="text-sm text-muted-foreground/70 max-w-md text-center truncate">
               {this.state.error.message}
             </p>
