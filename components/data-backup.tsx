@@ -84,6 +84,7 @@ export function DataBackup() {
       workingHours: store.workingHours,
       focusSoundSettings: store.focusSoundSettings,
       focusPresets: store.focusPresets,
+      focusShield: store.focusShield,
       dailyReviewSettings: store.dailyReviewSettings,
       savedFilters: store.savedFilters,
       activeSavedFilterId: store.activeSavedFilterId,

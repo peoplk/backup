@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { FocusReport } from '@/components/focus-report'
 import { ReportExportDialog } from '@/components/report-export-dialog'
+import { ActivityTimelineCard } from '@/components/activity-timeline-card'
 import {
   Target,
   CheckCircle2,
@@ -64,6 +65,7 @@ import {
 import { APP_COLORS, CHART_TOOLTIP_STYLE, WEEK_DAYS_FULL } from '@/lib/config'
 import { subDays, startOfWeek, format, addDays } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
+import { isHabitScheduledOn } from '@/lib/habit-frequency'
 
 // ============ 类型定义 ============
 
@@ -115,7 +117,7 @@ interface DayStatsType {
 // ============ 主组件 ============
 
 export function AnalyticsView() {
-  const { tasks, pomodoroSessions, timeEntries, projects, distractions, habits, habitCheckIns } = useAppStore(useShallow((state) => ({
+  const { tasks, pomodoroSessions, timeEntries, projects, distractions, habits, habitCheckIns, focusGoals } = useAppStore(useShallow((state) => ({
     tasks: state.tasks,
     pomodoroSessions: state.pomodoroSessions,
     timeEntries: state.timeEntries,
@@ -123,6 +125,7 @@ export function AnalyticsView() {
     distractions: state.distractions,
     habits: state.habits,
     habitCheckIns: state.habitCheckIns,
+    focusGoals: state.focusGoals,
   })))
 
   const [activeTab, setActiveTab] = useState<TabKey>('overview')
@@ -234,9 +237,17 @@ export function AnalyticsView() {
     const lastWeekMinutes = lastWeekPomodoros.reduce((acc, s) => acc + s.duration, 0) / 60
     const weeklyTrend = lastWeekMinutes > 0 ? Math.round(((totalFocusMinutes - lastWeekMinutes) / lastWeekMinutes) * 100) : (totalFocusMinutes > 0 ? 100 : 0)
 
-    const activeHabits = habits.filter(h => !h.archived).length
+    // 习惯完成率：按各习惯的真实频率计算期望打卡次数，而非假设每天打卡
+    const activeHabits = habits.filter(h => !h.archived)
+    let scheduledCount = 0
+    for (let i = 0; i < 7; i++) {
+      const day = addDays(rangeStart, i)
+      for (const habit of activeHabits) {
+        if (isHabitScheduledOn(habit, day)) scheduledCount++
+      }
+    }
     const habitCheckInsInRange = habitCheckIns.filter(c => new Date(c.date) >= rangeStart && c.completed).length
-    const habitCompletionRate = activeHabits > 0 ? Math.min(100, Math.round((habitCheckInsInRange / (activeHabits * 7)) * 100)) : 0
+    const habitCompletionRate = scheduledCount > 0 ? Math.min(100, Math.round((habitCheckInsInRange / scheduledCount) * 100)) : 0
 
     // 深度工作：>= 45min 的 session 数量
     const deepWorkSessions = rangePomodoros.filter(s => s.duration >= 45 * 60).length
@@ -265,19 +276,18 @@ export function AnalyticsView() {
     }
   }, [pomodoroSessions, tasks, habits, habitCheckIns, now])
 
-  // 每日目标达成率
+  // 每日目标达成率（读取用户配置的 focusGoals，而非硬编码）
   const dailyGoalAchievement = useMemo(() => {
     const today = new Date(now)
     const todayStr = today.toDateString()
     const todayPomodoros = pomodoroSessions.filter(s => s.type === 'work' && new Date(s.completedAt).toDateString() === todayStr)
     const todayMinutes = todayPomodoros.reduce((acc, s) => acc + s.duration, 0) / 60
-    // 目标：8个番茄 + 200分钟
-    const pomodoroGoal = 8
-    const minuteGoal = 200
+    const pomodoroGoal = Math.max(1, focusGoals?.dailyPomodoros ?? 8)
+    const minuteGoal = Math.max(1, focusGoals?.dailyMinutes ?? 200)
     const pomodoroRate = Math.min(100, (todayPomodoros.length / pomodoroGoal) * 100)
     const minuteRate = Math.min(100, (todayMinutes / minuteGoal) * 100)
     return { rate: Math.round((pomodoroRate + minuteRate) / 2), pomodoroRate: Math.round(pomodoroRate), minuteRate: Math.round(minuteRate), pomodoros: todayPomodoros.length, minutes: Math.round(todayMinutes) }
-  }, [pomodoroSessions, now])
+  }, [pomodoroSessions, now, focusGoals])
 
   const efficiencyScore = useMemo(() => {
     const focusScore = Math.min(100, summaryStats.totalFocusMinutes / 480 * 100)
@@ -590,6 +600,9 @@ export function AnalyticsView() {
             </CardContent>
           </Card>
         </div>
+
+        {/* 应用时间线（本地自动追踪） */}
+        <ActivityTimelineCard />
 
         {/* 第二行：专注趋势 + 每日目标达成率 */}
         <div className="grid gap-6 lg:grid-cols-3">

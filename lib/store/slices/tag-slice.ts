@@ -26,9 +26,24 @@ export const createTagSlice = (
       ),
     })),
   deleteTag: (id: string) =>
-    set((state) => ({
-      tags: state.tags.filter((t) => t.id !== id),
-    })),
+    set((state) => {
+      const tag = state.tags.find((t) => t.id === id)
+      if (!tag) return state
+      // 同时从所有任务/时间记录中移除该标签，避免悬空引用
+      return {
+        tags: state.tags.filter((t) => t.id !== id),
+        tasks: state.tasks.map((t) =>
+          t.tags.includes(tag.name)
+            ? { ...t, tags: t.tags.filter((name) => name !== tag.name) }
+            : t
+        ),
+        timeEntries: state.timeEntries.map((e) =>
+          e.tags?.includes(tag.name)
+            ? { ...e, tags: e.tags.filter((name) => name !== tag.name) }
+            : e
+        ),
+      }
+    }),
   // 增加标签使用次数，不存在则自动创建
   incrementTagUsage: (name: string) =>
     set((state) => {

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
 import type { AppState } from './types'
 import type { TaskReminder } from '@/lib/types'
 import { cloudSyncMiddleware, generateId } from './utils'
@@ -77,12 +77,46 @@ import { createTrashSlice } from './slices/trash-slice'
 import { createFocusShieldSlice } from './slices/focus-shield-slice'
 import { createTemplateSlice } from './slices/template-slice'
 import { createJournalSlice } from './slices/journal-slice'
+import { createActivitySlice } from './slices/activity-slice'
+import { createSubscriptionSlice } from './slices/subscription-slice'
 
 export * from './types'
 
 // 跨窗口同步：主窗口与桌面小组件是独立 React 实例，
 // 任一窗口写入 localStorage 后，其他窗口通过 storage 事件合并更新，避免旧 state 覆盖新数据
 const STORAGE_KEY = 'productivity-app-storage'
+
+// 跨窗口合并允许的键白名单（与 partialize 保持一致），防止任意键注入 store
+const PERSISTED_KEYS: ReadonlySet<string> = new Set([
+  'tasks', 'timeEntries', 'pomodoroSessions', 'abandonedPomodoroSessions',
+  'pomodoroSettings', 'projects', 'habits', 'habitCheckIns', 'anniversaries',
+  'notifications', 'sidebarCollapsed', 'activeSmartList', 'goals',
+  'achievements', 'userLevel', 'tags', 'reminders', 'focusGoals',
+  'repeatCompletions', 'trashedItems', 'taskOrder', 'timeBlocks',
+  'distractions', 'journals', 'taskTemplates', 'pomodoroStrictMode',
+  'dashboardWidgets', 'darkModeSchedule', 'workingHours',
+  'focusSoundSettings', 'focusPresets', 'focusShield',
+  'focusShieldSchedule', 'activitySettings', 'activityDays',
+  'subscribedCalendars', 'externalEvents',
+  'dailyReviewSettings', 'savedFilters', 'activeSavedFilterId',
+])
+
+// 集合类键必须是数组；损坏/被篡改的数据直接丢弃，避免污染本地并扩散到云端
+const ARRAY_KEYS: ReadonlySet<string> = new Set([
+  'tasks', 'timeEntries', 'pomodoroSessions', 'abandonedPomodoroSessions',
+  'projects', 'habits', 'habitCheckIns', 'anniversaries', 'notifications',
+  'goals', 'achievements', 'tags', 'reminders', 'repeatCompletions',
+  'trashedItems', 'timeBlocks', 'distractions', 'journals', 'taskTemplates',
+  'dashboardWidgets', 'focusPresets', 'savedFilters',
+  'activityDays', 'subscribedCalendars', 'externalEvents',
+])
+
+function isValidSyncValue(key: string, value: unknown): boolean {
+  if (!PERSISTED_KEYS.has(key)) return false
+  if (ARRAY_KEYS.has(key) && !Array.isArray(value)) return false
+  if (value === null || typeof value === 'function') return false
+  return true
+}
 
 function syncFromStorageEvent(ev: StorageEvent) {
   if (ev.key !== STORAGE_KEY) return
@@ -95,6 +129,8 @@ function syncFromStorageEvent(ev: StorageEvent) {
     const patch: Record<string, unknown> = {}
     for (const key of Object.keys(incoming)) {
       if (key === 'pomodoroTimerState') continue
+      // 结构校验失败直接跳过该键，不让损坏数据进入 store
+      if (!isValidSyncValue(key, incoming[key])) continue
       if (key in current && JSON.stringify(current[key]) === JSON.stringify(incoming[key])) {
         continue
       }
@@ -111,6 +147,73 @@ function syncFromStorageEvent(ev: StorageEvent) {
 
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', syncFromStorageEvent)
+}
+
+// 节流持久化：高频状态（如番茄钟每秒 tick）合并为最多 2s 落盘一次，
+// 避免每秒全量 JSON.stringify + localStorage 同步写盘
+const THROTTLE_MS = 2000
+let pendingWrite: { key: string; value: string } | null = null
+let writeTimer: ReturnType<typeof setTimeout> | null = null
+
+function flushPendingWrite() {
+  if (writeTimer) {
+    clearTimeout(writeTimer)
+    writeTimer = null
+  }
+  if (pendingWrite && typeof window !== 'undefined') {
+    try {
+      window.localStorage.setItem(pendingWrite.key, pendingWrite.value)
+    } catch {
+      // 配额满/隐私模式：忽略
+    }
+    pendingWrite = null
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', flushPendingWrite)
+}
+
+const throttledStorage: Storage = {
+  get length() {
+    if (typeof window === 'undefined') return 0
+    return window.localStorage.length
+  },
+  clear() {
+    if (typeof window === 'undefined') return
+    flushPendingWrite()
+    window.localStorage.clear()
+  },
+  key(index) {
+    if (typeof window === 'undefined') return null
+    return window.localStorage.key(index)
+  },
+  getItem(key) {
+    if (typeof window === 'undefined') return null
+    return window.localStorage.getItem(key)
+  },
+  setItem(key, value) {
+    if (typeof window === 'undefined') return
+    pendingWrite = { key, value }
+    if (writeTimer) return
+    writeTimer = setTimeout(() => {
+      writeTimer = null
+      const write = pendingWrite
+      pendingWrite = null
+      if (write && typeof window !== 'undefined') {
+        try {
+          window.localStorage.setItem(write.key, write.value)
+        } catch {
+          // 配额满/隐私模式：忽略
+        }
+      }
+    }, THROTTLE_MS)
+  },
+  removeItem(key) {
+    if (typeof window === 'undefined') return
+    flushPendingWrite()
+    window.localStorage.removeItem(key)
+  },
 }
 
 export const useAppStore = create<AppState>()(
@@ -134,9 +237,12 @@ export const useAppStore = create<AppState>()(
       ...createFocusShieldSlice(set, get, api),
       ...createTemplateSlice(set, get, api),
       ...createJournalSlice(set, get, api),
+      ...createActivitySlice(set, get, api),
+      ...createSubscriptionSlice(set, get, api),
     })),
 {
   name: 'productivity-app-storage',  version: 8,
+  storage: createJSONStorage(() => throttledStorage),
   migrate: (persistedState: unknown, version: number) => {
     if (version < 2) {
       return {
@@ -354,6 +460,13 @@ export const useAppStore = create<AppState>()(
     workingHours: state.workingHours,
     focusSoundSettings: state.focusSoundSettings,
     focusPresets: state.focusPresets,
+    focusShield: state.focusShield,
+    focusShieldSchedule: state.focusShieldSchedule,
+    activitySettings: state.activitySettings,
+    // 注意：activityDays 属设备本地隐私数据，仅本地持久化，不参与云同步
+    activityDays: state.activityDays,
+    subscribedCalendars: state.subscribedCalendars,
+    externalEvents: state.externalEvents,
     dailyReviewSettings: state.dailyReviewSettings,
     savedFilters: state.savedFilters,
     activeSavedFilterId: state.activeSavedFilterId,
@@ -410,6 +523,7 @@ export const useAppStore = create<AppState>()(
           workingHours: store.workingHours,
           focusSoundSettings: store.focusSoundSettings,
           focusPresets: store.focusPresets,
+          focusShield: store.focusShield,
           dailyReviewSettings: store.dailyReviewSettings,
           savedFilters: store.savedFilters,
           activeSavedFilterId: store.activeSavedFilterId,
@@ -450,6 +564,7 @@ export const useAppStore = create<AppState>()(
           workingHours: store.workingHours,
           focusSoundSettings: store.focusSoundSettings,
           focusPresets: store.focusPresets,
+          focusShield: store.focusShield,
           dailyReviewSettings: store.dailyReviewSettings,
           savedFilters: store.savedFilters,
           activeSavedFilterId: store.activeSavedFilterId,

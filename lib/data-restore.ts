@@ -70,6 +70,7 @@ const EXTRA_KEYS = [
   'workingHours',
   'focusSoundSettings',
   'focusPresets',
+  'focusShield',
   'dailyReviewSettings',
   'savedFilters',
   'activeSavedFilterId',

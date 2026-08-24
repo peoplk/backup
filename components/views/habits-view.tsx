@@ -8,6 +8,7 @@ import { useHabitStats, useLast30Days } from '@/lib/hooks'
 import { toast } from 'sonner'
 import { useShallow } from 'zustand/react/shallow'
 import { useDataLink } from '@/lib/data-link-service'
+import { HabitBatchCheckIn } from '@/components/habit-batch-checkin'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -226,7 +227,9 @@ export function HabitsView() {
           <h1 className="text-2xl font-bold tracking-tight">习惯打卡</h1>
           <p className="text-muted-foreground mt-0.5">培养良好习惯，记录每日进步</p>
         </div>
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <div className="flex items-center gap-2">
+          <HabitBatchCheckIn />
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
             <Button className="gap-2">
               <Plus className="h-4 w-4" />
@@ -449,6 +452,7 @@ export function HabitsView() {
             </div>
           </DialogContent>
         </Dialog>
+      </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

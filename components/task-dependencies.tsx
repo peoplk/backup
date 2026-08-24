@@ -19,8 +19,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { AlertCircle, Link2, Plus, X, CheckCircle2, Circle } from 'lucide-react'
+import { AlertCircle, Link2, Plus, X, CheckCircle2, Circle, Network } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { TaskDependencyGraph } from '@/components/task-dependency-graph'
 
 interface TaskDependencyManagerProps {
   taskId: string
@@ -214,6 +215,17 @@ export function TaskDependencyManager({ taskId, trigger }: TaskDependencyManager
               </div>
             </div>
           )}
+
+          <div className="rounded-lg border border-border/60 p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <Network className="h-4 w-4 text-chart-1" />
+              <h3 className="text-sm font-semibold">依赖链路</h3>
+              <span className="text-xs text-muted-foreground">
+                查看该任务的完整上下游依赖关系
+              </span>
+            </div>
+            <TaskDependencyGraph taskId={taskId} />
+          </div>
         </div>
       </DialogContent>
     </Dialog>

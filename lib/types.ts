@@ -409,3 +409,64 @@ export interface FocusShieldConfig {
   mode: FocusShieldMode
   items: FocusShieldItem[]
 }
+
+/** 定时封锁会话时间窗：days 为周日=0 的星期数组；start/end 为 HH:mm，支持跨夜 */
+export interface FocusShieldWindow {
+  id: string
+  label?: string
+  days: number[]
+  start: string
+  end: string
+}
+
+export interface FocusShieldScheduleState {
+  enabled: boolean
+  windows: FocusShieldWindow[]
+}
+
+// ─── 自动时间线追踪（仅本地存储，不上云） ───
+
+export type ActivityCategory = 'work' | 'distraction' | 'neutral'
+
+export interface ActivityAppUsage {
+  /** 进程名（小写） */
+  name: string
+  /** 首次见到的窗口标题摘要（可选展示） */
+  title?: string
+  seconds: number
+  category: ActivityCategory
+}
+
+export interface ActivityDay {
+  /** YYYY-MM-DD */
+  date: string
+  apps: ActivityAppUsage[]
+}
+
+export interface ActivitySettings {
+  enabled: boolean
+}
+
+// ─── 日历订阅（ICS 只读聚合） ───
+
+export type SubscriptionStatus = 'idle' | 'syncing' | 'synced' | 'error'
+
+export interface SubscribedCalendar {
+  id: string
+  name: string
+  url: string
+  color: string
+  enabled: boolean
+  lastFetchedAt?: Date | null
+  lastError?: string | null
+  status?: SubscriptionStatus
+}
+
+export interface ExternalCalendarEvent {
+  id: string
+  calendarId: string
+  title: string
+  start: Date
+  end: Date
+  allDay: boolean
+}

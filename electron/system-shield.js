@@ -347,20 +347,27 @@ function getShieldStatus() {
 }
 
 // Register IPC handlers
-function registerSystemShieldIPC() {
-  ipcMain.handle('shield-start', (_event, { websites, apps, mode }) => {
+// 所有 handler 必须经过 isTrustedSender 校验，防止任意本地页面滥用系统级能力
+function registerSystemShieldIPC(isTrustedSender) {
+  const trusted = typeof isTrustedSender === 'function' ? isTrustedSender : () => false
+
+  ipcMain.handle('shield-start', (event, { websites, apps, mode } = {}) => {
+    if (!trusted(event)) return { success: false, mode: 'denied' }
     return startSystemShield(websites || [], apps || [], mode || 'blacklist')
   })
 
-  ipcMain.handle('shield-stop', () => {
+  ipcMain.handle('shield-stop', (event) => {
+    if (!trusted(event)) return { success: false, mode: 'denied' }
     return stopSystemShield()
   })
 
-  ipcMain.handle('shield-update', (_event, { websites, apps, mode }) => {
+  ipcMain.handle('shield-update', (event, { websites, apps, mode } = {}) => {
+    if (!trusted(event)) return { success: false, mode: 'denied' }
     return updateShieldRules(websites || [], apps || [], mode || 'blacklist')
   })
 
   ipcMain.handle('shield-status', () => {
+    // 只读状态，无需校验
     return getShieldStatus()
   })
 }

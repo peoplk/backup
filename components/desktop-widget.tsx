@@ -30,6 +30,7 @@ import {
   LogOut,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { dataLinkService } from '@/lib/data-link-service'
 
 const modeConfig = {
   work: {
@@ -205,14 +206,17 @@ export function DesktopWidget() {
   }, [])
 
   useEffect(() => {
-    window.electronAPI?.onPomodoroSync?.((next: SyncState) => {
+    const off = window.electronAPI?.onPomodoroSync?.((next: SyncState) => {
       setSyncState(next)
     })
     // 主窗口每秒广播番茄钟状态，这里仅作兜底拉取，降频避免重复 IPC
     const interval = setInterval(() => {
       window.electronAPI?.sendPomodoroState?.()
     }, 5000)
-    return () => clearInterval(interval)
+    return () => {
+      clearInterval(interval)
+      if (typeof off === 'function') off()
+    }
   }, [])
 
   useEffect(() => {
@@ -328,7 +332,11 @@ export function DesktopWidget() {
   const hiddenHabitCount = Math.max(0, activeHabits.length - visibleHabits.length)
 
   const handleCheckIn = useCallback((habitId: string, isCompleted: boolean) => {
-    if (!isCompleted) checkInHabit(habitId, new Date(), true)
+    if (!isCompleted) {
+      checkInHabit(habitId, new Date(), true)
+      // 与主视图保持一致：更新关联目标进度
+      dataLinkService.handleHabitCheck(habitId, new Date(), true)
+    }
   }, [checkInHabit])
 
   /* ---------- stats ---------- */

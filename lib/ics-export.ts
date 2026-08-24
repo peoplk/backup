@@ -5,6 +5,15 @@ function formatDateToICS(date: Date | string): string {
   return dateObj.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
 }
 
+/** 全天事件的日期格式：使用本地日历日期，避免 UTC 转换导致日期偏移 */
+function formatLocalDateToICS(date: Date | string): string {
+  const dateObj = date instanceof Date ? date : new Date(date)
+  const y = dateObj.getFullYear()
+  const m = String(dateObj.getMonth() + 1).padStart(2, '0')
+  const d = String(dateObj.getDate()).padStart(2, '0')
+  return `${y}${m}${d}`
+}
+
 function escapeICS(text: string): string {
   return text.replace(/[\\;,\n]/g, (match) => {
     if (match === '\n') return '\\n'
@@ -42,8 +51,8 @@ export function generateICS(tasks: Task[], anniversaries: Anniversary[]): string
       endDate.setDate(endDate.getDate() + 1)
 
       lines.push('BEGIN:VEVENT')
-      lines.push(`DTSTART;VALUE=DATE:${formatDateToICS(startDate).slice(0, 8)}`)
-      lines.push(`DTEND;VALUE=DATE:${formatDateToICS(endDate).slice(0, 8)}`)
+      lines.push(`DTSTART;VALUE=DATE:${formatLocalDateToICS(startDate)}`)
+      lines.push(`DTEND;VALUE=DATE:${formatLocalDateToICS(endDate)}`)
     }
 
     lines.push(`UID:task-${task.id}@focusflow`)
@@ -82,7 +91,7 @@ export function generateICS(tasks: Task[], anniversaries: Anniversary[]): string
         rrule += `;INTERVAL=${task.repeatRule.interval}`
       }
       if (task.repeatRule.endDate) {
-        rrule += `;UNTIL=${formatDateToICS(new Date(task.repeatRule.endDate)).slice(0, 8)}T235959Z`
+        rrule += `;UNTIL=${formatLocalDateToICS(new Date(task.repeatRule.endDate))}T235959Z`
       }
       lines.push(`RRULE:${rrule}`)
     }
@@ -123,8 +132,8 @@ export function generateICS(tasks: Task[], anniversaries: Anniversary[]): string
     nextDate.setDate(nextDate.getDate() + 1)
 
     lines.push('BEGIN:VEVENT')
-    lines.push(`DTSTART;VALUE=DATE:${formatDateToICS(date).slice(0, 8)}`)
-    lines.push(`DTEND;VALUE=DATE:${formatDateToICS(nextDate).slice(0, 8)}`)
+    lines.push(`DTSTART;VALUE=DATE:${formatLocalDateToICS(date)}`)
+    lines.push(`DTEND;VALUE=DATE:${formatLocalDateToICS(nextDate)}`)
     lines.push(`UID:anniversary-${anniversary.id}@focusflow`)
     lines.push(`SUMMARY:${escapeICS(anniversary.title)}`)
 

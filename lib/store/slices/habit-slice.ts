@@ -38,6 +38,15 @@ export const createHabitSlice = (
         notifications: state.notifications.filter(
           (n) => !(n.relatedType === 'habit' && n.relatedId === id && n.type === 'habit-reminder')
         ),
+        reminders: state.reminders.filter(
+          (r) => !(r.type === 'habit' && r.referenceId === id)
+        ),
+        // 清理目标中指向该习惯的引用，避免孤儿引用
+        goals: state.goals.map((g) =>
+          g.linkedHabits?.includes(id)
+            ? { ...g, linkedHabits: g.linkedHabits.filter((hId) => hId !== id) }
+            : g
+        ),
         trashedItems: [
           { id, type: 'habit' as const, data: habit, deletedAt: new Date() },
           ...state.trashedItems,
@@ -137,14 +146,23 @@ export const createHabitSlice = (
       )
       if (yesterdayCheckIn?.completed) return state
 
+      // 已存在昨日未完成记录时更新该条，而不是追加重复的同日记录
+      const nextCheckIns = yesterdayCheckIn
+        ? state.habitCheckIns.map(c =>
+            c.id === yesterdayCheckIn.id
+              ? { ...c, completed: true, note: '🧊 连续冻结保护' }
+              : c
+          )
+        : [
+            ...state.habitCheckIns,
+            { id: generateId(), habitId, date: yesterday, completed: true, note: '🧊 连续冻结保护' },
+          ]
+
       return {
         habits: state.habits.map(h =>
           h.id === habitId ? { ...h, streakFreezes: (h.streakFreezes || 0) + 1 } : h
         ),
-        habitCheckIns: [
-          ...state.habitCheckIns,
-          { id: generateId(), habitId, date: yesterday, completed: true, note: '🧊 连续冻结保护' },
-        ],
+        habitCheckIns: nextCheckIns,
         notifications: [
           {
             id: generateId(),
@@ -158,4 +176,35 @@ export const createHabitSlice = (
         ].slice(0, 50),
       }
     }),
+  batchCheckInHabits: (habitIds: string[], dates: Date[]) => {
+    set((state) => {
+      const existing = new Set(
+        state.habitCheckIns.map(c => `${c.habitId}|${new Date(c.date).toDateString()}`)
+      )
+      const newCheckIns: HabitCheckIn[] = []
+      for (const habitId of habitIds) {
+        for (const date of dates) {
+          const key = `${habitId}|${new Date(date).toDateString()}`
+          if (existing.has(key)) continue
+          newCheckIns.push({
+            id: generateId(),
+            habitId,
+            date: new Date(date),
+            completed: true,
+            note: '📝 批量补卡',
+          })
+        }
+      }
+      if (newCheckIns.length === 0) return state
+      return {
+        habitCheckIns: [...state.habitCheckIns, ...newCheckIns],
+      }
+    })
+    // 补卡后同步更新关联目标的进度
+    habitIds.forEach((habitId) => {
+      import('@/lib/habit-goal-integration').then(({ HabitGoalIntegration }) => {
+        HabitGoalIntegration.updateGoalProgressFromHabit(habitId)
+      })
+    })
+  },
 })

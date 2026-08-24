@@ -4,11 +4,8 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 /** @type {import('next').NextConfig} */
-const isTauri = process.env.BUILD_MODE === 'tauri'
-const isStatic = isTauri
-
 const nextConfig = {
-  output: isStatic ? 'export' : 'standalone',
+  output: 'standalone',
   outputFileTracingRoot: __dirname,
   typescript: {
     ignoreBuildErrors: false,
@@ -27,8 +24,6 @@ const nextConfig = {
     maxInactiveAge: 25 * 1000,
     pagesBufferLength: 2,
   },
-  trailingSlash: isStatic,
-  assetPrefix: isStatic && process.env.NODE_ENV === 'production' ? '.' : undefined,
 }
 
 export default nextConfig

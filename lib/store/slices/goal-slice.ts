@@ -36,6 +36,13 @@ export const createGoalSlice = (
         notifications: state.notifications.filter(
           (n) => !(n.relatedType === 'goal' && n.relatedId === id)
         ),
+        // 清理关联习惯的 goalId 反向引用，避免孤儿引用
+        habits: state.habits.map((h) =>
+          h.linkedGoalId === id ? { ...h, linkedGoalId: undefined } : h
+        ),
+        reminders: state.reminders.filter(
+          (r) => !(r.type === 'goal' && r.referenceId === id)
+        ),
         trashedItems: [
           { id, type: 'goal' as const, data: goal, deletedAt: new Date() },
           ...state.trashedItems,

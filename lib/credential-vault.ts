@@ -29,15 +29,32 @@ export function getCredentialVaultStatus(): CredentialVaultStatus {
   return { available, engine: available ? 'electron-safeStorage' : 'none' }
 }
 
-/** 将明文字段加密为密封值（safeStorage 不可用时原样返回并标记 unsealed）。 */
+/**
+ * 异步检测真实加密可用性（Electron 下 safeStorage 可能被系统禁用，
+ * 仅检查 API 存在会误判为已加密）。
+ */
+export async function getCredentialVaultStatusAsync(): Promise<CredentialVaultStatus> {
+  if (typeof window === 'undefined' || typeof window.electronAPI?.credentialVaultAvailable !== 'function') {
+    return { available: false, engine: 'none' }
+  }
+  try {
+    const available = !!(await window.electronAPI.credentialVaultAvailable())
+    return { available, engine: available ? 'electron-safeStorage' : 'none' }
+  } catch {
+    return { available: false, engine: 'none' }
+  }
+}
+
+/** 将明文字段加密为密封值（safeStorage 不可用时显式降级并标记，绝不静默明文）。 */
 export async function sealSecret(plaintext: string): Promise<string> {
   if (!plaintext) return ''
   if (isSafeStorageAvailable()) {
     try {
       const sealed = await window.electronAPI!.credentialEncrypt!(plaintext)
+      // 主进程拒绝加密（safeStorage 不可用/失败）时返回空串，此处显式降级并打标记
+      if (!sealed) return CLEAR_SENTINEL + plaintext
       return SEAL_PREFIX + sealed
     } catch {
-      // safeStorage 失败时降级，返回明文并加标记
       return CLEAR_SENTINEL + plaintext
     }
   }

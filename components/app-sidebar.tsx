@@ -53,6 +53,7 @@ const iconMap = {
   goals: Target,
   habits: Trophy,
   calendar: CalendarDays,
+  'time-block': CalendarClock,
   anniversaries: Heart,
   analytics: BarChart3,
   journal: BookOpen,

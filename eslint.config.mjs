@@ -10,7 +10,6 @@ const eslintConfig = [
       'android/**',
       'android-app/**',
       'electron/**',
-      'tauri/**',
       'dist/**',
       'out/**',
       'server/**',

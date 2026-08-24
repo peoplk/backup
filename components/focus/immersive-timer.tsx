@@ -217,14 +217,25 @@ export function ImmersiveTimer({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
   }
 
+  // 树的尺寸/透明度只随 completedSessions 稳定增长时生成一次，
+  // 避免依赖变化时全部重随机导致视觉抖动
   const trees = useMemo(() => {
     const breakEvery = sessionsBeforeLongBreak || 4
     const result = []
     const totalTrees = Math.min(Math.floor(completedSessions / breakEvery) + 1, 12)
+    const rng = () => {
+      let seed = 0x2f6e2b1 + completedSessions * 0x9e3779b9
+      return () => {
+        seed = (seed + 0x9e3779b9) & 0xffffffff
+        const t = (seed ^ (seed >>> 15)) >>> 0
+        return t / 0xffffffff
+      }
+    }
+    const next = rng()
     for (let i = 0; i < totalTrees; i++) {
       result.push({
-        size: 24 + Math.random() * 28,
-        opacity: 0.4 + Math.random() * 0.5,
+        size: 24 + next() * 28,
+        opacity: 0.4 + next() * 0.5,
         isComplete: i < Math.floor(completedSessions / breakEvery),
       })
     }

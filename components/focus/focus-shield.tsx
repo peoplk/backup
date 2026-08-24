@@ -24,50 +24,18 @@ import {
   Cpu,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import type { FocusShieldItem } from '@/lib/types'
+import {
+  DEFAULT_BLOCKED_WEBSITES,
+  DEFAULT_BLOCKED_APPS,
+  DEFAULT_ALLOWED_WEBSITES,
+  DEFAULT_ALLOWED_APPS,
+} from '@/lib/focus-shield-defaults'
+import { ShieldScheduleSettings } from '@/components/focus/shield-schedule-settings'
 
-interface BlockedItem {
-  id: string
-  type: 'website' | 'app'
-  name: string
-  pattern: string
-  enabled: boolean
-}
+type BlockedItem = FocusShieldItem
 
 type ShieldMode = 'blacklist' | 'whitelist'
-
-const DEFAULT_BLOCKED_WEBSITES = [
-  { id: '1', type: 'website' as const, name: '微博', pattern: 'weibo.com', enabled: true },
-  { id: '2', type: 'website' as const, name: '抖音', pattern: 'douyin.com', enabled: true },
-  { id: '3', type: 'website' as const, name: 'B站', pattern: 'bilibili.com', enabled: true },
-  { id: '4', type: 'website' as const, name: '知乎', pattern: 'zhihu.com', enabled: false },
-  { id: '5', type: 'website' as const, name: '小红书', pattern: 'xiaohongshu.com', enabled: true },
-  { id: '6', type: 'website' as const, name: '淘宝', pattern: 'taobao.com', enabled: true },
-  { id: '7', type: 'website' as const, name: '京东', pattern: 'jd.com', enabled: false },
-  { id: '8', type: 'website' as const, name: '腾讯视频', pattern: 'v.qq.com', enabled: true },
-]
-
-const DEFAULT_BLOCKED_APPS = [
-  { id: 'a1', type: 'app' as const, name: '微信', pattern: 'WeChat', enabled: false },
-  { id: 'a2', type: 'app' as const, name: 'QQ', pattern: 'QQ', enabled: false },
-  { id: 'a3', type: 'app' as const, name: '钉钉', pattern: 'DingTalk', enabled: false },
-  { id: 'a4', type: 'app' as const, name: '企业微信', pattern: 'WXWork', enabled: false },
-]
-
-const DEFAULT_ALLOWED_WEBSITES = [
-  { id: 'w1', type: 'website' as const, name: 'Notion', pattern: 'notion.so', enabled: true },
-  { id: 'w2', type: 'website' as const, name: 'GitHub', pattern: 'github.com', enabled: true },
-  { id: 'w3', type: 'website' as const, name: 'Google Docs', pattern: 'docs.google.com', enabled: true },
-  { id: 'w4', type: 'website' as const, name: 'Figma', pattern: 'figma.com', enabled: true },
-  { id: 'w5', type: 'website' as const, name: '飞书文档', pattern: 'feishu.cn', enabled: true },
-  { id: 'w6', type: 'website' as const, name: '语雀', pattern: 'yuque.com', enabled: true },
-]
-
-const DEFAULT_ALLOWED_APPS = [
-  { id: 'wa1', type: 'app' as const, name: 'VS Code', pattern: 'Code', enabled: true },
-  { id: 'wa2', type: 'app' as const, name: '飞书', pattern: 'Feishu', enabled: true },
-  { id: 'wa3', type: 'app' as const, name: '企业微信', pattern: 'WXWork', enabled: true },
-  { id: 'wa4', type: 'app' as const, name: '钉钉', pattern: 'DingTalk', enabled: true },
-]
 
 const STORAGE_KEY_BLACKLIST = 'focusflow-focus-shield-v2'
 const STORAGE_KEY_WHITELIST = 'focusflow-focus-shield-whitelist-v2'
@@ -502,6 +470,9 @@ export function FocusShield() {
           )}
         </CardContent>
       </Card>
+
+      {/* 定时封锁会话：时间窗调度，自动启停专注盾 */}
+      <ShieldScheduleSettings />
 
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
         <DialogContent className="max-w-sm">

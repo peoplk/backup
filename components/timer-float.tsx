@@ -52,14 +52,17 @@ export function TimerFloat() {
   })
 
   useEffect(() => {
-    window.electronAPI?.onPomodoroSync?.((next: SyncState) => {
+    const off = window.electronAPI?.onPomodoroSync?.((next: SyncState) => {
       setState(next)
     })
     // 主窗口每秒广播番茄钟状态，这里仅作兜底拉取，降频避免重复 IPC
     const interval = setInterval(() => {
       window.electronAPI?.sendPomodoroState?.()
     }, 5000)
-    return () => clearInterval(interval)
+    return () => {
+      clearInterval(interval)
+      if (typeof off === 'function') off()
+    }
   }, [])
 
   const { timeLeft, totalDuration, isRunning, mode } = state

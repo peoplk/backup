@@ -14,6 +14,13 @@ function removeTaskNotifications(notifications: Notification[], taskId: string):
   )
 }
 
+/** 完成任务后的联动：积分、成就、目标进度、项目时长（动态加载避免循环依赖，状态更新后再执行） */
+function triggerTaskCompletionEffects(taskId: string): void {
+  void import('@/lib/data-link-service').then(({ dataLinkService }) => {
+    dataLinkService.handleTaskCompletion(taskId)
+  })
+}
+
 export const createTaskSlice = (
   set: SetState,
   get: () => AppState,
@@ -44,8 +51,17 @@ export const createTaskSlice = (
       if (!task) return state
       clearNotifiedKeysWithPrefix(`task-${id}`)
       return {
-        tasks: state.tasks.filter((t) => t.id !== id),
+        tasks: state.tasks
+          .filter((t) => t.id !== id)
+          .map((t) => ({
+            ...t,
+            dependsOn: t.dependsOn?.filter((depId) => depId !== id),
+            blockedBy: t.blockedBy?.filter((bId) => bId !== id),
+          })),
         notifications: removeTaskNotifications(state.notifications, id),
+        reminders: state.reminders.filter(
+          (r) => !(r.type === 'task' && r.referenceId === id)
+        ),
         trashedItems: [
           { id, type: 'task' as const, data: task, deletedAt: new Date() },
           ...state.trashedItems,
@@ -70,168 +86,162 @@ export const createTaskSlice = (
         t.id === id ? { ...t, archived: false } : t
       ),
     })),
-  completeTask: (id: string) =>
-    set((state) => {
-      const task = state.tasks.find((t) => t.id === id)
-      if (!task) return state
-      
-      if (task.dependsOn && task.dependsOn.length > 0) {
-        const allDependenciesCompleted = task.dependsOn.every(depId => {
-          const depTask = state.tasks.find(t => t.id === depId)
-          return depTask && depTask.status === 'done'
-        })
-        if (!allDependenciesCompleted) {
-          const notification = {
-            type: 'task-due' as const,
-            title: '无法完成任务',
-            message: `"${task.title}" 有未完成的前置任务`,
-            relatedType: 'task' as const,
-            relatedId: id,
-          }
-          return {
-            notifications: [
-              {
-                ...notification,
-                id: generateId(),
-                timestamp: new Date(),
-                read: false,
-              },
-              ...state.notifications,
-            ].slice(0, 50),
-          }
-        }
+  completeTask: (id: string) => {
+    const state = get()
+    const task = state.tasks.find((t) => t.id === id)
+    if (!task || task.status === 'done') return
+
+    if (task.dependsOn && task.dependsOn.length > 0) {
+      const allDependenciesCompleted = task.dependsOn.every(depId => {
+        const depTask = state.tasks.find(t => t.id === depId)
+        return depTask && depTask.status === 'done'
+      })
+      if (!allDependenciesCompleted) {
+        set((state) => ({
+          notifications: [
+            {
+              id: generateId(),
+              type: 'task-due' as const,
+              title: '无法完成任务',
+              message: `"${task.title}" 有未完成的前置任务`,
+              relatedType: 'task' as const,
+              relatedId: id,
+              timestamp: new Date(),
+              read: false,
+            },
+            ...state.notifications,
+          ].slice(0, 50),
+        }))
+        return
       }
-      
-      if (task.repeatRule) {
-        const currentCompletedCount = (task.repeatRule.completedCount || 0) + 1
-        const completion: RepeatTaskCompletion = {
-          id: generateId(),
-          taskId: task.id,
-          completedAt: new Date(),
-          dueDate: task.dueDate,
-        }
-        
-        const hasReachedEndDate = task.repeatRule.endDate && 
-          new Date() > new Date(task.repeatRule.endDate)
-        const hasReachedCount = task.repeatRule.endAfterCount && 
-          currentCompletedCount >= task.repeatRule.endAfterCount
-        
-        if (hasReachedEndDate || hasReachedCount) {
-          const notification = {
-            type: 'task-due' as const,
-            title: '重复任务已完成',
-            message: `"${task.title}" 已完成所有重复周期`,
-            relatedType: 'task' as const,
-            relatedId: id,
-          }
-          return {
-            tasks: state.tasks.map((t) =>
-              t.id === id
-                ? { 
-                    ...t, 
-                    status: 'done' as const, 
-                    completedAt: new Date(),
-                    repeatRule: {
-                      ...t.repeatRule!,
-                      completedCount: currentCompletedCount
-                    }
-                  }
-                : t
-            ),
-            repeatCompletions: [...state.repeatCompletions, completion],
-            notifications: [
-              {
-                ...notification,
-                id: generateId(),
-                timestamp: new Date(),
-                read: false,
-              },
-              ...removeTaskNotifications(state.notifications, id),
-            ].slice(0, 50),
-          }
-        }
-        
-        const todayDate = new Date()
-        todayDate.setHours(0, 0, 0, 0)
-        const originalDueDate = new Date(task.dueDate || new Date())
-        originalDueDate.setHours(0, 0, 0, 0)
-        const baseDate = new Date(Math.max(originalDueDate.getTime(), todayDate.getTime()))
-        const newDueDate = new Date(baseDate)
-        switch (task.repeatRule.type) {
-          case 'daily':
-            newDueDate.setDate(newDueDate.getDate() + task.repeatRule.interval)
-            break
-          case 'weekly':
-            newDueDate.setDate(newDueDate.getDate() + 7 * task.repeatRule.interval)
-            break
-          case 'monthly':
-            newDueDate.setMonth(newDueDate.getMonth() + task.repeatRule.interval)
-            break
-          case 'yearly':
-            newDueDate.setFullYear(newDueDate.getFullYear() + task.repeatRule.interval)
-            break
-        }
-        
-        const notification = {
-          type: 'task-due' as const,
-          title: '任务完成',
-          message: `"${task.title}" 已完成，下一个周期: ${newDueDate.toLocaleDateString('zh-CN')}`,
-          relatedType: 'task' as const,
-          relatedId: id,
-        }
-        
-        return {
+    }
+
+    if (task.repeatRule) {
+      const currentCompletedCount = (task.repeatRule.completedCount || 0) + 1
+      const completion: RepeatTaskCompletion = {
+        id: generateId(),
+        taskId: task.id,
+        completedAt: new Date(),
+        dueDate: task.dueDate,
+      }
+
+      const hasReachedEndDate = task.repeatRule.endDate &&
+        new Date() > new Date(task.repeatRule.endDate)
+      const hasReachedCount = task.repeatRule.endAfterCount &&
+        currentCompletedCount >= task.repeatRule.endAfterCount
+
+      if (hasReachedEndDate || hasReachedCount) {
+        set((state) => ({
           tasks: state.tasks.map((t) =>
             t.id === id
-              ? { 
-                  ...t, 
-                  status: 'todo' as const,
-                  dueDate: newDueDate,
-                  completedAt: undefined,
-                  completedPomodoros: 0,
+              ? {
+                  ...t,
+                  status: 'done' as const,
+                  completedAt: new Date(),
                   repeatRule: {
                     ...t.repeatRule!,
-                    completedCount: currentCompletedCount
-                  }
+                    completedCount: currentCompletedCount,
+                  },
                 }
               : t
           ),
           repeatCompletions: [...state.repeatCompletions, completion],
           notifications: [
             {
-              ...notification,
               id: generateId(),
+              type: 'task-due' as const,
+              title: '重复任务已完成',
+              message: `"${task.title}" 已完成所有重复周期`,
+              relatedType: 'task' as const,
+              relatedId: id,
               timestamp: new Date(),
               read: false,
             },
             ...removeTaskNotifications(state.notifications, id),
           ].slice(0, 50),
-        }
+        }))
+        triggerTaskCompletionEffects(id)
+        return
       }
-      const notification = task ? {
-        type: 'task-due' as const,
-        title: '任务完成',
-        message: `"${task.title}" 已完成`,
-        relatedType: 'task' as const,
-        relatedId: id,
-      } : null
-      return {
+
+      const todayDate = new Date()
+      todayDate.setHours(0, 0, 0, 0)
+      const originalDueDate = new Date(task.dueDate || new Date())
+      originalDueDate.setHours(0, 0, 0, 0)
+      const baseDate = new Date(Math.max(originalDueDate.getTime(), todayDate.getTime()))
+      const newDueDate = new Date(baseDate)
+      switch (task.repeatRule.type) {
+        case 'daily':
+          newDueDate.setDate(newDueDate.getDate() + task.repeatRule.interval)
+          break
+        case 'weekly':
+          newDueDate.setDate(newDueDate.getDate() + 7 * task.repeatRule.interval)
+          break
+        case 'monthly':
+          newDueDate.setMonth(newDueDate.getMonth() + task.repeatRule.interval)
+          break
+        case 'yearly':
+          newDueDate.setFullYear(newDueDate.getFullYear() + task.repeatRule.interval)
+          break
+      }
+
+      set((state) => ({
         tasks: state.tasks.map((t) =>
           t.id === id
-            ? { ...t, status: 'done' as const, completedAt: new Date() }
+            ? {
+                ...t,
+                status: 'todo' as const,
+                dueDate: newDueDate,
+                completedAt: undefined,
+                completedPomodoros: 0,
+                repeatRule: {
+                  ...t.repeatRule!,
+                  completedCount: currentCompletedCount,
+                },
+              }
             : t
         ),
-        notifications: notification ? [
+        repeatCompletions: [...state.repeatCompletions, completion],
+        notifications: [
           {
-            ...notification,
             id: generateId(),
+            type: 'task-due' as const,
+            title: '任务完成',
+            message: `"${task.title}" 已完成，下一个周期: ${newDueDate.toLocaleDateString('zh-CN')}`,
+            relatedType: 'task' as const,
+            relatedId: id,
             timestamp: new Date(),
             read: false,
           },
           ...removeTaskNotifications(state.notifications, id),
-        ].slice(0, 50) : state.notifications,
-      }
-    }),
+        ].slice(0, 50),
+      }))
+      triggerTaskCompletionEffects(id)
+      return
+    }
+
+    set((state) => ({
+      tasks: state.tasks.map((t) =>
+        t.id === id
+          ? { ...t, status: 'done' as const, completedAt: new Date() }
+          : t
+      ),
+      notifications: [
+        {
+          id: generateId(),
+          type: 'task-due' as const,
+          title: '任务完成',
+          message: `"${task.title}" 已完成`,
+          relatedType: 'task' as const,
+          relatedId: id,
+          timestamp: new Date(),
+          read: false,
+        },
+        ...removeTaskNotifications(state.notifications, id),
+      ].slice(0, 50),
+    }))
+    triggerTaskCompletionEffects(id)
+  },
   uncompleteTask: (id: string) =>
     set((state) => {
       const task = state.tasks.find((t) => t.id === id)
@@ -422,24 +432,47 @@ export const createTaskSlice = (
       
       return { tasks: updatedTasks }
     }),
-  batchCompleteTasks: (ids: string[]) =>
+  batchCompleteTasks: (ids: string[]) => {
     set((state) => ({
       tasks: state.tasks.map((t) =>
         ids.includes(t.id)
           ? { ...t, status: 'done' as const, completedAt: new Date() }
           : t
       ),
-    })),
+    }))
+    ids.forEach((id) => triggerTaskCompletionEffects(id))
+  },
   batchDeleteTasks: (ids: string[]) =>
     set((state) => {
       const idSet = new Set(ids)
       for (const id of ids) {
         clearNotifiedKeysWithPrefix(`task-${id}`)
       }
+      const trashedTasks = state.tasks.filter((t) => idSet.has(t.id))
       return {
-        tasks: state.tasks.filter((t) => !idSet.has(t.id)),
+        tasks: state.tasks
+          .filter((t) => !idSet.has(t.id))
+          // 清理剩余任务中指向被删任务的依赖关系（双向）
+          .map((t) => ({
+            ...t,
+            dependsOn: t.dependsOn?.filter((depId) => !idSet.has(depId)),
+            blockedBy: t.blockedBy?.filter((bId) => !idSet.has(bId)),
+          })),
         notifications: state.notifications.filter(
           (n) => !(n.relatedType === 'task' && n.relatedId && idSet.has(n.relatedId))
+        ),
+        // 批量删除同样进入回收站（软删除）
+        trashedItems: [
+          ...trashedTasks.map((t) => ({
+            id: t.id,
+            type: 'task' as const,
+            data: t,
+            deletedAt: new Date(),
+          })),
+          ...state.trashedItems,
+        ],
+        reminders: state.reminders.filter(
+          (r) => !(r.type === 'task' && r.referenceId && idSet.has(r.referenceId))
         ),
       }
     }),

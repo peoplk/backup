@@ -111,33 +111,66 @@ export function DataExport() {
 
   const exportToJSON = () => {
     const data: Record<string, unknown> = {}
-    const dateRange = getDateRange(options.range)
+    const store = useAppStore.getState()
 
     if (options.types.includes('all') || options.types.includes('tasks')) {
-      let filteredTasks = filterByDateRange(tasks, options.range)
+      let filteredTasks = filterByDateRange(store.tasks, options.range)
       if (!options.includeArchived) filteredTasks = filteredTasks.filter(t => !t.archived)
       if (!options.includeCompleted) filteredTasks = filteredTasks.filter(t => t.status !== 'done')
       data.tasks = filteredTasks
     }
 
     if (options.types.includes('all') || options.types.includes('pomodoros')) {
-      data.pomodoroSessions = filterByDateRange(pomodoroSessions, options.range)
+      data.pomodoroSessions = filterByDateRange(store.pomodoroSessions, options.range)
+      data.abandonedPomodoroSessions = filterByDateRange(store.abandonedPomodoroSessions, options.range)
     }
 
     if (options.types.includes('all') || options.types.includes('habits')) {
-      let filteredHabits = habits
+      let filteredHabits = store.habits
       if (!options.includeArchived) filteredHabits = filteredHabits.filter(h => !h.archived)
       data.habits = filteredHabits
-      data.habitCheckIns = filterByDateRange(habitCheckIns, options.range)
+      data.habitCheckIns = filterByDateRange(store.habitCheckIns, options.range)
     }
 
     if (options.types.includes('all') || options.types.includes('goals')) {
-      data.goals = goals
+      data.goals = store.goals
     }
+
+    // 与备份保持一致：全量携带其余数据集合，保证导出文件可直接恢复
+    data.timeEntries = store.timeEntries
+    data.anniversaries = store.anniversaries
+    data.projects = store.projects
+    data.tags = store.tags
+    data.reminders = store.reminders
+    data.notifications = store.notifications
+    data.sidebarCollapsed = store.sidebarCollapsed
+    data.activeSmartList = store.activeSmartList
+    data.achievements = store.achievements
+    data.userLevel = store.userLevel
+    data.focusGoals = store.focusGoals
+    data.repeatCompletions = store.repeatCompletions
+    data.trashedItems = store.trashedItems
+    data.taskOrder = store.taskOrder
+    data.timeBlocks = filterByDateRange(store.timeBlocks, options.range)
+    data.distractions = store.distractions
+    data.journals = store.journals
+    data.taskTemplates = store.taskTemplates
+    data.pomodoroStrictMode = store.pomodoroStrictMode
+    data.pomodoroSettings = store.pomodoroSettings
+    data.pomodoroTimerState = { ...store.pomodoroTimerState, isRunning: false }
+    data.dashboardWidgets = store.dashboardWidgets
+    data.darkModeSchedule = store.darkModeSchedule
+    data.workingHours = store.workingHours
+    data.focusSoundSettings = store.focusSoundSettings
+    data.focusPresets = store.focusPresets
+    data.focusShield = store.focusShield
+    data.dailyReviewSettings = store.dailyReviewSettings
+    data.savedFilters = store.savedFilters
+    data.activeSavedFilterId = store.activeSavedFilterId
 
     data.exportInfo = {
       exportedAt: new Date().toISOString(),
-      version: '1.0',
+      version: '1.1',
       range: options.range,
     }
 

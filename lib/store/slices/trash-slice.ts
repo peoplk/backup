@@ -160,6 +160,8 @@ export const createTrashSlice = (
       ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90)
       const sevenDaysAgo = new Date()
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+      const oneYearAgo = new Date()
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
 
       return {
         pomodoroSessions: state.pomodoroSessions.filter(
@@ -179,6 +181,20 @@ export const createTrashSlice = (
         ),
         trashedItems: state.trashedItems.filter(
           (t) => new Date(t.deletedAt) > thirtyDaysAgo
+        ),
+        // 扩展覆盖：干扰记录、历史时间块、过期日记（避免无上限增长）
+        distractions: state.distractions.filter(
+          (d) => new Date(d.timestamp) > ninetyDaysAgo
+        ),
+        timeBlocks: state.timeBlocks.filter(
+          (b) => {
+            const blockDate = new Date(b.date)
+            blockDate.setHours(0, 0, 0, 0)
+            return blockDate > ninetyDaysAgo
+          }
+        ),
+        journals: state.journals.filter(
+          (j) => new Date(j.date) > oneYearAgo
         ),
       }
     }),

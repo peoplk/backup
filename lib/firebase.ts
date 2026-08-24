@@ -272,7 +272,7 @@ export async function setOfflineMode(offline: boolean): Promise<void> {
   if (!db) return
   if (offline) {
     await disableNetwork(db)
-    notifyStatus({ status: 'offline', lastSyncAt: null, error: null, userId: null, isEnabled: false, conflicts: [] })
+    notifyStatus({ status: 'offline' })
   } else {
     await enableNetwork(db)
   }
@@ -321,7 +321,7 @@ export async function mergeLocalAndCloud(
 
       merged[key] = Array.from(mergedMap.values())
     } else {
-      merged[key] = localValue !== undefined ? localValue : cloudValue
+      merged[key] = cloudValue !== undefined ? cloudValue : localValue
     }
   }
 

@@ -360,6 +360,8 @@ async function s3Request(
     method,
     headers: requestHeaders,
     body: options.body || undefined,
+    // 签名请求位于云同步热路径，必须带超时防止悬挂连接堆积
+    signal: AbortSignal.timeout(15000),
   })
 }
 
@@ -470,14 +472,18 @@ export async function syncFromS3(_userId: string): Promise<Record<string, unknow
 export function subscribeToS3(userId: string, callback: (data: Record<string, unknown>) => void): () => void {
   const interval = (currentConfig?.syncInterval || DEFAULT_POLL_INTERVAL) * 1000
   let stopped = false
+  let inFlight = false
 
   const tick = async () => {
-    if (stopped) return
+    if (stopped || inFlight) return
+    inFlight = true
     try {
       const data = await syncFromS3(userId)
       if (data) callback(data)
     } catch {
       // silent
+    } finally {
+      inFlight = false
     }
   }
 
@@ -531,8 +537,8 @@ export async function mergeLocalAndS3(userId: string, localData: Record<string, 
         }
       }
       merged[key] = Array.from(mergedMap.values())
-    } else if (localValue !== undefined) {
-      merged[key] = localValue
+    } else {
+      merged[key] = cloudValue !== undefined ? cloudValue : localValue
     }
   }
 

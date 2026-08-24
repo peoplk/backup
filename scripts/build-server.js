@@ -69,6 +69,15 @@ if (fs.existsSync(publicDir)) {
 const serverJs = path.join(serverDir, 'server.js')
 let content = fs.readFileSync(serverJs, 'utf-8')
 content = content.replace(/\.next/g, './.next')
+// 防御性收紧：忽略环境变量中的 HOSTNAME（Git Bash/CI 常注入机器名），
+// 仅接受专用变量 FOCUSFLOW_HOST 且必须为回环地址，否则一律回落 127.0.0.1
+content = content.replace(
+  /const hostname = process\.env\.HOSTNAME \|\| ['"](?:0\.0\.0\.0|127\.0\.0\.1)['"]/,
+  [
+    "const __ffHostRequested = process.env.FOCUSFLOW_HOST || '127.0.0.1'",
+    "const hostname = ['127.0.0.1', 'localhost', '::1'].includes(__ffHostRequested) ? __ffHostRequested : '127.0.0.1'",
+  ].join('\n')
+)
 fs.writeFileSync(serverJs, content)
 
 console.log('Server build complete!')

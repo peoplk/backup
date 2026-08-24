@@ -1,7 +1,8 @@
 'use client'
 
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useCallback } from 'react'
 import { useAppStore } from '@/lib/store'
+import { useShallow } from 'zustand/react/shallow'
 import type { Task } from '@/lib/types'
 import { isRepeatTaskCompletedToday } from '@/lib/hooks'
 import type { RepeatTaskCompletion } from '@/lib/types'
@@ -37,7 +38,13 @@ function isRepeatTaskDueForDate(t: Task, targetDate: Date, mode: 'equal' | 'lte'
 }
 
 export function useSmartLists() {
-  const { tasks, repeatCompletions } = useAppStore()
+  // 用 useShallow 只订阅 tasks/repeatCompletions，避免整个 store 的每次 setState 都触发重渲染
+  const { tasks, repeatCompletions } = useAppStore(
+    useShallow((state) => ({
+      tasks: state.tasks,
+      repeatCompletions: state.repeatCompletions,
+    }))
+  )
 
   const [dateKey, setDateKey] = useState(() => new Date().toDateString())
 
@@ -181,10 +188,14 @@ export function useSmartLists() {
     }))
   }, [tasks, repeatCompletions, today, tomorrow, next7Days])
 
-  const getSmartListTasks = (listId: string) => {
-    const list = smartLists.find(l => l.id === listId)
-    return list ? list.filter(tasks) : []
-  }
+  // 稳定引用，避免下游 useMemo 依赖被每次渲染的新函数击穿
+  const getSmartListTasks = useCallback(
+    (listId: string) => {
+      const list = smartLists.find(l => l.id === listId)
+      return list ? list.filter(tasks) : []
+    },
+    [smartLists, tasks]
+  )
 
   return { smartLists, getSmartListTasks }
 }

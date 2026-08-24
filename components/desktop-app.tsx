@@ -28,6 +28,9 @@ import { ensurePomodoroEngine } from '@/lib/pomodoro-engine'
 import { useAutoCleanup } from '@/lib/hooks'
 import { useDarkModeSchedule } from '@/lib/use-dark-mode-schedule'
 import { useIdleDetector } from '@/lib/use-idle-detector'
+import { useActivityTracker } from '@/lib/use-activity-tracker'
+import { useShieldSchedule } from '@/lib/use-shield-schedule'
+import { useCalendarSubscriptions } from '@/lib/use-calendar-subscriptions'
 import { VIEW_TITLES } from '@/lib/config'
 import { useKeyboardShortcuts } from '@/lib/shortcuts'
 import { cn } from '@/lib/utils'
@@ -54,6 +57,9 @@ export function DesktopApp() {
   useAutoCleanup()
   useDarkModeSchedule()
   useIdleDetector()
+  useActivityTracker()
+  useShieldSchedule()
+  useCalendarSubscriptions()
 
   useEffect(() => {
     setIsElectron(!!window.electronAPI)
@@ -62,6 +68,8 @@ export function DesktopApp() {
   useEffect(() => {
     ensurePomodoroEngine()
     useAppStore.getState().refreshRepeatTasks()
+    // 网络状态监听（离线模式 / 恢复在线自动重连）
+    import('@/lib/network-monitor').then(({ initNetworkMonitor }) => initNetworkMonitor()).catch(() => {})
     // 启动时恢复加密存储的 LLM API Key（safeStorage 可用时系统级解密）
     void import('@/lib/llm-assistant')
       .then(({ initLLMConfig }) => initLLMConfig())
@@ -73,26 +81,31 @@ export function DesktopApp() {
   useEffect(() => {
     if (!window.electronAPI) return
 
-    window.electronAPI.onMenuNavigate?.((view: string) => {
+    const cleanups: Array<() => void> = []
+    const off = (fn: (() => void) | undefined) => {
+      if (typeof fn === 'function') cleanups.push(fn)
+    }
+
+    off(window.electronAPI.onMenuNavigate?.((view: string) => {
       const validViews = ['focus', 'tasks', 'habits', 'dashboard', 'goals', 'calendar', 'anniversaries', 'analytics', 'settings', 'time-block', 'journal'] as const
       if (validViews.includes(view as typeof validViews[number])) {
         useAppStore.getState().setActiveView(view as typeof validViews[number])
       }
-    })
-    window.electronAPI.onMenuNewTask?.(() => {
+    }))
+    off(window.electronAPI.onMenuNewTask?.(() => {
       useAppStore.getState().setActiveView('tasks')
-    })
-    window.electronAPI.onMenuQuickAdd?.(() => {
+    }))
+    off(window.electronAPI.onMenuQuickAdd?.(() => {
       useAppStore.getState().setActiveView('tasks')
-    })
-    window.electronAPI.onMenuStartFocus?.(() => {
+    }))
+    off(window.electronAPI.onMenuStartFocus?.(() => {
       useAppStore.getState().setActiveView('focus')
-    })
-    window.electronAPI.onTrayTogglePomodoro?.(() => {
+    }))
+    off(window.electronAPI.onTrayTogglePomodoro?.(() => {
       useAppStore.getState().setActiveView('focus')
       window.dispatchEvent(new CustomEvent('focusflow:toggle-pomodoro'))
-    })
-    window.electronAPI.onClipboardCapture?.((data: { text: string; type: string }) => {
+    }))
+    off(window.electronAPI.onClipboardCapture?.((data: { text: string; type: string }) => {
       let title = data.text
       try {
         const hostname = new URL(data.text).hostname.replace(/^www\./, '')
@@ -110,7 +123,8 @@ export function DesktopApp() {
       })
       useAppStore.getState().setActiveView('tasks')
       toast.success('已从剪贴板创建任务', { description: title })
-    })
+    }))
+    return () => cleanups.forEach((fn) => fn())
   }, [])
 
   useEffect(() => {

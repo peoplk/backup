@@ -28,6 +28,12 @@ import type {
   FocusShieldConfig,
   FocusShieldItem,
   FocusShieldMode,
+  FocusShieldScheduleState,
+  FocusShieldWindow,
+  ActivitySettings,
+  ActivityDay,
+  SubscribedCalendar,
+  ExternalCalendarEvent,
   TaskReminder,
   SavedFilter,
   FilterCriteria,
@@ -114,6 +120,7 @@ export interface AppState {
   deleteHabit: (id: string) => void
   checkInHabit: (habitId: string, date: Date, completed: boolean, note?: string, value?: number) => void
   useStreakFreeze: (habitId: string) => void
+  batchCheckInHabits: (habitIds: string[], dates: Date[]) => void
 
   anniversaries: Anniversary[]
   addAnniversary: (anniversary: Omit<Anniversary, 'id' | 'createdAt'>) => void
@@ -260,6 +267,25 @@ export interface AppState {
   deleteFocusShieldItem: (id: string) => void
   toggleFocusShieldItem: (id: string) => void
   setFocusShieldMode: (mode: FocusShieldMode) => void
+
+  focusShieldSchedule: FocusShieldScheduleState
+  updateFocusShieldSchedule: (updates: Partial<FocusShieldScheduleState>) => void
+  upsertShieldWindow: (win: Omit<FocusShieldWindow, 'id'> & { id?: string }) => void
+  removeShieldWindow: (id: string) => void
+
+  activitySettings: ActivitySettings
+  activityDays: ActivityDay[]
+  setActivityEnabled: (enabled: boolean) => void
+  recordActivitySample: (sample: { app: string; title?: string; seconds: number }) => void
+  clearActivityData: () => void
+
+  subscribedCalendars: SubscribedCalendar[]
+  externalEvents: ExternalCalendarEvent[]
+  addSubscribedCalendar: (cal: { name: string; url: string; color?: string }) => SubscribedCalendar | null
+  updateSubscribedCalendar: (id: string, updates: Partial<SubscribedCalendar>) => void
+  removeSubscribedCalendar: (id: string) => void
+  toggleSubscribedCalendar: (id: string) => void
+  setExternalEvents: (calendarId: string, events: ExternalCalendarEvent[]) => void
 
   savedFilters: SavedFilter[]
   addSavedFilter: (name: string, criteria: FilterCriteria) => void

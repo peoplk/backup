@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Trophy, X, Sparkles, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -32,9 +32,19 @@ export function GoalCelebration({ open, onClose, streakDays }: GoalCelebrationPr
     }
   }, [open])
 
-  if (!open) return null
+  // 祝福语与星星参数只在打开时随机一次，避免每次渲染重随导致闪烁
+  const { text, stars } = useMemo(() => {
+    const t = ENCOURAGE[Math.floor(Math.random() * ENCOURAGE.length)]
+    const s = Array.from({ length: 24 }).map(() => ({
+      top: Math.random() * 100,
+      left: Math.random() * 100,
+      delay: Math.random() * 0.6,
+      opacity: 0.4 + Math.random() * 0.6,
+    }))
+    return { text: t, stars: s }
+  }, [open])
 
-  const text = ENCOURAGE[Math.floor(Math.random() * ENCOURAGE.length)]
+  if (!open) return null
 
   return (
     <div
@@ -46,15 +56,15 @@ export function GoalCelebration({ open, onClose, streakDays }: GoalCelebrationPr
     >
       <div className="absolute inset-0 bg-background/60 backdrop-blur-sm" />
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        {Array.from({ length: 24 }).map((_, i) => (
+        {stars.map((star, i) => (
           <Star
             key={i}
             className="absolute h-4 w-4 text-amber-400 animate-pulse"
             style={{
-              top: `${Math.random() * 100}%`,
-              left: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 0.6}s`,
-              opacity: 0.4 + Math.random() * 0.6,
+              top: `${star.top}%`,
+              left: `${star.left}%`,
+              animationDelay: `${star.delay}s`,
+              opacity: star.opacity,
             }}
           />
         ))}

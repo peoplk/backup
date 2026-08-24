@@ -12,7 +12,7 @@ export type RemoteSyncStatus = {
 }
 
 export interface SyncStoreBaseState {
-  status: 'idle' | 'syncing' | 'synced' | 'error'
+  status: 'idle' | 'syncing' | 'synced' | 'error' | 'offline'
   lastSyncAt: Date | null
   error: string | null
   conflicts: SyncConflict[]
@@ -63,6 +63,7 @@ export interface SyncStoreHelpers {
   getUnsubscribe: () => (() => void) | null
   setUnsubscribe: (fn: (() => void) | null) => void
   getSyncDataCallback: () => ((data: Record<string, unknown>) => void) | null
+  getSyncDataProvider: () => (() => Record<string, unknown>) | null
 }
 
 const SYNC_ARRAY_KEYS = ['tasks', 'habits', 'goals', 'anniversaries', 'projects', 'tags']
@@ -80,7 +81,7 @@ function normalizeForCompare(value: unknown): unknown {
   return value
 }
 
-function detectDataConflicts(
+export function detectDataConflicts(
   localData: Record<string, unknown>,
   remoteData: Record<string, unknown>,
 ): SyncConflict[] {
@@ -133,6 +134,7 @@ export function createSyncStore<TExtra extends Record<string, unknown> = {}>(
     getUnsubscribe: () => unsubscribe,
     setUnsubscribe: (fn) => { unsubscribe = fn },
     getSyncDataCallback: () => syncDataCallback,
+    getSyncDataProvider: () => syncDataProvider,
   }
 
   const useStore = create<SyncStoreBaseState>((set, get) => ({
@@ -163,13 +165,19 @@ export function createSyncStore<TExtra extends Record<string, unknown> = {}>(
 
         unsubscribe = config.subscribeToRemote(userId, async (data) => {
           let finalData = data
+          let localSnapshot: Record<string, unknown> | null = null
           try {
             const localData = syncDataProvider?.()
             if (localData && Object.keys(localData).length > 0) {
+              localSnapshot = localData
               finalData = await config.mergeLocalAndRemote(userId, localData)
             }
           } catch {
             finalData = data
+          }
+          if (localSnapshot && finalData !== data) {
+            const conflicts = detectDataConflicts(localSnapshot, data)
+            if (conflicts.length > 0) set({ conflicts })
           }
           syncDataCallback?.(finalData)
           set({ status: 'synced', lastSyncAt: new Date(), error: null })

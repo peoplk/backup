@@ -1,8 +1,7 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import { useAppStore } from '@/lib/store'
-import { useDataLink } from '@/lib/data-link-service'
 import { useShallow } from 'zustand/react/shallow'
 import {
   useStats,
@@ -69,13 +68,10 @@ export function DashboardView() {
     checkInHabit: state.checkInHabit,
   })))
 
-  const dataLink = useDataLink()
-
   const handleCompleteTask = (taskId: string) => {
     const task = tasks.find((t) => t.id === taskId)
     if (task && task.status !== 'done') {
       completeTask(taskId)
-      dataLink.handleTaskCompletion(taskId)
     }
   }
 

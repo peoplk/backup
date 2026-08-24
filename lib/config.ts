@@ -20,6 +20,7 @@ export const NAV_ITEMS = [
   { id: 'habits' as const, label: '习惯' },
   { id: 'goals' as const, label: '目标' },
   { id: 'calendar' as const, label: '日历' },
+  { id: 'time-block' as const, label: '时间块' },
   { id: 'anniversaries' as const, label: '纪念日' },
   { id: 'journal' as const, label: '日记' },
   { id: 'analytics' as const, label: '统计' },
@@ -106,11 +107,11 @@ export const VIEW_TITLES: Record<string, string> = {
   habits: '习惯',
   goals: '目标',
   calendar: '日历',
+  'time-block': '时间块',
   anniversaries: '纪念日',
   journal: '每日日记',
   analytics: '统计',
   settings: '设置',
-  'time-block': '日历',
 }
 
 export const NOTIFICATION_CONFIG = {

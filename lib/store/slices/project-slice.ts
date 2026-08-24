@@ -30,7 +30,37 @@ export const createProjectSlice = (
       ),
     })),
   deleteProject: (id: string) =>
-    set((state) => ({
-      projects: state.projects.filter((p) => p.id !== id),
-    })),
+    set((state) => {
+      const project = state.projects.find((p) => p.id === id)
+      if (!project) return state
+      const childIds = new Set<string>()
+      const collect = (pid: string) => {
+        for (const p of state.projects) {
+          if (p.parentId === pid && !childIds.has(p.id)) {
+            childIds.add(p.id)
+            collect(p.id)
+          }
+        }
+      }
+      collect(id)
+      const removedIds = new Set([id, ...childIds])
+      const removedNames = new Set(
+        state.projects.filter((p) => removedIds.has(p.id)).map((p) => p.name)
+      )
+      return {
+        projects: state.projects.filter((p) => !removedIds.has(p.id)),
+        // 清理任务中指向被删项目的引用
+        tasks: state.tasks.map((t) =>
+          t.project && removedNames.has(t.project)
+            ? { ...t, project: undefined }
+            : t
+        ),
+        // 清理时间记录中指向被删项目的引用
+        timeEntries: state.timeEntries.map((e) =>
+          e.project && removedNames.has(e.project)
+            ? { ...e, project: '未分类', projectId: undefined }
+            : e
+        ),
+      }
+    }),
 })

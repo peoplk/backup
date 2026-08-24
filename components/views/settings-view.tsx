@@ -6,7 +6,7 @@ import { useS3SyncStore, pushDataToS3, pullDataFromS3, resolveS3Conflict } from 
 import { getIsFirebaseConfigured, getFirebaseConfig } from '@/lib/firebase'
 import type { FirebaseConfigInput } from '@/lib/firebase'
 import { getIsS3Configured, getS3Config, saveS3Config, S3_PRESET_SERVICES, type S3ConfigInput } from '@/lib/s3-sync'
-import { getCredentialVaultStatus } from '@/lib/credential-vault'
+import { getCredentialVaultStatus, getCredentialVaultStatusAsync } from '@/lib/credential-vault'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { useShallow } from 'zustand/react/shallow'
 import { Button } from '@/components/ui/button'
@@ -364,7 +364,11 @@ export function SettingsView() {
   const syncStore = useSyncStore()
   const s3SyncStore = useS3SyncStore()
   const [llmConfig, setLLMConfigState] = useState(() => getLLMConfig())
-  const vaultStatus = getCredentialVaultStatus()
+  const [vaultStatus, setVaultStatus] = useState(() => getCredentialVaultStatus())
+  // Electron 下 safeStorage 可能被系统禁用，异步刷新真实状态以显示准确警告
+  useEffect(() => {
+    getCredentialVaultStatusAsync().then(setVaultStatus).catch(() => {})
+  }, [])
   const isPlainStorage = vaultStatus.engine === 'none'
   const [showLLMKey, setShowLLMKey] = useState(false)
   const [llmTesting, setLLMTesting] = useState(false)

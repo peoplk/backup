@@ -36,6 +36,10 @@ export interface HabitCheckContext {
 class DataLinkService {
   private static instance: DataLinkService
   private eventListeners: Map<string, Array<(event: DataLinkEvent) => void>> = new Map()
+  // 防重复计分：taskId -> 已发过积分的完成时间戳（ISO）
+  private awardedCompletionKeys = new Map<string, string>()
+  // 项目时长增量记账：taskId -> 已计入项目的总时长，只补记增量
+  private creditedTaskTime = new Map<string, number>()
 
   static getInstance(): DataLinkService {
     if (!DataLinkService.instance) {
@@ -62,13 +66,20 @@ class DataLinkService {
   }
 
   private emit(event: DataLinkEvent): void {
-    const listeners = this.eventListeners.get(event.type)
-    if (listeners) {
-      listeners.forEach(callback => callback(event))
+    // 单个订阅者抛错不应中断其余监听者与调用方流程
+    for (const callback of this.eventListeners.get(event.type) ?? []) {
+      try {
+        callback(event)
+      } catch (err) {
+        console.error(`[data-link] listener for "${event.type}" failed:`, err)
+      }
     }
-    const allListeners = this.eventListeners.get('*')
-    if (allListeners) {
-      allListeners.forEach(callback => callback(event))
+    for (const callback of this.eventListeners.get('*') ?? []) {
+      try {
+        callback(event)
+      } catch (err) {
+        console.error(`[data-link] wildcard listener failed:`, err)
+      }
     }
   }
 
@@ -105,12 +116,23 @@ class DataLinkService {
       this.updateGoalProgress(goalId)
     })
 
+    // 项目时长按增量入账：只补记上次记账后的新增时长，
+    // 避免反复切换完成态时把全部历史 session 时长重复累加
     if (task.project) {
-      this.updateProjectTime(task.project, totalTimeSpent)
+      const credited = this.creditedTaskTime.get(taskId) ?? 0
+      const delta = Math.max(0, totalTimeSpent - credited)
+      if (delta > 0) {
+        this.updateProjectTime(task.project, delta)
+        this.creditedTaskTime.set(taskId, credited + delta)
+      }
     }
 
-    state.checkAchievements()
-    state.addPoints(10)
+    // 积分只在新完成事件时发放一次（同一 completedAt 不重复计 10 分）
+    const completionKey = task.completedAt ? new Date(task.completedAt).toISOString() : ''
+    if (completionKey && this.awardedCompletionKeys.get(taskId) !== completionKey) {
+      this.awardedCompletionKeys.set(taskId, completionKey)
+      state.addPoints(10)
+    }
 
     return context
   }
@@ -166,7 +188,10 @@ class DataLinkService {
     } else if (entry.project) {
       this.updateProjectTime(entry.project, entry.duration)
     }
-    state.addPoints(Math.max(1, Math.round(entry.duration / 60 / 5)))
+    // 零时长条目不计分，避免空记录刷分
+    if (entry.duration > 0) {
+      state.addPoints(Math.round(entry.duration / 60 / 5))
+    }
   }
 
   handleHabitCheck(habitId: string, date: Date, completed: boolean): HabitCheckContext | null {
@@ -240,6 +265,11 @@ class DataLinkService {
         relatedId: task.id,
       })
     }
+  }
+
+  /** 重算某个目标的进度（任务完成率 + 里程碑完成率）。 */
+  updateGoalProgressAfterLink(goalId: string): void {
+    this.updateGoalProgress(goalId)
   }
 
   private updateGoalProgress(goalId: string): void {
@@ -430,6 +460,34 @@ class DataLinkService {
     }
   }
 
+  linkHabitToGoal(habitId: string, goalId: string): void {
+    const state = useAppStore.getState()
+    const goal = state.goals.find(g => g.id === goalId)
+    const habit = state.habits.find(h => h.id === habitId)
+
+    if (goal && habit && !(goal.linkedHabits ?? []).includes(habitId)) {
+      state.updateGoal(goalId, {
+        linkedHabits: [...(goal.linkedHabits ?? []), habitId]
+      })
+      state.updateHabit(habitId, { linkedGoalId: goalId })
+    }
+  }
+
+  unlinkHabitFromGoal(habitId: string, goalId: string): void {
+    const state = useAppStore.getState()
+    const goal = state.goals.find(g => g.id === goalId)
+    const habit = state.habits.find(h => h.id === habitId)
+
+    if (goal) {
+      state.updateGoal(goalId, {
+        linkedHabits: (goal.linkedHabits ?? []).filter(id => id !== habitId)
+      })
+    }
+    if (habit?.linkedGoalId === goalId) {
+      state.updateHabit(habitId, { linkedGoalId: undefined })
+    }
+  }
+
   suggestTaskForPomodoro(): Task | null {
     const state = useAppStore.getState()
     const activeTasks = state.tasks.filter(t => t.status !== 'done' && !t.archived)
@@ -479,6 +537,9 @@ export function useDataLink() {
       getWeeklyStats: () => dataLinkService.getWeeklyStats(),
       linkTaskToGoal: (taskId: string, goalId: string) => dataLinkService.linkTaskToGoal(taskId, goalId),
       unlinkTaskFromGoal: (taskId: string, goalId: string) => dataLinkService.unlinkTaskFromGoal(taskId, goalId),
+      linkHabitToGoal: (habitId: string, goalId: string) => dataLinkService.linkHabitToGoal(habitId, goalId),
+      unlinkHabitFromGoal: (habitId: string, goalId: string) => dataLinkService.unlinkHabitFromGoal(habitId, goalId),
+      updateGoalProgressAfterLink: (goalId: string) => dataLinkService.updateGoalProgressAfterLink(goalId),
       suggestTaskForPomodoro: () => dataLinkService.suggestTaskForPomodoro(),
       subscribe: (eventType: string, callback: (event: DataLinkEvent) => void) =>
         dataLinkService.subscribe(eventType, callback),

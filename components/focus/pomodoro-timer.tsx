@@ -216,9 +216,9 @@ export function PomodoroTimer() {
       }
     }
 
-    if (typeof window !== 'undefined' && window.electronAPI?.onFullScreenChange) {
-      window.electronAPI.onFullScreenChange(handleElectronFullscreenChange)
-    }
+    const off = typeof window !== 'undefined' && window.electronAPI?.onFullScreenChange
+      ? window.electronAPI.onFullScreenChange(handleElectronFullscreenChange)
+      : undefined
 
     const handleBrowserFullscreenChange = () => {
       if (!document.fullscreenElement && isFullscreen) {
@@ -229,6 +229,7 @@ export function PomodoroTimer() {
 
     return () => {
       document.removeEventListener('fullscreenchange', handleBrowserFullscreenChange)
+      if (typeof off === 'function') off()
     }
   }, [isFullscreen])
 

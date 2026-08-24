@@ -22,13 +22,34 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleWidget: () => ipcRenderer.send('toggle-widget'),
   closeWidget: () => ipcRenderer.send('close-widget'),
   quitApp: () => ipcRenderer.send('app-quit'),
-  onMenuNavigate: (callback) => ipcRenderer.on('menu-navigate', (_event, view) => callback(view)),
-  onMenuNewTask: (callback) => ipcRenderer.on('menu-new-task', () => callback()),
-  onMenuQuickAdd: (callback) => ipcRenderer.on('menu-quick-add', () => callback()),
-  onMenuStartFocus: (callback) => ipcRenderer.on('menu-start-focus', () => callback()),
+  // 所有 on* API 返回移除函数，供组件 effect cleanup 调用，防止监听器累积泄漏
+  onMenuNavigate: (callback) => {
+    const listener = (_event, view) => callback(view)
+    ipcRenderer.on('menu-navigate', listener)
+    return () => ipcRenderer.removeListener('menu-navigate', listener)
+  },
+  onMenuNewTask: (callback) => {
+    const listener = () => callback()
+    ipcRenderer.on('menu-new-task', listener)
+    return () => ipcRenderer.removeListener('menu-new-task', listener)
+  },
+  onMenuQuickAdd: (callback) => {
+    const listener = () => callback()
+    ipcRenderer.on('menu-quick-add', listener)
+    return () => ipcRenderer.removeListener('menu-quick-add', listener)
+  },
+  onMenuStartFocus: (callback) => {
+    const listener = () => callback()
+    ipcRenderer.on('menu-start-focus', listener)
+    return () => ipcRenderer.removeListener('menu-start-focus', listener)
+  },
   setFullScreen: (fullscreen) => ipcRenderer.send('set-fullscreen', fullscreen),
   isFullScreen: () => ipcRenderer.invoke('is-fullscreen'),
-  onFullScreenChange: (callback) => ipcRenderer.on('fullscreen-change', (_event, isFullScreen) => callback(isFullScreen)),
+  onFullScreenChange: (callback) => {
+    const listener = (_event, isFullScreen) => callback(isFullScreen)
+    ipcRenderer.on('fullscreen-change', listener)
+    return () => ipcRenderer.removeListener('fullscreen-change', listener)
+  },
 
   // System Shield APIs
   shieldStart: (websites, apps, mode) => ipcRenderer.invoke('shield-start', { websites, apps, mode }),
@@ -46,17 +67,50 @@ contextBridge.exposeInMainWorld('electronAPI', {
   toggleTimerFloat: () => ipcRenderer.send('toggle-timer-float'),
   closeTimerFloat: () => ipcRenderer.send('close-timer-float'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
-  onTrayTogglePomodoro: (callback) => ipcRenderer.on('tray-toggle-pomodoro', () => callback()),
-  onClipboardCapture: (callback) => ipcRenderer.on('clipboard-capture', (_event, data) => callback(data)),
-  onSystemSuspend: (callback) => ipcRenderer.on('system-suspend', () => callback()),
-  onSystemResume: (callback) => ipcRenderer.on('system-resume', () => callback()),
+  printToPDF: (options) => ipcRenderer.invoke('print-to-pdf', options),
+  onTrayTogglePomodoro: (callback) => {
+    const listener = () => callback()
+    ipcRenderer.on('tray-toggle-pomodoro', listener)
+    return () => ipcRenderer.removeListener('tray-toggle-pomodoro', listener)
+  },
+  onClipboardCapture: (callback) => {
+    const listener = (_event, data) => callback(data)
+    ipcRenderer.on('clipboard-capture', listener)
+    return () => ipcRenderer.removeListener('clipboard-capture', listener)
+  },
+  onSystemSuspend: (callback) => {
+    const listener = () => callback()
+    ipcRenderer.on('system-suspend', listener)
+    return () => ipcRenderer.removeListener('system-suspend', listener)
+  },
+  onSystemResume: (callback) => {
+    const listener = () => callback()
+    ipcRenderer.on('system-resume', listener)
+    return () => ipcRenderer.removeListener('system-resume', listener)
+  },
   sendPomodoroState: (state) => ipcRenderer.send('pomodoro-state', state),
-  onPomodoroSync: (callback) => ipcRenderer.on('pomodoro-sync', (_event, data) => callback(data)),
+  onPomodoroSync: (callback) => {
+    const listener = (_event, data) => callback(data)
+    ipcRenderer.on('pomodoro-sync', listener)
+    return () => ipcRenderer.removeListener('pomodoro-sync', listener)
+  },
   sendFloatControl: (action) => ipcRenderer.send('float-control', action),
-  onFloatControl: (callback) => ipcRenderer.on('float-pomodoro-control', (_event, action) => callback(action)),
+  onFloatControl: (callback) => {
+    const listener = (_event, action) => callback(action)
+    ipcRenderer.on('float-pomodoro-control', listener)
+    return () => ipcRenderer.removeListener('float-pomodoro-control', listener)
+  },
 
   // Credential vault (safeStorage)
   credentialVaultAvailable: () => ipcRenderer.invoke('credential-vault-available'),
   credentialEncrypt: (plain) => ipcRenderer.invoke('credential-encrypt', plain),
   credentialDecrypt: (sealed) => ipcRenderer.invoke('credential-decrypt', sealed),
+
+  // Activity timeline tracking (local-only sampling of foreground app)
+  setActivityTracking: (enabled) => ipcRenderer.send('activity-set-enabled', enabled),
+  onActivitySample: (callback) => {
+    const listener = (_event, data) => callback(data)
+    ipcRenderer.on('activity-sample', listener)
+    return () => ipcRenderer.removeListener('activity-sample', listener)
+  },
 })

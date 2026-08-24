@@ -31,9 +31,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: '无效请求体' }, { status: 400 })
   }
 
-  const ip =
-    (request.headers.get('x-forwarded-for')?.split(',')[0] ?? 'unknown').trim() || 'unknown'
-  if (rateLimited(ip)) {
+  // 本地单机服务：不信任可伪造的 X-Forwarded-For，统一按固定 key 限流
+  if (rateLimited('local')) {
     return NextResponse.json({ error: '请求过于频繁，请稍后重试' }, { status: 429 })
   }
 

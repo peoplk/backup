@@ -26,6 +26,14 @@ try {
 
 const gotTheLock = app.requestSingleInstanceLock()
 
+// 全局未捕获异常兜底：记录日志并提示，避免静默崩溃
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', err)
+})
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason)
+})
+
 if (!gotTheLock) {
   app.quit()
 } else {
@@ -70,20 +78,27 @@ function isTrustedSender(event) {
   }
 }
 
+// 仅允许 https 与本应用本地 http 地址交给系统打开，其余协议（file:/ms-msdt:/search-ms: 等）一律丢弃
+function isSafeExternalUrl(rawUrl) {
+  const u = tryParseUrl(rawUrl)
+  if (!u) return false
+  if (u.protocol === 'https:') return true
+  return u.protocol === 'http:' && isLocalAppUrl(rawUrl)
+}
+
 function secureWindow(windowInstance) {
   if (!windowInstance) return
   windowInstance.webContents.setWindowOpenHandler(({ url }) => {
-    const u = tryParseUrl(url)
-    if (u && u.protocol === 'https:') {
-      shell.openExternal(url)
-    } else if (u && u.protocol === 'http:' && isLocalAppUrl(url)) {
+    if (isSafeExternalUrl(url)) {
       shell.openExternal(url)
     }
     return { action: 'deny' }
   })
   windowInstance.webContents.on('will-navigate', (event, url) => {
-    if (!isLocalAppUrl(url)) {
-      event.preventDefault()
+    if (isLocalAppUrl(url)) return
+    event.preventDefault()
+    // 与 setWindowOpenHandler 同一协议策略：非 https/本地地址不交给系统，防止 Follina 类协议滥用
+    if (isSafeExternalUrl(url)) {
       shell.openExternal(url)
     }
   })
@@ -356,7 +371,29 @@ function startNextServer() {
       reject(err)
     })
 
-    setTimeout(resolve, 2000)
+    // 轮询健康检查：最多等待 20s，替代固定 2s 的竞态等待
+    let attempts = 0
+    const checkInterval = setInterval(async () => {
+      attempts++
+      try {
+        // 带超时的健康检查，防止悬挂请求堆积
+        const res = await fetch(`http://127.0.0.1:${PORT}`, { signal: AbortSignal.timeout(2000) })
+        if (res.ok) {
+          clearInterval(checkInterval)
+          resolve()
+          return
+        }
+      } catch {
+        // server 尚未就绪，继续轮询
+      }
+      if (attempts >= 40) {
+        clearInterval(checkInterval)
+        console.error('Next.js server failed to become ready in time')
+        // 启动失败时回收子进程，避免残留 node 进程常驻
+        stopNextServer()
+        reject(new Error('本地服务启动超时'))
+      }
+    }, 500)
   })
 }
 
@@ -417,6 +454,70 @@ function stopClipboardWatcher() {
   }
 }
 
+// ─── 自动时间线追踪：周期采样前台应用（仅 Windows，本地存储不上传） ───
+const ACTIVITY_INTERVAL_MS = 30000
+let activityTimer = null
+let activityPsProc = null
+const isWindowsPlatform = process.platform === 'win32'
+
+// 单次查询前台窗口的进程名与标题（PowerShell + Win32 API）
+// 通过 -EncodedCommand 传递，彻底规避多层引号转义问题
+const FOREGROUND_QUERY_SCRIPT = "$sig='using System;using System.Runtime.InteropServices;public class FFWin{[DllImport(\"user32.dll\")]public static extern IntPtr GetForegroundWindow();[DllImport(\"user32.dll\")]public static extern uint GetWindowThreadProcessId(IntPtr p,out uint id);}';Add-Type $sig;$h=[FFWin]::GetForegroundWindow();$id=0;[void][FFWin]::GetWindowThreadProcessId($h,[ref]$id);$p=Get-Process -Id $id -ErrorAction SilentlyContinue;if($p -and $p.ProcessName){$t=$p.MainWindowTitle;if($t){$t=$t.Substring(0,[Math]::Min(120,$t.Length))};\"$($p.ProcessName)|$t\"}"
+const FOREGROUND_QUERY_ENCODED = Buffer.from(FOREGROUND_QUERY_SCRIPT, 'utf16le').toString('base64')
+
+function stopActivitySampling() {
+  if (activityTimer) {
+    clearInterval(activityTimer)
+    activityTimer = null
+  }
+  if (activityPsProc) {
+    try { activityPsProc.kill() } catch { /* 忽略 */ }
+    activityPsProc = null
+  }
+}
+
+function startActivitySampling() {
+  if (activityTimer || !isWindowsPlatform) return
+  const broadcast = (app, title) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      try { win.webContents.send('activity-sample', { app, title, intervalSec: Math.round(ACTIVITY_INTERVAL_MS / 1000) }) } catch { /* 忽略 */ }
+    }
+  }
+  activityTimer = setInterval(() => {
+    if (activityPsProc) return // 上一次查询尚未返回，跳过本轮
+    try {
+      activityPsProc = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', FOREGROUND_QUERY_ENCODED], {
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      })
+      let out = ''
+      const proc = activityPsProc
+      proc.stdout.on('data', (d) => { out += d.toString() })
+      proc.on('close', () => {
+        if (activityPsProc === proc) activityPsProc = null
+        const line = out.trim().split(/\r?\n/).filter(Boolean).pop()
+        if (!line) return
+        const sep = line.indexOf('|')
+        if (sep <= 0) return
+        const app = line.slice(0, sep).trim().slice(0, 64)
+        const title = line.slice(sep + 1).trim().slice(0, 120)
+        if (app) broadcast(app, title)
+      })
+      proc.on('error', () => {
+        if (activityPsProc === proc) activityPsProc = null
+      })
+    } catch {
+      // spawn 失败忽略本轮
+    }
+  }, ACTIVITY_INTERVAL_MS)
+}
+
+ipcMain.on('activity-set-enabled', (event, enabled) => {
+  if (!isTrustedSender(event)) return
+  if (enabled) startActivitySampling()
+  else stopActivitySampling()
+})
+
 function registerGlobalShortcuts() {
   globalShortcut.register('Ctrl+Shift+F', () => {
     toggleMainWindow()
@@ -473,11 +574,13 @@ function setupAutoUpdater() {
   }, 15000)
 }
 
-ipcMain.on('window-minimize', () => {
+ipcMain.on('window-minimize', (event) => {
+  if (!isTrustedSender(event)) return
   mainWindow?.minimize()
 })
 
-ipcMain.on('window-maximize', () => {
+ipcMain.on('window-maximize', (event) => {
+  if (!isTrustedSender(event)) return
   if (mainWindow?.isMaximized()) {
     mainWindow.unmaximize()
   } else {
@@ -485,11 +588,13 @@ ipcMain.on('window-maximize', () => {
   }
 })
 
-ipcMain.on('window-close', () => {
+ipcMain.on('window-close', (event) => {
+  if (!isTrustedSender(event)) return
   mainWindow?.hide()
 })
 
-ipcMain.handle('window-is-maximized', () => {
+ipcMain.handle('window-is-maximized', (event) => {
+  if (!isTrustedSender(event)) return false
   return mainWindow?.isMaximized() ?? false
 })
 
@@ -604,6 +709,44 @@ ipcMain.handle('get-app-version', () => {
   return app.getVersion()
 })
 
+// 打印到 PDF：渲染进程提供 HTML，主进程用隐藏窗口渲染并调起保存对话框
+ipcMain.handle('print-to-pdf', async (event, { html, fileName } = {}) => {
+  if (!isTrustedSender(event)) return { success: false, message: '非法调用' }
+  if (typeof html !== 'string' || html.length === 0) return { success: false, message: '内容为空' }
+  // 上限 2MB，防止异常/恶意渲染请求造成内存压力
+  if (html.length > 2_000_000) return { success: false, message: '内容过大' }
+  if (typeof fileName !== 'string') return { success: false, message: '缺少文件名' }
+  const safeName = fileName.replace(/[\\/:*?"<>|]/g, '_').replace(/\.pdf$/i, '') + '.pdf'
+  let printWin = null
+  try {
+    printWin = new BrowserWindow({
+      show: false,
+      webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
+    })
+    await printWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
+    const pdfData = await printWin.webContents.printToPDF({
+      pageSize: 'A4',
+      printBackground: true,
+      margins: { marginType: 'printableArea' },
+    })
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      title: '导出 PDF',
+      defaultPath: safeName,
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    })
+    if (canceled || !filePath) return { success: false, canceled: true }
+    const fs = require('fs')
+    await fs.promises.writeFile(filePath, pdfData)
+    return { success: true, filePath }
+  } catch (err) {
+    console.error('printToPDF failed', err)
+    return { success: false, message: err instanceof Error ? err.message : '导出失败' }
+  } finally {
+    // 无论成功失败都销毁隐藏窗口，避免累积泄漏
+    if (printWin && !printWin.isDestroyed()) printWin.destroy()
+  }
+})
+
 // 凭据安全存储：使用操作系统级加密（Windows DPAPI / macOS Keychain）
 ipcMain.handle('credential-vault-available', () => {
   try {
@@ -617,10 +760,16 @@ ipcMain.handle('credential-encrypt', (event, plain) => {
   if (!isTrustedSender(event)) return ''
   if (typeof plain !== 'string' || !plain) return ''
   try {
-    if (!safeStorage.isEncryptionAvailable()) return plain
+    // safeStorage 不可用或加密失败时返回空串，绝不静默回退为明文；
+    // 由渲染层感知后显式降级（值带 plain: 标记，可被检测与提示）
+    if (!safeStorage.isEncryptionAvailable()) {
+      console.warn('[credential-vault] safeStorage unavailable, refusing to store plaintext')
+      return ''
+    }
     return safeStorage.encryptString(plain).toString('base64')
-  } catch {
-    return plain
+  } catch (err) {
+    console.error('[credential-vault] encrypt failed:', err)
+    return ''
   }
 })
 
@@ -628,9 +777,10 @@ ipcMain.handle('credential-decrypt', (event, sealed) => {
   if (!isTrustedSender(event)) return ''
   if (typeof sealed !== 'string' || !sealed) return ''
   try {
-    if (!safeStorage.isEncryptionAvailable()) return sealed
+    if (!safeStorage.isEncryptionAvailable()) return ''
     return safeStorage.decryptString(Buffer.from(sealed, 'base64'))
-  } catch {
+  } catch (err) {
+    console.error('[credential-vault] decrypt failed:', err)
     return ''
   }
 })
@@ -638,7 +788,7 @@ ipcMain.handle('credential-decrypt', (event, sealed) => {
 app.whenReady().then(async () => {
   try {
     Menu.setApplicationMenu(null)
-    registerSystemShieldIPC()
+    registerSystemShieldIPC(isTrustedSender)
     registerPowerMonitor()
     registerGlobalShortcuts()
     await startNextServer()

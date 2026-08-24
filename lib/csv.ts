@@ -117,6 +117,10 @@ export function parseCSV(content: string): ParsedTaskRow[] {
   const validStatuses = ['todo', 'in-progress', 'done', 'cancelled']
   const validTypes = ['task', 'event', 'reminder']
 
+  const priorityMap: Record<string, string> = { 紧急: 'urgent', 高: 'high', 中: 'medium', 低: 'low' }
+  const statusMap: Record<string, string> = { 未开始: 'todo', 进行中: 'in-progress', 已完成: 'done', 已取消: 'cancelled' }
+  const typeMap: Record<string, string> = { 任务: 'task', 事件: 'event', 提醒: 'reminder' }
+
   const result: ParsedTaskRow[] = []
   for (const r of dataRows) {
     const get = (name: string) => {
@@ -126,22 +130,22 @@ export function parseCSV(content: string): ParsedTaskRow[] {
     const title = get('title') || get('任务标题')
     if (!title) continue
     const rowData: ParsedTaskRow = { title }
-    const priority = get('priority')
+    const priority = priorityMap[get('priority') || get('优先级')] || get('priority') || get('优先级')
     if (validPriorities.includes(priority)) rowData.priority = priority as ParsedTaskRow['priority']
-    const status = get('status')
+    const status = statusMap[get('status') || get('状态')] || get('status') || get('状态')
     if (validStatuses.includes(status)) rowData.status = status as ParsedTaskRow['status']
     const dueDate = get('dueDate') || get('日期')
     if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(dueDate)) rowData.dueDate = dueDate
     const project = get('project') || get('项目')
     if (project) rowData.project = project
-    const tags = get('tags')
+    const tags = get('tags') || get('标签')
     if (tags) rowData.tags = tags.split('|').map((t) => t.trim()).filter(Boolean)
-    const est = get('estimatedpomodoros')
+    const est = get('estimatedpomodoros') || get('预估番茄数') || get('预计番茄数')
     const estNum = parseInt(est, 10)
     if (Number.isFinite(estNum) && estNum > 0) rowData.estimatedPomodoros = Math.min(12, estNum)
-    const notes = get('notes')
+    const notes = get('notes') || get('备注')
     if (notes) rowData.notes = notes
-    const type = get('type')
+    const type = typeMap[get('type') || get('类型')] || get('type') || get('类型')
     if (validTypes.includes(type)) rowData.type = type as ParsedTaskRow['type']
     result.push(rowData)
   }

@@ -10,15 +10,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "export": "set BUILD_MODE=tauri && set NODE_OPTIONS=--max-old-space-size=4096 && next build",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
-    "electron:build": "npm run build && npm run build:server && electron-builder",
-    "electron:build:win": "npm run build && npm run build:server && electron-builder --win --x64",
-    "electron:build:mac": "npm run build && npm run build:server && electron-builder --mac",
-    "build:server": "node scripts/build-server.js",
-    "tauri": "tauri",
-    "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "electron:build": "npm run build && npm run build:server && node scripts/build-electron.js",
+    "electron:build:win": "npm run build && npm run build:server && node scripts/build-electron.js --win --x64",
+    "electron:build:mac": "npm run build && npm run build:server && node scripts/build-electron.js --mac",
+    "build:server": "node scripts/build-server.js"
   },
   "build": {
     "appId": "com.focusflow.app",
@@ -122,7 +118,6 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.2.2",
-    "@tauri-apps/cli": "2.10.1",
     "@types/node": "22.19.17",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",

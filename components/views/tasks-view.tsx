@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react'
 import { useAppStore } from '@/lib/store'
@@ -95,7 +95,6 @@ import { TaskDependencyManager, TaskDependencyBadge } from '@/components/task-de
 import { QuickAddTask } from '@/components/quick-add-task'
 import { TaskQuickActions } from '@/components/task-quick-actions'
 import { parseSmartInput } from '@/lib/smart-input'
-import { useDataLink } from '@/lib/data-link-service'
 import { DndContext, DragOverlay, closestCorners, PointerSensor, useSensor, useSensors, DragStartEvent, DragEndEvent, DragOverEvent } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -314,13 +313,10 @@ export function TasksView() {
     savedFilters: state.savedFilters,
   })))
   
-  const dataLink = useDataLink()
-  
   const handleCompleteTask = (taskId: string) => {
     const task = tasks.find(t => t.id === taskId)
     if (task && task.status !== 'done') {
       completeTask(taskId)
-      dataLink.handleTaskCompletion(taskId)
     }
   }
   
@@ -394,8 +390,12 @@ export function TasksView() {
   const allTags = useMemo(() => [...new Set(tasks.flatMap((t) => t.tags))], [tasks])
   const { smartLists, getSmartListTasks } = useSmartLists()
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  // 稳定 today 引用，避免每次渲染击穿下游 useCallback/useMemo 依赖链
+  const today = useMemo(() => {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    return d
+  }, [])
 
   const filteredTasks = useMemo(() => {
     let filtered = tasks.filter((task) => {
@@ -471,12 +471,13 @@ export function TasksView() {
     }
   }, [filteredTasks, isDoneVisibleToday])
 
-  const matrixGroups = useMemo(() => {
+    const matrixGroups = useMemo(() => {
     const activeTasks = filteredTasks.filter(t => t.status !== 'done' || !!t.repeatRule)
     const todayDate = new Date()
     todayDate.setHours(0, 0, 0, 0)
     const threeDaysLater = new Date(todayDate)
     threeDaysLater.setDate(threeDaysLater.getDate() + 3)
+
     const isUrgent = (t: Task) => {
       if (t.priority === 'urgent') return true
       if (t.dueDate) {

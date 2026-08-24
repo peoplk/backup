@@ -11,6 +11,12 @@ export interface ShieldStatus {
   appsBlocked: string[]
 }
 
+export interface ActivitySampleData {
+  app: string
+  title: string
+  intervalSec: number
+}
+
 export interface ElectronAPI {
   minimizeWindow: () => void
   maximizeWindow: () => void
@@ -19,13 +25,13 @@ export interface ElectronAPI {
   toggleWidget: () => void
   closeWidget: () => void
   quitApp: () => void
-  onMenuNavigate: (callback: (view: string) => void) => void
-  onMenuNewTask: (callback: () => void) => void
-  onMenuQuickAdd: (callback: () => void) => void
-  onMenuStartFocus: (callback: () => void) => void
+  onMenuNavigate: (callback: (view: string) => void) => (() => void) | undefined
+  onMenuNewTask: (callback: () => void) => (() => void) | undefined
+  onMenuQuickAdd: (callback: () => void) => (() => void) | undefined
+  onMenuStartFocus: (callback: () => void) => (() => void) | undefined
   setFullScreen: (fullscreen: boolean) => void
   isFullScreen: () => Promise<boolean>
-  onFullScreenChange: (callback: (isFullScreen: boolean) => void) => void
+  onFullScreenChange: (callback: (isFullScreen: boolean) => void) => (() => void) | undefined
 
   shieldStart: (
     websites: string[],
@@ -49,20 +55,24 @@ export interface ElectronAPI {
   toggleTimerFloat: () => void
   closeTimerFloat: () => void
   getAppVersion: () => Promise<string>
-  onTrayTogglePomodoro: (callback: () => void) => void
-  onClipboardCapture: (callback: (data: { text: string; type: string }) => void) => void
-  onSystemSuspend: (callback: () => void) => void
-  onSystemResume: (callback: () => void) => void
+  onTrayTogglePomodoro: (callback: () => void) => (() => void) | undefined
+  onClipboardCapture: (callback: (data: { text: string; type: string }) => void) => (() => void) | undefined
+  onSystemSuspend: (callback: () => void) => (() => void) | undefined
+  onSystemResume: (callback: () => void) => (() => void) | undefined
   sendPomodoroState: (state?: PomodoroSyncState) => void
-  onPomodoroSync: (callback: (state: PomodoroSyncState) => void) => void
+  onPomodoroSync: (callback: (state: PomodoroSyncState) => void) => (() => void) | undefined
   sendFloatControl: (action: string) => void
-  onFloatControl: (callback: (action: string) => void) => void
+  onFloatControl: (callback: (action: string) => void) => (() => void) | undefined
   printToPDF?: (opts: { html: string; fileName: string }) => Promise<{ success: boolean }>
 
   // 凭据安全存储（safeStorage）
   credentialVaultAvailable: () => Promise<boolean>
   credentialEncrypt: (plain: string) => Promise<string>
   credentialDecrypt: (sealed: string) => Promise<string>
+
+  // 自动时间线追踪（仅 Windows 生效，本地存储）
+  setActivityTracking?: (enabled: boolean) => void
+  onActivitySample?: (callback: (data: ActivitySampleData) => void) => (() => void) | undefined
 }
 
 declare global {

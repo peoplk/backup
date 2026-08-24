@@ -1,8 +1,7 @@
-'use client'
+﻿'use client'
 
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useAppStore } from '@/lib/store'
-import { useDataLink } from '@/lib/data-link-service'
 import type { TimeBlock } from '@/lib/types'
 import { useShallow } from 'zustand/react/shallow'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -46,6 +45,7 @@ import {
   CircleDot,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { CalendarSubscriptionsManager } from '@/components/calendar-subscriptions-manager'
 import { Textarea } from '@/components/ui/textarea'
 import { WEEK_DAYS, WEEK_DAYS_FULL, MONTH_NAMES, TIME_SLOTS, TASK_TYPE_CONFIG, TIME_BLOCK_CATEGORY_CONFIG } from '@/lib/config'
 
@@ -71,6 +71,7 @@ export function CalendarView() {
     tasks, timeEntries, pomodoroSessions, habits, habitCheckIns, anniversaries,
     completeTask, uncompleteTask,
     timeBlocks, addTimeBlock, updateTimeBlock, deleteTimeBlock,
+    subscribedCalendars, externalEvents,
   } = useAppStore(useShallow((s) => ({
     tasks: s.tasks,
     timeEntries: s.timeEntries,
@@ -84,6 +85,8 @@ export function CalendarView() {
     addTimeBlock: s.addTimeBlock,
     updateTimeBlock: s.updateTimeBlock,
     deleteTimeBlock: s.deleteTimeBlock,
+    subscribedCalendars: s.subscribedCalendars,
+    externalEvents: s.externalEvents,
   })))
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState(new Date())
@@ -100,8 +103,12 @@ export function CalendarView() {
     taskId: '',
   })
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  // 稳定 today 引用，避免每次渲染新建 Date 击穿 memo/比较逻辑
+  const today = useMemo(() => {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    return d
+  }, [])
 
   const resetNewBlock = () => {
     setNewBlock({
@@ -159,13 +166,10 @@ export function CalendarView() {
     setIsAddDialogOpen(false)
   }
 
-  const dataLink = useDataLink()
-
   const handleCompleteTask = (taskId: string) => {
     const task = tasks.find((t) => t.id === taskId)
     if (task && task.status !== 'done') {
       completeTask(taskId)
-      dataLink.handleTaskCompletion(taskId)
     }
   }
 
@@ -251,6 +255,26 @@ export function CalendarView() {
       })
     }
 
+    // 外部订阅日历（ICS 只读聚合）：按所属日历配色展示
+    if (externalEvents.length > 0) {
+      const calById = new Map(subscribedCalendars.map((c) => [c.id, c]))
+      externalEvents.forEach((ev) => {
+        if (new Date(ev.start).toDateString() !== dateStr) return
+        const cal = calById.get(ev.calendarId)
+        events.push({
+          type: 'external',
+          title: ev.title,
+          colorClass: 'text-violet-600 dark:text-violet-400',
+          bgClass: 'bg-violet-500/10 border-l-2',
+          time: ev.allDay
+            ? undefined
+            : new Date(ev.start).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+          id: `ext:${ev.calendarId}:${ev.id}`,
+        })
+        void cal // 配色由日历管理面板维护，列表内统一紫色系以区分本地事件
+      })
+    }
+
     return events.sort((a, b) => (a.time || '').localeCompare(b.time || ''))
   }
 
@@ -276,23 +300,31 @@ export function CalendarView() {
     const newDate = new Date(currentDate)
     newDate.setMonth(currentDate.getMonth() + (direction === 'next' ? 1 : -1))
     setCurrentDate(newDate)
+    // 同步选中日期，避免网格与侧栏/头部日期脱节
+    setSelectedDate(newDate)
   }
 
   const navigateWeek = (direction: 'prev' | 'next') => {
     const newDate = new Date(currentDate)
     newDate.setDate(currentDate.getDate() + (direction === 'next' ? 7 : -7))
     setCurrentDate(newDate)
+    setSelectedDate(newDate)
   }
 
   const navigateDay = (direction: 'prev' | 'next') => {
     const newDate = new Date(currentDate)
     newDate.setDate(currentDate.getDate() + (direction === 'next' ? 1 : -1))
     setCurrentDate(newDate)
+    setSelectedDate(newDate)
   }
 
   const days = useMemo(() => getDaysInMonth(currentDate), [currentDate])
   const weekDaysArr = useMemo(() => getWeekDays(currentDate), [currentDate])
-  const selectedDateEvents = useMemo(() => getEventsForDate(selectedDate), [selectedDate, tasks, timeEntries, pomodoroSessions, anniversaries])
+  const selectedDateEvents = useMemo(
+    () => getEventsForDate(selectedDate),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedDate, tasks, timeEntries, pomodoroSessions, anniversaries, externalEvents, subscribedCalendars]
+  )
   const selectedDateStats = useMemo(() => getStatsForDate(selectedDate), [selectedDate, tasks, timeEntries, pomodoroSessions, habitCheckIns])
 
   const selectedDayTasks = useMemo(() => {
@@ -1518,6 +1550,7 @@ export function CalendarView() {
               </Badge>
             ))}
           </div>
+          <CalendarSubscriptionsManager />
         </div>
       </div>
 

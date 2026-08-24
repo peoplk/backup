@@ -1,28 +1,11 @@
-import type { FocusShieldConfig, FocusShieldItem, FocusShieldMode } from '@/lib/types'
+import type { FocusShieldConfig, FocusShieldItem, FocusShieldMode, FocusShieldScheduleState, FocusShieldWindow } from '@/lib/types'
 import type { AppState, AppStoreApi } from '../types'
 import { generateId } from '../utils'
+import { DEFAULT_BLACKLIST_ITEMS, DEFAULT_WHITELIST_ITEMS } from '@/lib/focus-shield-defaults'
 
 type SetState = (
   fn: ((state: AppState) => Partial<AppState>) | Partial<AppState>
 ) => void
-
-const DEFAULT_BLACKLIST_ITEMS: FocusShieldItem[] = [
-  { id: 'shield-weibo', type: 'website', name: '微博', pattern: 'weibo.com', enabled: true },
-  { id: 'shield-douyin', type: 'website', name: '抖音', pattern: 'douyin.com', enabled: true },
-  { id: 'shield-bilibili', type: 'website', name: 'B站', pattern: 'bilibili.com', enabled: true },
-  { id: 'shield-xiaohongshu', type: 'website', name: '小红书', pattern: 'xiaohongshu.com', enabled: true },
-  { id: 'shield-taobao', type: 'website', name: '淘宝', pattern: 'taobao.com', enabled: true },
-  { id: 'shield-tencentvideo', type: 'website', name: '腾讯视频', pattern: 'v.qq.com', enabled: true },
-  { id: 'shield-wechat', type: 'app', name: '微信', pattern: 'WeChat', enabled: false },
-  { id: 'shield-qq', type: 'app', name: 'QQ', pattern: 'QQ', enabled: false },
-]
-
-const DEFAULT_WHITELIST_ITEMS: FocusShieldItem[] = [
-  { id: 'shield-notion', type: 'website', name: 'Notion', pattern: 'notion.so', enabled: true },
-  { id: 'shield-github', type: 'website', name: 'GitHub', pattern: 'github.com', enabled: true },
-  { id: 'shield-feishu', type: 'website', name: '飞书文档', pattern: 'feishu.cn', enabled: true },
-  { id: 'shield-vscode', type: 'app', name: 'VS Code', pattern: 'Code', enabled: true },
-]
 
 export const createFocusShieldSlice = (
   set: SetState,
@@ -73,12 +56,51 @@ export const createFocusShieldSlice = (
       focusShield: {
         ...state.focusShield,
         mode,
+        // 切换模式时保留用户已有条目，仅在列表为空时播种默认项，避免静默丢弃用户数据
         items:
-          mode === state.focusShield.mode
+          !mode || state.focusShield.items.length > 0
             ? state.focusShield.items
             : mode === 'blacklist'
             ? DEFAULT_BLACKLIST_ITEMS
             : DEFAULT_WHITELIST_ITEMS,
+      },
+    })),
+
+  // ─── 定时封锁会话（Freedom 式时间窗调度） ───
+
+  focusShieldSchedule: { enabled: false, windows: [] } as FocusShieldScheduleState,
+
+  updateFocusShieldSchedule: (updates: Partial<FocusShieldScheduleState>) =>
+    set((state) => ({
+      focusShieldSchedule: { ...state.focusShieldSchedule, ...updates },
+    })),
+
+  upsertShieldWindow: (win: Omit<FocusShieldWindow, 'id'> & { id?: string }) =>
+    set((state) => {
+      if (win.id && state.focusShieldSchedule.windows.some((w) => w.id === win.id)) {
+        return {
+          focusShieldSchedule: {
+            ...state.focusShieldSchedule,
+            windows: state.focusShieldSchedule.windows.map((w) =>
+              w.id === win.id ? ({ ...w, ...win } as FocusShieldWindow) : w
+            ),
+          },
+        }
+      }
+      const next = { ...win, id: win.id || generateId() } as FocusShieldWindow
+      return {
+        focusShieldSchedule: {
+          ...state.focusShieldSchedule,
+          windows: [...state.focusShieldSchedule.windows, next],
+        },
+      }
+    }),
+
+  removeShieldWindow: (id: string) =>
+    set((state) => ({
+      focusShieldSchedule: {
+        ...state.focusShieldSchedule,
+        windows: state.focusShieldSchedule.windows.filter((w) => w.id !== id),
       },
     })),
 })

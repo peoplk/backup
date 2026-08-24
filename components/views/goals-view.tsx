@@ -61,6 +61,7 @@ import { cn } from '@/lib/utils'
 import { Textarea } from '@/components/ui/textarea'
 import { AchievementsWall } from '@/components/achievements-wall'
 import { COLOR_PALETTE } from '@/lib/palette'
+import { dataLinkService } from '@/lib/data-link-service'
 
 const goalTypeConfig = {
   yearly: { label: '年度目标', color: 'bg-chart-1', icon: Flag },
@@ -98,6 +99,7 @@ export function GoalsView() {
     tasks,
     setActiveView,
     undoLastDelete,
+    habits,
   } = useAppStore(useShallow((state) => ({
     goals: state.goals,
     addGoal: state.addGoal,
@@ -110,6 +112,7 @@ export function GoalsView() {
     tasks: state.tasks,
     setActiveView: state.setActiveView,
     undoLastDelete: state.undoLastDelete,
+    habits: state.habits,
   })))
 
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
@@ -131,9 +134,15 @@ export function GoalsView() {
   })
   const [newMilestone, setNewMilestone] = useState('')
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null)
+  // 关联任务/习惯的待选值（按目标 ID 记录）
+  const [pendingLinkTask, setPendingLinkTask] = useState<Record<string, string>>({})
+  const [pendingLinkHabit, setPendingLinkHabit] = useState<Record<string, string>>({})
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  const today = useMemo(() => {
+    const d = new Date()
+    d.setHours(0, 0, 0, 0)
+    return d
+  }, [])
 
   const filteredGoals = useMemo(() => {
     return goals.filter((goal) => {
@@ -505,19 +514,118 @@ export function GoalsView() {
                       return (
                         <div
                           key={taskId}
-                          className="flex items-center gap-2 text-sm p-2 rounded-lg hover:bg-muted/50 cursor-pointer"
+                          className="group flex items-center gap-2 text-sm p-2 rounded-lg hover:bg-muted/50 cursor-pointer"
                           onClick={() => setActiveView('tasks')}
                         >
                           <ChevronRight className="h-3 w-3 text-muted-foreground" />
-                          <span className={task.status === 'done' ? 'line-through text-muted-foreground' : ''}>
+                          <span className={`flex-1 truncate ${task.status === 'done' ? 'line-through text-muted-foreground' : ''}`}>
                             {task.title}
                           </span>
+                          <button
+                            className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              dataLinkService.unlinkTaskFromGoal(taskId, goal.id)
+                            }}
+                            aria-label="取消关联任务"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
                         </div>
                       )
                     })}
                   </div>
                 </div>
               )}
+
+              {/* 关联任务添加区 */}
+              <div className="mt-2">
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={pendingLinkTask[goal.id] || ''}
+                    onValueChange={(taskId) => {
+                      if (!taskId) return
+                      dataLinkService.linkTaskToGoal(taskId, goal.id)
+                      setPendingLinkTask((prev) => ({ ...prev, [goal.id]: '' }))
+                      dataLinkService.updateGoalProgressAfterLink(goal.id)
+                    }}
+                  >
+                    <SelectTrigger className="h-7 text-xs flex-1">
+                      <SelectValue placeholder="+ 关联任务..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {tasks
+                        .filter((t) => !goal.linkedTasks.includes(t.id) && t.status !== 'done')
+                        .slice(0, 50)
+                        .map((task) => (
+                          <SelectItem key={task.id} value={task.id} className="text-xs">
+                            {task.title}
+                          </SelectItem>
+                        ))}
+                      {tasks.filter((t) => !goal.linkedTasks.includes(t.id) && t.status !== 'done').length === 0 && (
+                        <div className="px-2 py-1 text-xs text-muted-foreground">没有可关联的任务</div>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {(goal.linkedHabits?.length ?? 0) > 0 && (
+                <div className="mt-4 pt-4 border-t">
+                  <h4 className="text-sm font-medium flex items-center gap-2 mb-3">
+                    <Target className="h-4 w-4" />
+                    关联习惯
+                  </h4>
+                  <div className="space-y-1">
+                    {(goal.linkedHabits ?? []).map((habitId) => {
+                      const habit = habits.find((h) => h.id === habitId)
+                      if (!habit) return null
+                      return (
+                        <div key={habitId} className="group flex items-center gap-2 text-sm p-2 rounded-lg hover:bg-muted/50">
+                          <span className="text-base">{habit.icon}</span>
+                          <span className="flex-1 truncate">{habit.name}</span>
+                          <button
+                            className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                            onClick={() => dataLinkService.unlinkHabitFromGoal(habitId, goal.id)}
+                            aria-label="取消关联习惯"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* 关联习惯添加区 */}
+              <div className="mt-2">
+                <Select
+                  value={pendingLinkHabit[goal.id] || ''}
+                  onValueChange={(habitId) => {
+                    if (!habitId) return
+                    dataLinkService.linkHabitToGoal(habitId, goal.id)
+                    setPendingLinkHabit((prev) => ({ ...prev, [goal.id]: '' }))
+                  }}
+                >
+                  <SelectTrigger className="h-7 text-xs flex-1">
+                    <SelectValue placeholder="+ 关联习惯..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {habits
+                      .filter((h) => !(goal.linkedHabits ?? []).includes(h.id) && !h.archived)
+                      .slice(0, 50)
+                      .map((habit) => (
+                        <SelectItem key={habit.id} value={habit.id} className="text-xs">
+                          {habit.icon} {habit.name}
+                        </SelectItem>
+                      ))}
+                    {habits.filter((h) => !(goal.linkedHabits ?? []).includes(h.id) && !h.archived).length === 0 && (
+                      <div className="px-2 py-1 text-xs text-muted-foreground">没有可关联的习惯</div>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
 
               <div className="mt-4 flex gap-2">
                 <Button
@@ -824,7 +932,7 @@ export function GoalsView() {
                     {status === 'completed' && '暂无已完成的目标'}
                     {status === 'paused' && '暂无已暂停的目标'}
                   </p>
-                  <p className="text-xs mt-1">点击上方"新建目标"创建第一个目标</p>
+                  <p className="text-xs mt-1">点击上方“新建目标”创建第一个目标</p>
                 </CardContent>
               </Card>
             ) : (

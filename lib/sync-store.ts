@@ -1,4 +1,4 @@
-import { createSyncStore } from './sync-store-factory'
+import { createSyncStore, detectDataConflicts } from './sync-store-factory'
 import {
   ensureAuth,
   syncToCloud,
@@ -105,8 +105,23 @@ const {
           userEmail: user.email ?? null,
           userName: user.displayName ?? null,
         })
-        helpers.setUnsubscribe(cfg.subscribeToRemote(user.uid, (data) => {
-          helpers.getSyncDataCallback()?.(data)
+        helpers.setUnsubscribe(cfg.subscribeToRemote(user.uid, async (data) => {
+          let finalData = data
+          let localSnapshot: Record<string, unknown> | null = null
+          try {
+            const localData = helpers.getSyncDataProvider?.()?.()
+            if (localData && Object.keys(localData).length > 0) {
+              localSnapshot = localData
+              finalData = await cfg.mergeLocalAndRemote(user.uid, localData)
+            }
+          } catch {
+            finalData = data
+          }
+          if (localSnapshot && finalData !== data) {
+            const conflicts = detectDataConflicts(localSnapshot, data)
+            if (conflicts.length > 0) set({ conflicts })
+          }
+          helpers.getSyncDataCallback()?.(finalData)
           set({ status: 'synced', lastSyncAt: new Date(), error: null })
         }))
       } catch (err) {

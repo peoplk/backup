@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useMemo, useState } from 'react'
 import { useAppStore } from '@/lib/store'
@@ -51,14 +51,14 @@ function getProgress(ach: Achievement, stats: { totalPomodoros: number; totalTas
       if (ach.id === 'time-traveler') {
         return Math.min(100, (stats.totalPomodoros * 25 / 6000) * 100)
       }
-      return Math.min(100, (stats.totalPomodoros / ach.requirement) * 100)
+      return Math.min(100, (stats.totalPomodoros / ach.requirement.value) * 100)
     case 'tasks':
-      return Math.min(100, (stats.totalTasks / ach.requirement) * 100)
+      return Math.min(100, (stats.totalTasks / ach.requirement.value) * 100)
     case 'habits':
     case 'streak':
-      return Math.min(100, (stats.totalStreak / ach.requirement) * 100)
+      return Math.min(100, (stats.totalStreak / ach.requirement.value) * 100)
     default:
-      return ach.unlocked ? 100 : 0
+      return ach.earned ? 100 : 0
   }
 }
 
@@ -79,8 +79,8 @@ export function AchievementsWall() {
       const unlockedAt = unlockedMap.get(a.id)
       return {
         ...a,
-        unlocked: a.unlocked || !!unlockedAt,
-        unlockedAt: a.unlockedAt || (unlockedAt ? new Date(unlockedAt) : undefined),
+        earned: a.earned || !!unlockedAt,
+        earnedAt: a.earnedAt || (unlockedAt ? new Date(unlockedAt) : undefined),
       }
     })
   }, [allAchievements, storeAchievements])
@@ -97,8 +97,8 @@ export function AchievementsWall() {
   }, [pomodoroSessions, tasks, habits, gameProgress.streak])
 
   const filtered = useMemo(() => {
-    if (filter === 'unlocked') return enriched.filter((a) => a.unlocked)
-    if (filter === 'locked') return enriched.filter((a) => !a.unlocked)
+    if (filter === 'unlocked') return enriched.filter((a) => a.earned)
+    if (filter === 'locked') return enriched.filter((a) => !a.earned)
     return enriched
   }, [enriched, filter])
 
@@ -111,12 +111,12 @@ export function AchievementsWall() {
     return map
   }, [filtered])
 
-  const unlockedCount = enriched.filter((a) => a.unlocked).length
+  const unlockedCount = enriched.filter((a) => a.earned).length
   const totalCount = enriched.length
   const completionPct = totalCount > 0 ? Math.round((unlockedCount / totalCount) * 100) : 0
   const totalReward = enriched
-    .filter((a) => a.unlocked)
-    .reduce((acc, a) => acc + a.reward, 0)
+    .filter((a) => a.earned)
+    .reduce((acc, a) => acc + a.points, 0)
 
   return (
     <div className="space-y-4">
@@ -210,12 +210,12 @@ export function AchievementsWall() {
               </div>
               <h3 className="text-sm font-semibold">{config.label}</h3>
               <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">
-                {items.filter((a) => a.unlocked).length} / {items.length}
+                {items.filter((a) => a.earned).length} / {items.length}
               </Badge>
             </div>
             <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
               {items.map((ach) => {
-                const tier = getTier(ach.requirement)
+                const tier = getTier(ach.requirement.value)
                 const tierStyle = TIER_STYLES[tier]
                 const progress = getProgress(ach, stats)
                 return (
@@ -223,7 +223,7 @@ export function AchievementsWall() {
                     key={ach.id}
                     className={cn(
                       'relative overflow-hidden transition-all',
-                      ach.unlocked
+                      ach.earned
                         ? cn('border-amber-500/30 ring-1', tierStyle.ring, 'shadow-md', tierStyle.glow)
                         : 'opacity-70 grayscale'
                     )}
@@ -233,12 +233,12 @@ export function AchievementsWall() {
                         <div
                           className={cn(
                             'flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-2xl',
-                            ach.unlocked
+                            ach.earned
                               ? 'bg-gradient-to-br from-amber-100 to-amber-200 dark:from-amber-900/40 dark:to-amber-800/40'
                               : 'bg-muted'
                           )}
                         >
-                          {ach.unlocked ? ach.icon : <Lock className="h-5 w-5 text-muted-foreground" />}
+                          {ach.earned ? ach.icon : <Lock className="h-5 w-5 text-muted-foreground" />}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
@@ -253,10 +253,10 @@ export function AchievementsWall() {
                             </Badge>
                             <span className="flex items-center gap-0.5 text-[10px] text-amber-600 dark:text-amber-400">
                               <Sparkles className="h-2.5 w-2.5" />
-                              +{ach.reward}
+                              +{ach.points}
                             </span>
                           </div>
-                          {!ach.unlocked && progress > 0 && (
+                          {!ach.earned && progress > 0 && (
                             <div className="mt-2">
                               <Progress value={progress} className="h-1" />
                               <p className="text-[9px] text-muted-foreground mt-0.5 tabular-nums">
@@ -264,9 +264,9 @@ export function AchievementsWall() {
                               </p>
                             </div>
                           )}
-                          {ach.unlocked && ach.unlockedAt && (
+                          {ach.earned && ach.earnedAt && (
                             <p className="text-[10px] text-muted-foreground mt-1.5">
-                              ✓ {new Date(ach.unlockedAt).toLocaleDateString('zh-CN')}
+                              ✓ {new Date(ach.earnedAt).toLocaleDateString('zh-CN')}
                             </p>
                           )}
                         </div>
