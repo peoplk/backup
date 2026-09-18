@@ -5,6 +5,11 @@
   "main": "electron/main.js",
   "author": "FocusFlow",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/peoplk/backup.git"
+  },
+  "homepage": "https://github.com/peoplk/backup#readme",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
