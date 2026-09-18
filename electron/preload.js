@@ -56,6 +56,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   shieldStop: () => ipcRenderer.invoke('shield-stop'),
   shieldUpdate: (websites, apps, mode) => ipcRenderer.invoke('shield-update', { websites, apps, mode }),
   shieldStatus: () => ipcRenderer.invoke('shield-status'),
+  shieldVerify: () => ipcRenderer.invoke('shield-verify'),
+  shieldScheduleSync: (windows) => ipcRenderer.invoke('shield-schedule-sync', windows),
+  onShieldStatusChanged: (callback) => {
+    const listener = (_event, payload) => callback(payload)
+    ipcRenderer.on('shield-status-changed', listener)
+    return () => ipcRenderer.removeListener('shield-status-changed', listener)
+  },
 
   // Desktop enhancements
   notify: (options) => ipcRenderer.invoke('notify', options),
@@ -105,6 +112,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   credentialVaultAvailable: () => ipcRenderer.invoke('credential-vault-available'),
   credentialEncrypt: (plain) => ipcRenderer.invoke('credential-encrypt', plain),
   credentialDecrypt: (sealed) => ipcRenderer.invoke('credential-decrypt', sealed),
+
+  // 全屏严格模式（主进程窗口锁定）
+  setStrictLock: (opts) => ipcRenderer.invoke('strict-lock-set', opts),
+  getStrictLockStatus: () => ipcRenderer.invoke('strict-lock-status'),
+  onStrictLockViolation: (callback) => {
+    const listener = (_event, payload) => callback(payload)
+    ipcRenderer.on('strict-lock-violation', listener)
+    return () => ipcRenderer.removeListener('strict-lock-violation', listener)
+  },
+  // 主进程侧解锁（托盘紧急解锁 / 快捷键）后广播，供渲染层同步状态
+  onStrictLockChanged: (callback) => {
+    const listener = (_event, payload) => callback(payload)
+    ipcRenderer.on('strict-lock-changed', listener)
+    return () => ipcRenderer.removeListener('strict-lock-changed', listener)
+  },
 
   // Activity timeline tracking (local-only sampling of foreground app)
   setActivityTracking: (enabled) => ipcRenderer.send('activity-set-enabled', enabled),

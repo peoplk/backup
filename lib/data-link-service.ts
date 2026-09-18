@@ -1,6 +1,8 @@
 import { useMemo } from 'react'
 import { useAppStore } from '@/lib/store'
 import type { Task, Goal, Habit, PomodoroSession, TimeEntry } from '@/lib/types'
+import { calculateHabitStreak, getScheduledCompletionRate } from '@/lib/habit-streak'
+import { XP_RULES, pomodoroXp } from '@/lib/xp-rules'
 
 export interface DataLinkEvent {
   type: 'task_completed' | 'pomodoro_completed' | 'habit_checked' | 'goal_progress' | 'time_entry_added'
@@ -131,8 +133,10 @@ class DataLinkService {
     const completionKey = task.completedAt ? new Date(task.completedAt).toISOString() : ''
     if (completionKey && this.awardedCompletionKeys.get(taskId) !== completionKey) {
       this.awardedCompletionKeys.set(taskId, completionKey)
-      state.addPoints(10)
+      state.addPoints(XP_RULES.completeTask)
     }
+
+    state.checkAchievements?.()
 
     return context
   }
@@ -150,7 +154,7 @@ class DataLinkService {
     }
 
     if (mode === 'work') {
-      state.addPoints(Math.max(1, Math.round(duration / 60)))
+      state.addPoints(pomodoroXp(duration))
     }
 
     this.emit({
@@ -190,30 +194,28 @@ class DataLinkService {
     }
     // 零时长条目不计分，避免空记录刷分
     if (entry.duration > 0) {
-      state.addPoints(Math.round(entry.duration / 60 / 5))
+      state.addPoints(Math.max(1, Math.round(entry.duration / 60 / 5)))
     }
   }
 
   handleHabitCheck(habitId: string, date: Date, completed: boolean): HabitCheckContext | null {
     const state = useAppStore.getState()
     const habit = state.habits.find(h => h.id === habitId)
-    
+
     if (!habit) return null
 
+    // 统一连胜引擎（应做日感知 + 最佳纪录维护）
     let streak = 0
+    let bestStreakUpdate: { bestStreak: number } | null = null
     if (completed) {
-      const checkDate = new Date(date)
-      while (true) {
-        const dStr = checkDate.toDateString()
-        const checkIn = state.habitCheckIns.find(
-          c => c.habitId === habitId && new Date(c.date).toDateString() === dStr
-        )
-        if (checkIn?.completed || dStr === date.toDateString()) {
-          streak++
-          checkDate.setDate(checkDate.getDate() - 1)
-        } else {
-          break
-        }
+      const result = calculateHabitStreak(
+        habit,
+        state.habitCheckIns.filter(c => c.habitId === habitId),
+        date
+      )
+      streak = result.current
+      if (result.best > (habit.bestStreak || 0)) {
+        bestStreakUpdate = { bestStreak: result.best }
       }
     }
 
@@ -221,12 +223,7 @@ class DataLinkService {
     if (habit.linkedGoalId && state.goals.some(g => g.id === habit.linkedGoalId)) {
       linkedGoalId = habit.linkedGoalId
     } else {
-      const habitNameKey = habit.name.trim().toLowerCase()
-      linkedGoalId = state.goals.find(g => {
-        if (g.linkedHabits?.includes(habitId)) return true
-        if (g.title && habitNameKey && g.title.trim().toLowerCase() === habitNameKey) return true
-        return false
-      })?.id
+      linkedGoalId = state.goals.find(g => g.linkedHabits?.includes(habitId))?.id
     }
 
     const context: HabitCheckContext = {
@@ -243,8 +240,16 @@ class DataLinkService {
       timestamp: new Date(),
     })
 
-    if (linkedGoalId && completed) {
-      this.updateGoalProgress(linkedGoalId)
+    if (completed) {
+      if (bestStreakUpdate) {
+        state.updateHabit(habitId, bestStreakUpdate)
+      }
+      // 打卡积分：每次有效打卡 +5
+      state.addPoints(XP_RULES.habitCheckIn)
+      if (linkedGoalId) {
+        this.updateGoalProgress(linkedGoalId)
+      }
+      state.checkAchievements?.()
     }
 
     return context
@@ -272,33 +277,67 @@ class DataLinkService {
     this.updateGoalProgress(goalId)
   }
 
+  /**
+   * 重算某个目标的进度（单一公式，避免多来源互相覆盖）：
+   * 进度 = 可用分量的平均（任务完成率 / 里程碑完成率 / 习惯调度完成率）
+   * 习惯分量按 goal.linkedHabits 注册表计算（30 天应做日完成率）。
+   */
   private updateGoalProgress(goalId: string): void {
     const state = useAppStore.getState()
     const goal = state.goals.find(g => g.id === goalId)
-    
+
     if (!goal) return
 
-    const completedTasks = goal.linkedTasks.filter(taskId => {
-      const task = state.tasks.find(t => t.id === taskId)
-      return task && task.status === 'done'
-    }).length
+    const components: number[] = []
 
-    const totalTasks = goal.linkedTasks.length
-    const progress = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : goal.progress
+    if (goal.linkedTasks.length > 0) {
+      const completedTasks = goal.linkedTasks.filter(taskId => {
+        const task = state.tasks.find(t => t.id === taskId)
+        return task && task.status === 'done'
+      }).length
+      components.push((completedTasks / goal.linkedTasks.length) * 100)
+    }
 
-    const completedMilestones = goal.milestones.filter(m => m.completed).length
-    const milestoneProgress = goal.milestones.length > 0 
-      ? (completedMilestones / goal.milestones.length) * 100 
-      : 0
+    if (goal.milestones.length > 0) {
+      const completedMilestones = goal.milestones.filter(m => m.completed).length
+      components.push((completedMilestones / goal.milestones.length) * 100)
+    }
 
-    const finalProgress = (progress + milestoneProgress) / 2
+    // 习惯注册表：goal.linkedHabits + habit.linkedGoalId 反向引用
+    const linkedHabitIds = new Set([
+      ...(goal.linkedHabits ?? []),
+      ...state.habits.filter(h => h.linkedGoalId === goalId).map(h => h.id),
+    ])
+    if (linkedHabitIds.size > 0) {
+      let rateSum = 0
+      let counted = 0
+      for (const habitId of linkedHabitIds) {
+        const habit = state.habits.find(h => h.id === habitId)
+        if (!habit || habit.archived) continue
+        rateSum += getScheduledCompletionRate(
+          habit,
+          state.habitCheckIns.filter(c => c.habitId === habitId),
+          30
+        )
+        counted++
+      }
+      if (counted > 0) components.push(rateSum / counted)
+    }
+
+    // 没有任何关联内容时不覆盖用户手动设置的进度
+    if (components.length === 0) return
+
+    const finalProgress = Math.min(
+      Math.round(components.reduce((a, b) => a + b, 0) / components.length),
+      100
+    )
 
     state.updateGoal(goalId, { progress: finalProgress })
 
     if (finalProgress >= 100 && goal.status !== 'completed') {
-      state.updateGoal(goalId, { 
-        status: 'completed', 
-        completedAt: new Date() 
+      state.updateGoal(goalId, {
+        status: 'completed',
+        completedAt: new Date()
       })
       state.addNotification({
         type: 'achievement',
@@ -307,8 +346,9 @@ class DataLinkService {
         relatedType: 'goal',
         relatedId: goal.id,
       })
-      state.addPoints(50)
+      state.addPoints(XP_RULES.completeGoal)
     }
+    state.checkAchievements?.()
   }
 
   private updateProjectTime(projectName: string, additionalTime: number): void {

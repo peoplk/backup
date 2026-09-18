@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { useShallow } from 'zustand/react/shallow'
 import { useDataLink } from '@/lib/data-link-service'
 import { HabitBatchCheckIn } from '@/components/habit-batch-checkin'
+import { HabitTemplatePicker } from '@/components/habit-template-picker'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -45,8 +46,15 @@ import {
   Clock,
   Award,
   Zap,
+  MoreVertical,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { WEEKDAY_NAMES, habitFrequencyLabel, isHabitScheduledOn } from '@/lib/habit-frequency'
 import {
   BarChart,
@@ -107,6 +115,8 @@ export function HabitsView() {
     unit: '',
     weeklyPattern: [] as number[],
     intervalDays: 2,
+    weeklyTarget: 1,
+    monthlyTarget: 1,
   })
 
   const today = new Date()
@@ -128,6 +138,8 @@ export function HabitsView() {
       unit: newHabit.trackingType === 'quantity' ? newHabit.unit || undefined : undefined,
       weeklyPattern: newHabit.frequency === 'custom' && newHabit.weeklyPattern.length > 0 ? [...newHabit.weeklyPattern] : undefined,
       intervalDays: newHabit.frequency === 'custom' && newHabit.weeklyPattern.length === 0 ? newHabit.intervalDays : undefined,
+      weeklyTarget: newHabit.frequency === 'weekly' && newHabit.weeklyTarget > 1 ? newHabit.weeklyTarget : undefined,
+      monthlyTarget: newHabit.frequency === 'monthly' && newHabit.monthlyTarget > 1 ? newHabit.monthlyTarget : undefined,
     } as Omit<Habit, 'id' | 'createdAt' | 'archived'>)
     resetNewHabit()
     setIsAddDialogOpen(false)
@@ -148,18 +160,20 @@ export function HabitsView() {
       unit: newHabit.trackingType === 'quantity' ? newHabit.unit || undefined : undefined,
       weeklyPattern: newHabit.frequency === 'custom' && newHabit.weeklyPattern.length > 0 ? [...newHabit.weeklyPattern] : undefined,
       intervalDays: newHabit.frequency === 'custom' && newHabit.weeklyPattern.length === 0 ? newHabit.intervalDays : undefined,
+      weeklyTarget: newHabit.frequency === 'weekly' && newHabit.weeklyTarget > 1 ? newHabit.weeklyTarget : undefined,
+      monthlyTarget: newHabit.frequency === 'monthly' && newHabit.monthlyTarget > 1 ? newHabit.monthlyTarget : undefined,
     })
     setEditingHabit(null)
     resetNewHabit()
   }
 
   const resetNewHabit = () => {
-    setNewHabit({ name: '', icon: '🌅', color: COLOR_PALETTE[0], frequency: 'daily', category: 'health', reminderTime: '', reminderEnabled: false, trackingType: 'boolean', targetValue: 1, unit: '', weeklyPattern: [], intervalDays: 2 })
+    setNewHabit({ name: '', icon: '🌅', color: COLOR_PALETTE[0], frequency: 'daily', category: 'health', reminderTime: '', reminderEnabled: false, trackingType: 'boolean', targetValue: 1, unit: '', weeklyPattern: [], intervalDays: 2, weeklyTarget: 1, monthlyTarget: 1 })
   }
 
   const handleCheckIn = (habitId: string, completed: boolean, value?: number) => {
+    // checkInHabit 内部已统一委托 data-link-service 处理连胜/积分/目标进度
     checkInHabit(habitId, today, completed, undefined, value)
-    dataLink.handleHabitCheck(habitId, today, completed)
   }
 
   const filteredHabits = selectedCategory === 'all' 
@@ -241,6 +255,19 @@ export function HabitsView() {
               <DialogTitle>{editingHabit ? '编辑习惯' : '添加新习惯'}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
+              {!editingHabit && (
+                <HabitTemplatePicker
+                  onSelect={(t) => setNewHabit((prev) => ({
+                    ...prev,
+                    name: t.name,
+                    icon: t.icon,
+                    category: t.category,
+                    trackingType: t.trackingType,
+                    targetValue: t.targetValue ?? 1,
+                    unit: t.unit ?? '',
+                  }))}
+                />
+              )}
               <div className="space-y-2">
                 <label className="text-sm font-medium">习惯名称</label>
                 <Input
@@ -379,9 +406,46 @@ export function HabitsView() {
                   <SelectContent>
                     <SelectItem value="daily">每天</SelectItem>
                     <SelectItem value="weekly">每周</SelectItem>
+                    <SelectItem value="monthly">每月</SelectItem>
                     <SelectItem value="custom">自定义</SelectItem>
                   </SelectContent>
                 </Select>
+                {newHabit.frequency === 'weekly' && (
+                  <div className="flex items-center justify-between gap-3 rounded-xl border border-border/50 p-3">
+                    <span className="text-xs font-medium text-muted-foreground">每周目标次数（1 = 任意日均可）</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={7}
+                      value={newHabit.weeklyTarget}
+                      onChange={(e) =>
+                        setNewHabit({
+                          ...newHabit,
+                          weeklyTarget: Math.min(7, Math.max(1, parseInt(e.target.value) || 1)),
+                        })
+                      }
+                      className="w-20 h-8"
+                    />
+                  </div>
+                )}
+                {newHabit.frequency === 'monthly' && (
+                  <div className="flex items-center justify-between gap-3 rounded-xl border border-border/50 p-3">
+                    <span className="text-xs font-medium text-muted-foreground">每月目标次数（1 = 任意日均可）</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={31}
+                      value={newHabit.monthlyTarget}
+                      onChange={(e) =>
+                        setNewHabit({
+                          ...newHabit,
+                          monthlyTarget: Math.min(31, Math.max(1, parseInt(e.target.value) || 1)),
+                        })
+                      }
+                      className="w-20 h-8"
+                    />
+                  </div>
+                )}
                 {newHabit.frequency === 'custom' && (
                   <div className="space-y-2 rounded-xl border border-border/50 p-3">
                     <div className="flex items-center justify-between">
@@ -591,6 +655,8 @@ export function HabitsView() {
                       unit: h.unit || '',
                       weeklyPattern: h.weeklyPattern ? [...h.weeklyPattern] : [],
                       intervalDays: h.intervalDays || 2,
+                      weeklyTarget: h.weeklyTarget || 1,
+                      monthlyTarget: h.monthlyTarget || 1,
                     })
                     setIsAddDialogOpen(true)
                   }}
@@ -888,6 +954,14 @@ function HabitCard({
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Flame className="h-3 w-3" style={{ color: habit.color }} />
                 <span>{streak} 天连续</span>
+                {(habit.bestStreak || 0) > streak && (
+                  <span
+                    className="text-xs text-amber-500"
+                    title={`历史最佳 ${habit.bestStreak} 天`}
+                  >
+                    🏆 最佳 {habit.bestStreak}
+                  </span>
+                )}
                 {(habit.streakFreezes || 0) > 0 && (
                   <span className="text-xs text-blue-500" title={`连续冻结 ×${habit.streakFreezes}`}>
                     🧊 ×{habit.streakFreezes}
@@ -909,24 +983,26 @@ function HabitCard({
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => onEdit(habit)}
-              aria-label="编辑习惯"
-            >
-              <Edit className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-destructive hover:text-destructive"
-              onClick={() => onDelete(habit.id, habit.name)}
-              aria-label="删除习惯"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="习惯操作">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => onEdit(habit)}>
+                  <Edit className="mr-2 h-4 w-4" />
+                  编辑
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={() => onDelete(habit.id, habit.name)}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  删除
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
         {isQuantity && (
@@ -993,16 +1069,16 @@ function HabitCard({
             <Input
               type="number"
               min={0}
-              placeholder={`输入${habit.unit || '数值'}...`}
+              placeholder={`本次新增${habit.unit || '数值'}（累加）`}
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               className="flex-1 h-9"
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
-                  const val = parseInt(inputValue) || 0
-                  if (val > 0) {
-                    const completed = val >= targetValue
-                    onCheckIn(habit.id, completed, val)
+                  const inc = parseInt(inputValue) || 0
+                  if (inc > 0) {
+                    const completed = currentValue + inc >= targetValue
+                    onCheckIn(habit.id, completed, inc)
                     setInputValue('')
                   }
                 }
@@ -1013,9 +1089,9 @@ function HabitCard({
               style={{ backgroundColor: isCompleted ? habit.color : undefined }}
               variant={isCompleted ? 'default' : 'default'}
               onClick={() => {
-                const val = parseInt(inputValue) || (currentValue > 0 ? currentValue + 1 : 1)
-                const completed = val >= targetValue
-                onCheckIn(habit.id, completed, val)
+                const inc = parseInt(inputValue) || 1
+                const completed = currentValue + inc >= targetValue
+                onCheckIn(habit.id, completed, inc)
                 setInputValue('')
               }}
             >

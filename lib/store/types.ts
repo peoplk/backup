@@ -38,6 +38,7 @@ import type {
   SavedFilter,
   FilterCriteria,
   TreeState,
+  Tombstone,
 } from '@/lib/types'
 import type { StoreApi } from 'zustand'
 
@@ -139,7 +140,7 @@ export interface AppState {
 
   sidebarCollapsed: boolean
   toggleSidebar: () => void
-  activeView: 'dashboard' | 'tasks' | 'focus' | 'analytics' | 'habits' | 'anniversaries' | 'settings' | 'goals' | 'time-block' | 'calendar' | 'journal'
+  activeView: 'dashboard' | 'tasks' | 'focus' | 'analytics' | 'habits' | 'anniversaries' | 'settings' | 'goals' | 'time-block' | 'calendar'
   setActiveView: (view: AppState['activeView']) => void
   
   activeSmartList: string | null
@@ -159,6 +160,14 @@ export interface AppState {
 
   achievements: Achievement[]
   userLevel: UserLevel
+
+  // 同步元数据（sync-slice）：删除墓碑随快照持久化与同步
+  tombstones: Tombstone[]
+  recordTombstones: (entries: Array<{ id: string; collection: string }>) => void
+  mergeTombstones: (remote: Tombstone[]) => void
+  /** 升级庆祝：等级提升时置位，弹窗关闭后清空（不持久化的瞬态） */
+  levelUpCelebration: { level: number; title: string } | null
+  clearLevelUpCelebration: () => void
   checkAchievements: () => void
   addPoints: (points: number) => void
 
@@ -214,9 +223,10 @@ export interface AppState {
   focusSoundSettings: {
     isPlaying: boolean
     volume: number
-    currentSound: string | null
+    soundLevels: Record<string, number>
     currentMusic: string | null
     autoPlay: boolean
+    sleepTimerEndsAt: number | null
   }
   updateFocusSoundSettings: (updates: Partial<AppState['focusSoundSettings']>) => void
 

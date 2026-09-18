@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 import { useAppStore } from '@/lib/store'
 import { sendBrowserNotification } from '@/lib/browser-notifications'
 import { markNotified, hasNotified } from '@/lib/notified-registry'
+import { isHabitScheduledOn } from '@/lib/habit-frequency'
 
 function getMobileNotifSetting(key: 'task' | 'habit' | 'focus' | 'review'): boolean {
   if (typeof window === 'undefined') return true
@@ -27,6 +28,8 @@ export function useAutoNotifications() {
 
   useEffect(() => {
     const checkNotifications = () => {
+      // 全屏严格模式锁定期间静默全部到期提醒，解锁后自然恢复（不补发历史提醒）
+      if ((window as unknown as { __strictLockMuted?: boolean }).__strictLockMuted) return
       const now = new Date()
       const today = new Date()
       today.setHours(0, 0, 0, 0)
@@ -81,7 +84,13 @@ export function useAutoNotifications() {
               }
             } else if (reminder.type === 'on-due') {
               const dueDate = new Date(task.dueDate!)
-              dueDate.setHours(9, 0, 0, 0)
+              // 到时提醒使用任务到期真实时分；仅日期（00:00）的任务回落到
+              // 工作时段开始时刻（未配置则 09:00），不再硬编码
+              if (dueDate.getHours() === 0 && dueDate.getMinutes() === 0) {
+                const workStart = useAppStore.getState().workingHours?.workStartTime || '09:00'
+                const [h, m] = workStart.split(':').map(Number)
+                dueDate.setHours(Number.isFinite(h) ? h : 9, Number.isFinite(m) ? m : 0, 0, 0)
+              }
               const diff = dueDate.getTime() - now.getTime()
               if (diff <= 0 && diff > -300000) {
                 shouldTrigger = true
@@ -176,6 +185,8 @@ export function useAutoNotifications() {
       habits.forEach(habit => {
         if (habit.archived) return
         if (!habit.reminderEnabled || !habit.reminderTime) return
+        // 非排班日不提醒（如「每周一三五」习惯在周二不打扰）
+        if (!isHabitScheduledOn(habit, now)) return
 
         const [reminderHour, reminderMinute] = habit.reminderTime.split(':').map(Number)
         const reminderTimeToday = new Date(today)

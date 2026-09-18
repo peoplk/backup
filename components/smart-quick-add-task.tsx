@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, createContext, useContext, type ReactNode } from 'react'
 import { useAppStore } from '@/lib/store'
-import { parseEnhancedInput, validateParsedInput, getSmartSuggestions, type ParsedTaskInput } from '@/lib/smart-input-enhanced'
+import { parseEnhancedInput, validateParsedInput, getSmartSuggestions, buildParsedTaskFields, type ParsedTaskInput } from '@/lib/smart-input-enhanced'
 import { useShallow } from 'zustand/react/shallow'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -136,7 +136,17 @@ function SmartInputPreview() {
               {parsed.startTime && (
                 <Badge variant="secondary" className="text-xs gap-1">
                   <Clock className="h-3 w-3" />
-                  {parsed.startTime}
+                  {parsed.startTime}{parsed.endTime ? ` - ${parsed.endTime}` : ''}
+                </Badge>
+              )}
+              {parsed.repeat && (
+                <Badge variant="secondary" className="text-xs gap-1">
+                  🔁 {parsed.repeat.type === 'weekly' && parsed.repeat.daysOfWeek?.length ? `每周${parsed.repeat.daysOfWeek.map(d => '日一二三四五六'[d]).join('、')}` : { daily: '每天', weekly: '每周', monthly: '每月', yearly: '每年' }[parsed.repeat.type]}
+                </Badge>
+              )}
+              {parsed.reminderMinutesBefore && (
+                <Badge variant="secondary" className="text-xs gap-1">
+                  🔔 提前{parsed.reminderMinutesBefore}分钟
                 </Badge>
               )}
               {parsed.priority && (
@@ -211,14 +221,9 @@ export function SmartQuickAddTask({ onSubmit, className }: SmartQuickAddTaskProp
       title: parsed.title,
       description: undefined,
       type: 'task',
-      priority: parsed.priority || 'medium',
-      project: parsed.project || '',
-      tags: parsed.tags || [],
-      dueDate: parsed.dueDate,
-      startTime: parsed.startTime,
+      ...buildParsedTaskFields(parsed),
       status: 'todo',
       estimatedPomodoros: parsed.estimatedPomodoros || 1,
-      energy: parsed.energy,
     })
     onSubmit?.(parsed)
   }

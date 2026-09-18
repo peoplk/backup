@@ -1,7 +1,8 @@
-import { useMemo, useEffect, useRef } from 'react'
+import { useMemo, useEffect, useRef, useCallback } from 'react'
 import { useAppStore } from '@/lib/store'
 import type { Task, RepeatRule, RepeatTaskCompletion } from '@/lib/types'
 import { computeDailyScore, computeScoreTrend } from '@/lib/productivity-score'
+import { calculateHabitStreak, getScheduledCompletionRate } from '@/lib/habit-streak'
 
 const CLEANUP_INTERVAL = 24 * 60 * 60 * 1000
 const LAST_CLEANUP_KEY = 'last-cleanup-time'
@@ -301,37 +302,26 @@ export function useHabitStats() {
   const totalHabits = activeHabits.length
   const completionRate = totalHabits > 0 ? Math.round((completedToday / totalHabits) * 100) : 0
 
-  const getHabitStreak = (habitId: string) => {
-    let streak = 0
-    const checkDate = new Date()
-    while (true) {
-      const dateStr = checkDate.toDateString()
-      const checkIn = habitCheckIns.find(
-        (c) => c.habitId === habitId && new Date(c.date).toDateString() === dateStr
-      )
-      if (checkIn?.completed) {
-        streak++
-        checkDate.setDate(checkDate.getDate() - 1)
-      } else {
-        break
-      }
-    }
-    return streak
-  }
+  const getHabitStreak = useCallback((habitId: string) => {
+    const habit = habits.find(h => h.id === habitId)
+    if (!habit) return 0
+    return calculateHabitStreak(
+      habit,
+      habitCheckIns.filter(c => c.habitId === habitId),
+      today
+    ).current
+  }, [habits, habitCheckIns, today])
 
-  const getHabitCompletionRate = (habitId: string, days: number = 30) => {
-    let completed = 0
-    for (let i = 0; i < days; i++) {
-      const date = new Date()
-      date.setDate(date.getDate() - i)
-      const dateStr = date.toDateString()
-      const checkIn = habitCheckIns.find(
-        (c) => c.habitId === habitId && new Date(c.date).toDateString() === dateStr
-      )
-      if (checkIn?.completed) completed++
-    }
-    return Math.round((completed / days) * 100)
-  }
+  const getHabitCompletionRate = useCallback((habitId: string, days: number = 30) => {
+    const habit = habits.find(h => h.id === habitId)
+    if (!habit) return 0
+    return getScheduledCompletionRate(
+      habit,
+      habitCheckIns.filter(c => c.habitId === habitId),
+      days,
+      today
+    )
+  }, [habits, habitCheckIns, today])
 
   const maxStreak = Math.max(...activeHabits.map((h) => getHabitStreak(h.id)), 0)
 

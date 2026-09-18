@@ -194,7 +194,6 @@ export function PrivacyLock() {
   const DATA_KEYS = [
     'productivity-app-storage',
     'sync-provider-selected',
-    'focusflow-firebase-config',
     'focusflow-s3-config',
     'focusflow-s3-secret',
     'focusflow-llm-config',

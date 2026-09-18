@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useAppStore } from '@/lib/store'
 import { useShallow } from 'zustand/react/shallow'
 import { Button } from '@/components/ui/button'
@@ -23,37 +23,65 @@ import {
   Plane,
   Train,
   Keyboard,
+  CloudLightning,
+  Droplets,
+  TrainFront,
+  Car,
+  Clock3,
+  Shell,
+  Bell,
+  Bird,
+  Music4,
+  MoonStar,
+  Sparkles,
   Heart,
+  AudioWaveform,
+  Activity,
+  Radio,
+  Timer,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import {
+  AMBIENT_SOUNDS,
+  FOCUS_MUSIC,
+  syncFocusSound,
+} from '@/lib/focus-sound-engine'
+import { FOCUS_SOUND_PRESETS, type FocusSoundPreset } from '@/lib/focus-sound-presets'
+import { useSoundSleepTimer } from '@/lib/use-sound-sleep-timer'
 
-interface AmbientSound {
-  id: string
-  name: string
-  icon: React.ElementType
-  url: string
-  category: 'nature' | 'environment' | 'focus'
+const SOUND_ICONS: Record<string, React.ElementType> = {
+  white: AudioWaveform,
+  pink: Activity,
+  brown: Radio,
+  storm: CloudLightning,
+  stream: Droplets,
+  subway: TrainFront,
+  street: Car,
+  clock: Clock3,
+  fountain: Shell,
+  temple: Bell,
+  nightbug: Bird,
+  lullaby: Music4,
+  nightsea: MoonStar,
+  starlight: Sparkles,
+  rain: CloudRain,
+  forest: TreeDeciduous,
+  waves: Waves,
+  wind: Wind,
+  fire: Flame,
+  cafe: Coffee,
+  plane: Plane,
+  train: Train,
+  keyboard: Keyboard,
+  heartbeat: Heart,
 }
 
-const AMBIENT_SOUNDS: AmbientSound[] = [
-  { id: 'rain', name: '雨声', icon: CloudRain, url: '', category: 'nature' },
-  { id: 'forest', name: '森林', icon: TreeDeciduous, url: '', category: 'nature' },
-  { id: 'waves', name: '海浪', icon: Waves, url: '', category: 'nature' },
-  { id: 'wind', name: '风声', icon: Wind, url: '', category: 'nature' },
-  { id: 'fire', name: '篝火', icon: Flame, url: '', category: 'nature' },
-  { id: 'cafe', name: '咖啡馆', icon: Coffee, url: '', category: 'environment' },
-  { id: 'plane', name: '飞机', icon: Plane, url: '', category: 'environment' },
-  { id: 'train', name: '火车', icon: Train, url: '', category: 'environment' },
-  { id: 'keyboard', name: '键盘', icon: Keyboard, url: '', category: 'focus' },
-  { id: 'heartbeat', name: '心跳', icon: Heart, url: '', category: 'focus' },
-]
+const AMBIENT_ONLY = AMBIENT_SOUNDS.filter(s => s.category !== 'noise')
+const NOISE_STYLES = AMBIENT_SOUNDS.filter(s => s.category === 'noise')
+const SLEEP_TIMER_OPTIONS = [15, 30, 60]
 
-const FOCUS_MUSIC = [
-  { id: 'alpha', name: 'Alpha波', frequency: '10Hz', description: '放松专注' },
-  { id: 'beta', name: 'Beta波', frequency: '20Hz', description: '高效工作' },
-  { id: 'theta', name: 'Theta波', frequency: '6Hz', description: '深度冥想' },
-  { id: 'gamma', name: 'Gamma波', frequency: '40Hz', description: '创意思维' },
-]
+/** 空混音的稳定引用（渲染层规范化用，避免每次渲染新建对象） */
+const EMPTY_SOUND_LEVELS: Record<string, number> = {}
 
 export function FocusSound() {
   const { pomodoroTimerState, focusSoundSettings, updateFocusSoundSettings } = useAppStore(useShallow((state) => ({
@@ -63,44 +91,30 @@ export function FocusSound() {
   })))
 
   const [isOpen, setIsOpen] = useState(false)
-  const audioContextRef = useRef<AudioContext | null>(null)
-  const oscillatorsRef = useRef<OscillatorNode[]>([])
-  const gainNodeRef = useRef<GainNode | null>(null)
-  const ambientNodesRef = useRef<{ source: AudioBufferSourceNode; gain: GainNode } | null>(null)
+  // 睡眠定时的剩余时间显示（每秒刷新）
+  const [now, setNow] = useState(Date.now())
 
   const isPlaying = focusSoundSettings?.isPlaying || false
   const volume = focusSoundSettings?.volume || 50
-  const currentSound = focusSoundSettings?.currentSound || null
+  const soundLevels = focusSoundSettings?.soundLevels ?? EMPTY_SOUND_LEVELS
   const currentMusic = focusSoundSettings?.currentMusic || null
+  const sleepTimerEndsAt = focusSoundSettings?.sleepTimerEndsAt ?? null
 
-  const stopAllAudio = useCallback(() => {
-    oscillatorsRef.current.forEach(osc => {
-      try { osc.stop() } catch { /* already stopped */ }
-    })
-    oscillatorsRef.current = []
+  // 播放状态/混音/音量变化 → 引擎同步（引擎幂等 diff 启停轨道，与全屏面板共用）
+  useEffect(() => {
+    syncFocusSound({ soundLevels, currentMusic, isPlaying, volume })
+  }, [soundLevels, currentMusic, isPlaying, volume])
 
-    if (ambientNodesRef.current) {
-      try { ambientNodesRef.current.source.stop() } catch { /* already stopped */ }
-      ambientNodesRef.current = null
-    }
-  }, [])
+  // 睡眠定时到点：暂停播放并清除定时
+  useSoundSleepTimer(sleepTimerEndsAt, () => {
+    updateFocusSoundSettings({ isPlaying: false, sleepTimerEndsAt: null })
+  })
 
   useEffect(() => {
-    if (isPlaying && currentMusic) {
-      startBinauralBeat(currentMusic)
-    } else if (!isPlaying) {
-      stopAllAudio()
-    }
-  }, [isPlaying, currentMusic])
-
-  useEffect(() => {
-    if (gainNodeRef.current) {
-      gainNodeRef.current.gain.value = volume / 100 * 0.3
-    }
-    if (ambientNodesRef.current) {
-      ambientNodesRef.current.gain.gain.value = volume / 100 * 0.15
-    }
-  }, [volume])
+    if (!sleepTimerEndsAt) return
+    const interval = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(interval)
+  }, [sleepTimerEndsAt])
 
   useEffect(() => {
     if (pomodoroTimerState.isRunning && focusSoundSettings?.autoPlay) {
@@ -108,128 +122,62 @@ export function FocusSound() {
     }
   }, [pomodoroTimerState.isRunning, focusSoundSettings?.autoPlay])
 
-  const getAudioContext = useCallback(() => {
-    if (!audioContextRef.current) {
-      audioContextRef.current = new AudioContext()
-    }
-    return audioContextRef.current
-  }, [])
-
-  const startBinauralBeat = useCallback((musicId: string) => {
-    stopAllAudio()
-
-    const ctx = getAudioContext()
-    const music = FOCUS_MUSIC.find(m => m.id === musicId)
-    if (!music) return
-
-    const frequency = parseInt(music.frequency)
-    const baseFreq = 200
-
-    // 使用 ChannelMergerNode 实现真正的立体声双耳节拍
-    const merger = ctx.createChannelMerger(2)
-    const gainNode = ctx.createGain()
-
-    const oscillatorL = ctx.createOscillator()
-    const gainL = ctx.createGain()
-    oscillatorL.type = 'sine'
-    oscillatorL.frequency.value = baseFreq
-    gainL.gain.value = volume / 100 * 0.3
-    oscillatorL.connect(gainL)
-    gainL.connect(merger, 0, 0) // 左声道
-
-    const oscillatorR = ctx.createOscillator()
-    const gainR = ctx.createGain()
-    oscillatorR.type = 'sine'
-    oscillatorR.frequency.value = baseFreq + frequency
-    gainR.gain.value = volume / 100 * 0.3
-    oscillatorR.connect(gainR)
-    gainR.connect(merger, 0, 1) // 右声道
-
-    merger.connect(gainNode)
-    gainNode.connect(ctx.destination)
-
-    oscillatorL.start()
-    oscillatorR.start()
-
-    oscillatorsRef.current = [oscillatorL, oscillatorR]
-    gainNodeRef.current = gainNode
-  }, [volume, stopAllAudio, getAudioContext])
-
-  // 使用 Web Audio API 合成环境音效
-  const startAmbientSound = useCallback((soundId: string) => {
-    stopAllAudio()
-
-    const ctx = getAudioContext()
-    const bufferSize = ctx.sampleRate * 2
-    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
-    const data = buffer.getChannelData(0)
-
-    // 根据不同音效类型生成不同的噪音模式
-    const soundConfig: Record<string, { filterFreq: number; filterQ: number; modFreq: number }> = {
-      rain: { filterFreq: 8000, filterQ: 0.5, modFreq: 3 },
-      forest: { filterFreq: 3000, filterQ: 1, modFreq: 0.5 },
-      waves: { filterFreq: 1200, filterQ: 0.7, modFreq: 0.15 },
-      wind: { filterFreq: 600, filterQ: 0.3, modFreq: 0.1 },
-      fire: { filterFreq: 2000, filterQ: 0.8, modFreq: 8 },
-      cafe: { filterFreq: 4000, filterQ: 0.4, modFreq: 2 },
-      plane: { filterFreq: 300, filterQ: 0.5, modFreq: 0.05 },
-      train: { filterFreq: 1500, filterQ: 0.6, modFreq: 1.5 },
-      keyboard: { filterFreq: 5000, filterQ: 1, modFreq: 6 },
-      heartbeat: { filterFreq: 200, filterQ: 2, modFreq: 1 },
-    }
-
-    const config = soundConfig[soundId] || soundConfig.rain
-
-    // 生成带调制的噪音
-    for (let i = 0; i < bufferSize; i++) {
-      const noise = Math.random() * 2 - 1
-      const mod = Math.sin(2 * Math.PI * config.modFreq * i / ctx.sampleRate)
-      data[i] = noise * (0.5 + 0.5 * mod)
-    }
-
-    const source = ctx.createBufferSource()
-    source.buffer = buffer
-    source.loop = true
-
-    const filter = ctx.createBiquadFilter()
-    filter.type = 'lowpass'
-    filter.frequency.value = config.filterFreq
-    filter.Q.value = config.filterQ
-
-    const gainNode = ctx.createGain()
-    gainNode.gain.value = volume / 100 * 0.15
-
-    source.connect(filter)
-    filter.connect(gainNode)
-    gainNode.connect(ctx.destination)
-
-    source.start()
-
-    ambientNodesRef.current = { source, gain: gainNode }
-    gainNodeRef.current = gainNode
-  }, [volume, stopAllAudio, getAudioContext])
-
   const handleToggle = () => {
     if (!isPlaying) {
-      getAudioContext()
+      if (Object.keys(soundLevels).length === 0 && !currentMusic) {
+        // 未选择过音源时默认播放雨声
+        updateFocusSoundSettings({ soundLevels: { rain: 50 }, isPlaying: true })
+        return
+      }
+      updateFocusSoundSettings({ isPlaying: true })
+    } else {
+      updateFocusSoundSettings({ isPlaying: false })
     }
-    updateFocusSoundSettings({ isPlaying: !isPlaying })
   }
 
-  const handleSoundSelect = (soundId: string) => {
-    startAmbientSound(soundId)
+  /** 点选音源 = 加入/移出混音（多轨并行，参照 white-noises.com） */
+  const toggleTrack = (soundId: string) => {
+    const next = { ...soundLevels }
+    if (soundId in next) {
+      delete next[soundId]
+    } else {
+      next[soundId] = 50
+    }
     updateFocusSoundSettings({
-      currentSound: soundId,
-      currentMusic: null,
-      isPlaying: true
+      soundLevels: next,
+      isPlaying: Object.keys(next).length > 0 || !!currentMusic,
     })
   }
 
-  const handleMusicSelect = (musicId: string) => {
+  /** 双耳节拍单选，再点一次关闭；与环境音叠加 */
+  const selectMusic = (musicId: string) => {
+    if (currentMusic === musicId) {
+      updateFocusSoundSettings({
+        currentMusic: null,
+        isPlaying: Object.keys(soundLevels).length > 0,
+      })
+    } else {
+      updateFocusSoundSettings({ currentMusic: musicId, isPlaying: true })
+    }
+  }
+
+  const applyPreset = (preset: FocusSoundPreset) => {
+    updateFocusSoundSettings({ soundLevels: { ...preset.levels }, isPlaying: true })
+  }
+
+  const stopAll = () => {
     updateFocusSoundSettings({
-      currentMusic: musicId,
-      currentSound: null,
-      isPlaying: true
+      soundLevels: {},
+      currentMusic: null,
+      isPlaying: false,
+      sleepTimerEndsAt: null,
+    })
+  }
+
+  const setSleepTimer = (minutes: number | null) => {
+    updateFocusSoundSettings({
+      sleepTimerEndsAt: minutes ? Date.now() + minutes * 60000 : null,
+      isPlaying: minutes ? true : isPlaying,
     })
   }
 
@@ -237,11 +185,30 @@ export function FocusSound() {
     updateFocusSoundSettings({ volume: value[0] })
   }
 
-  useEffect(() => {
-    return () => {
-      stopAllAudio()
-    }
-  }, [stopAllAudio])
+  const remainingMin = sleepTimerEndsAt
+    ? Math.max(0, Math.ceil((sleepTimerEndsAt - now) / 60000))
+    : null
+
+  const renderChip = (sound: { id: string; name: string }, gridCls: string) => {
+    const Icon = SOUND_ICONS[sound.id] ?? Music
+    const active = sound.id in soundLevels
+    return (
+      <button
+        key={sound.id}
+        onClick={() => toggleTrack(sound.id)}
+        className={cn(
+          'flex flex-col items-center rounded-lg border p-2 transition-all',
+          gridCls,
+          active
+            ? 'border-primary bg-primary/5 text-primary'
+            : 'border-border/50 hover:border-primary/30 hover:bg-muted/30'
+        )}
+      >
+        <Icon className="h-4 w-4" />
+        <span className="text-[9px] mt-1 truncate w-full text-center">{sound.name}</span>
+      </button>
+    )
+  }
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -271,6 +238,11 @@ export function FocusSound() {
             <div className="flex items-center gap-2">
               <Music className="h-4 w-4 text-primary" />
               <span className="font-semibold text-sm">专注音乐</span>
+              {Object.keys(soundLevels).length > 1 && (
+                <span className="text-[10px] text-muted-foreground">
+                  混音 {Object.keys(soundLevels).length} 轨
+                </span>
+              )}
             </div>
             <Button
               variant={isPlaying ? 'default' : 'outline'}
@@ -278,13 +250,13 @@ export function FocusSound() {
               onClick={handleToggle}
               className="h-7 text-xs"
             >
-              {isPlaying ? '停止' : '播放'}
+              {isPlaying ? '暂停' : '播放'}
             </Button>
           </div>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">音量</span>
+              <span className="text-xs text-muted-foreground">总音量</span>
               <span className="text-xs text-muted-foreground tabular-nums">{volume}%</span>
             </div>
             <Slider
@@ -297,12 +269,41 @@ export function FocusSound() {
           </div>
 
           <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">预设组合</p>
+            <div className="flex flex-wrap gap-1.5">
+              {FOCUS_SOUND_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  onClick={() => applyPreset(preset)}
+                  className="rounded-full border border-border/50 px-2.5 py-1 text-[11px] text-muted-foreground transition-all hover:border-primary/30 hover:bg-muted/30 hover:text-foreground"
+                >
+                  {preset.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">白噪音风格</p>
+            <div className="grid grid-cols-3 gap-1.5">
+              {NOISE_STYLES.map((sound) => renderChip(sound, ''))}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground">环境音效（可多选叠加）</p>
+            <div className="grid grid-cols-5 gap-1.5">
+              {AMBIENT_ONLY.map((sound) => renderChip(sound, ''))}
+            </div>
+          </div>
+
+          <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">双耳节拍</p>
             <div className="grid grid-cols-2 gap-2">
               {FOCUS_MUSIC.map((music) => (
                 <button
                   key={music.id}
-                  onClick={() => handleMusicSelect(music.id)}
+                  onClick={() => selectMusic(music.id)}
                   className={cn(
                     'flex flex-col items-center rounded-lg border p-3 transition-all',
                     currentMusic === music.id
@@ -318,38 +319,62 @@ export function FocusSound() {
           </div>
 
           <div className="space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">环境音效</p>
-            <div className="grid grid-cols-5 gap-1.5">
-              {AMBIENT_SOUNDS.map((sound) => {
-                const Icon = sound.icon
-                return (
-                  <button
-                    key={sound.id}
-                    onClick={() => handleSoundSelect(sound.id)}
-                    className={cn(
-                      'flex flex-col items-center rounded-lg border p-2 transition-all',
-                      currentSound === sound.id
-                        ? 'border-primary bg-primary/5 text-primary'
-                        : 'border-border/50 hover:border-primary/30 hover:bg-muted/30'
-                    )}
-                  >
-                    <Icon className="h-4 w-4" />
-                    <span className="text-[9px] mt-1 truncate w-full text-center">{sound.name}</span>
-                  </button>
-                )
-              })}
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                <Timer className="h-3 w-3" />
+                定时停止
+                {remainingMin !== null && (
+                  <span className="text-primary tabular-nums">剩 {remainingMin} 分钟</span>
+                )}
+              </p>
+            </div>
+            <div className="grid grid-cols-4 gap-1.5">
+              <button
+                onClick={() => setSleepTimer(null)}
+                className={cn(
+                  'rounded-lg border py-1.5 text-[11px] transition-all',
+                  sleepTimerEndsAt === null
+                    ? 'border-primary bg-primary/5 text-primary'
+                    : 'border-border/50 text-muted-foreground hover:bg-muted/30'
+                )}
+              >
+                关闭
+              </button>
+              {SLEEP_TIMER_OPTIONS.map((min) => (
+                <button
+                  key={min}
+                  onClick={() => setSleepTimer(min)}
+                  className={cn(
+                    'rounded-lg border py-1.5 text-[11px] transition-all',
+                    sleepTimerEndsAt !== null && Math.abs((remainingMin ?? -1) - min) < 1
+                      ? 'border-primary bg-primary/5 text-primary'
+                      : 'border-border/50 text-muted-foreground hover:bg-muted/30'
+                  )}
+                >
+                  {min} 分钟
+                </button>
+              ))}
             </div>
           </div>
 
           <div className="flex items-center gap-2 pt-2 border-t">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={stopAll}
+              className="h-7 text-xs"
+              disabled={!isPlaying && Object.keys(soundLevels).length === 0 && !currentMusic}
+            >
+              清空并停止
+            </Button>
             <input
               type="checkbox"
               id="autoPlay"
               checked={focusSoundSettings?.autoPlay || false}
               onChange={(e) => updateFocusSoundSettings({ autoPlay: e.target.checked })}
-              className="h-3.5 w-3.5 rounded border-gray-300"
+              className="h-3.5 w-3.5"
             />
-            <label htmlFor="autoPlay" className="text-xs text-muted-foreground">
+            <label htmlFor="autoPlay" className="text-xs text-muted-foreground cursor-pointer">
               开始专注时自动播放
             </label>
           </div>

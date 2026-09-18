@@ -74,7 +74,9 @@ export function ReportExportDialog() {
     })
     const totalMinutes = Math.round(sessions.reduce((acc, s) => acc + s.duration / 60, 0))
     const totalSessions = sessions.length
-    const avgPerDay = totalSessions / 7
+    // 日均按报表区间的真实天数均分（周报 7 / 月报 30 / 90 天报告 90），不再恒除 7
+    const dayCount = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000))
+    const avgPerDay = totalSessions / dayCount
     const completedTasks = tasks.filter(
       (t) => t.status === 'done' && t.completedAt && new Date(t.completedAt) >= start && new Date(t.completedAt) <= end
     )
@@ -136,8 +138,9 @@ export function ReportExportDialog() {
     // 解锁的成就
     const unlocked = achievements.filter((a) => a.earned)
 
-    // 任务完成度
-    const taskTotal = tasks.filter((t) => !t.archived).length
+    // 任务完成度：分母为报表结束前已创建且未归档的任务（区间内"应完成"的口径），
+    // 不再拿全部任务当分母导致完成度失真
+    const taskTotal = tasks.filter((t) => !t.archived && new Date(t.createdAt) <= end).length
     const taskCompletion = taskTotal > 0 ? Math.round((totalCompletedTasks / taskTotal) * 100) : 0
 
     return {
@@ -146,7 +149,9 @@ export function ReportExportDialog() {
       avgPerDay,
       totalCompletedTasks,
       taskCompletion,
-      byDate: Array.from(byDate.entries()).slice(-7),
+      dayCount,
+      // 输出区间内全部每日明细（此前月报/90 天报告被截断到最后 7 天）
+      byDate: Array.from(byDate.entries()),
       peakDay,
       lowDay: lowDay.count === Infinity ? null : lowDay,
       topProjects,

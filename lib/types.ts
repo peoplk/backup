@@ -65,6 +65,8 @@ export interface SavedFilter {
 
 export interface Task {
   id: string
+  /** 最近修改时间戳（ms），由同步层中间件统一盖章 */
+  updatedAt?: number
   title: string
   description?: string
   type: ScheduleItemType
@@ -144,6 +146,8 @@ export interface PomodoroSettings {
 
 export interface Project {
   id: string
+  /** 最近修改时间戳（ms），由同步层中间件统一盖章 */
+  updatedAt?: number
   name: string
   color: string
   totalTime: number
@@ -154,6 +158,8 @@ export interface Project {
 
 export interface Habit {
   id: string
+  /** 最近修改时间戳（ms），由同步层中间件统一盖章 */
+  updatedAt?: number
   name: string
   icon: string
   color: string
@@ -162,6 +168,10 @@ export interface Habit {
   weeklyPattern?: number[]
   /** 每 N 天完成一次（frequency='custom' 且未设置 weeklyPattern 时生效） */
   intervalDays?: number
+  /** 每周 N 次（frequency='weekly' 时生效，弹性目标：任意日完成均计入） */
+  weeklyTarget?: number
+  /** 每月 N 次（frequency='monthly' 时生效） */
+  monthlyTarget?: number
   category?: string
   reminderTime?: string
   reminderEnabled?: boolean
@@ -172,6 +182,8 @@ export interface Habit {
   unit?: string
   streakFreezes?: number
   maxStreakFreezes?: number
+  /** 历史最佳连胜（由统一连胜引擎维护） */
+  bestStreak?: number
   linkedGoalId?: string
 }
 
@@ -186,6 +198,8 @@ export interface HabitCheckIn {
 
 export interface Anniversary {
   id: string
+  /** 最近修改时间戳（ms），由同步层中间件统一盖章 */
+  updatedAt?: number
   title: string
   date: Date
   type: 'birthday' | 'anniversary' | 'countdown' | 'custom' | 'festival'
@@ -214,6 +228,8 @@ export interface Notification {
 
 export interface Goal {
   id: string
+  /** 最近修改时间戳（ms），由同步层中间件统一盖章 */
+  updatedAt?: number
   title: string
   description?: string
   type: 'yearly' | 'quarterly' | 'monthly' | 'weekly'
@@ -272,6 +288,13 @@ export interface Achievement {
   progress: number
   tier: 'bronze' | 'silver' | 'gold' | 'platinum'
   points: number
+}
+
+/** 删除墓碑：多端同步时告知其他设备"该实体已删除"，防止被旧数据复活 */
+export interface Tombstone {
+  id: string
+  collection: string
+  deletedAt: number
 }
 
 export interface UserLevel {
@@ -356,6 +379,16 @@ export interface PomodoroStrictMode {
   skipBreaks: boolean
   maxSessionsPerDay: number
   lockUntilSessionEnd: boolean
+  /** 全屏严格模式：进入沉浸全屏后锁定窗口（kiosk），禁止随意退出 */
+  fullscreenLock?: boolean
+  /** 放弃本次专注需长按的秒数；0 表示不允许中途放弃，必须走完 */
+  fullscreenGiveUpHoldSeconds?: number
+  /** 锁定期间自动开启专注屏蔽（hosts + 应用查杀），解锁后自动解除 */
+  fullscreenShield?: boolean
+  /** 锁定期间阻止系统休眠/息屏（powerSaveBlocker） */
+  fullscreenPreventSleep?: boolean
+  /** 锁定期间静默非番茄钟相关的应用内通知 */
+  fullscreenMuteNotifications?: boolean
 }
 
 /** @deprecated 未使用，将在未来版本中移除 */

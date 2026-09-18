@@ -1,366 +1,295 @@
-const fs = require('fs');
-const zlib = require('zlib');
+/**
+ * FocusFlow 应用图标生成器
+ *
+ * 设计：Modern Dark 风格的应用磁贴
+ *   - 深色圆角磁贴（近黑蓝），顶部一道极淡的高光保证立体感
+ *   - 大开口进度环（番茄钟表盘语义），蓝→靛→紫渐变，圆头端帽
+ *   - 中心焦点圆点，强化"专注"语义
+ *   - 不含任何字母字形：字母在 16x16 下会糊成色块
+ *
+ * 为什么重写旧版：
+ *   1. 旧版用最近邻缩放（Math.floor）生成小尺寸，16/24/32 边缘严重锯齿
+ *   2. 旧版只有 256/48/32/16 四档，缺 24/64/128，Windows 会拿 256 硬缩出模糊图标
+ *   3. 旧版把轨道、圆点、字母全部等比缩到 16px，细节互相糊死
+ *   4. 旧版输出的是全 PNG 条目 ICO，兼容性不如"小尺寸 DIB + 大尺寸 PNG"的常规布局
+ *
+ * 本版做法：
+ *   - sharp/librsvg 矢量渲染，先以 4x 超采样再 lanczos3 降采样，保证边缘干净
+ *   - 逐尺寸光学适配（optical sizing）：小尺寸主动减元素、加粗细，而不是等比缩小
+ *   - 标准多尺寸 ICO：16/24/32/48/64 用 BMP/DIB 条目，128/256 用 PNG 条目
+ *
+ * 用法：node build/create-icon.js
+ */
 
-function createValidPNG(width, height, rgbaData) {
-  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-  function makeChunk(typeStr, data) {
-    const typeBytes = Buffer.from(typeStr, 'ascii');
-    const lenBuf = Buffer.alloc(4);
-    lenBuf.writeUInt32BE(data.length);
-    const crcInput = Buffer.concat([typeBytes, data]);
-    let crc = 0xFFFFFFFF;
-    for (let i = 0; i < crcInput.length; i++) {
-      crc ^= crcInput[i];
-      for (let j = 0; j < 8; j++) {
-        crc = (crc >>> 1) ^ ((crc & 1) ? 0xEDB88320 : 0);
-      }
-    }
-    crc = (crc ^ 0xFFFFFFFF) >>> 0;
-    const crcBuf = Buffer.alloc(4);
-    crcBuf.writeUInt32BE(crc);
-    return Buffer.concat([lenBuf, typeBytes, data, crcBuf]);
-  }
-  const ihdrData = Buffer.alloc(13);
-  ihdrData.writeUInt32BE(width, 0);
-  ihdrData.writeUInt32BE(height, 4);
-  ihdrData[8] = 8;
-  ihdrData[9] = 6;
-  const ihdr = makeChunk('IHDR', ihdrData);
-  const rawData = Buffer.alloc(height * (width * 4 + 1));
-  for (let y = 0; y < height; y++) {
-    rawData[y * (width * 4 + 1)] = 0;
-    rgbaData.copy(rawData, y * (width * 4 + 1) + 1, y * width * 4, (y + 1) * width * 4);
-  }
-  const compressed = zlib.deflateSync(rawData, { level: 9 });
-  const idat = makeChunk('IDAT', compressed);
-  const iend = makeChunk('IEND', Buffer.alloc(0));
-  return Buffer.concat([signature, ihdr, idat, iend]);
+const fs = require('fs')
+const path = require('path')
+const sharp = require('sharp')
+
+const ROOT = path.join(__dirname, '..')
+const PUBLIC_DIR = path.join(ROOT, 'public')
+
+const VB = 256
+const CX = VB / 2
+const CY = VB / 2
+
+/**
+ * 逐尺寸光学适配参数。
+ * 小尺寸下轨道和圆点会互相挤成一团，因此主动去掉它们并把环身加粗，
+ * 让 16x16 在任务栏里依然读得出"带开口的环"这个核心形状。
+ */
+function params(size) {
+  if (size <= 16) return { r: 63, w: 36, track: false, dot: 0, gap: 84 }
+  if (size <= 24) return { r: 62, w: 31, track: false, dot: 16, gap: 82 }
+  if (size <= 48) return { r: 63, w: 28, track: false, dot: 15, gap: 80 }
+  return { r: 64, w: 26, track: true, dot: 15, gap: 80 }
 }
 
-function createICO(png256, png48, png32, png16) {
-  const images = [png256, png48, png32, png16];
-  const count = images.length;
-  const headerSize = 6;
-  const entrySize = 16 * count;
-  let offset = headerSize + entrySize;
-  const entries = [];
-  const sizes = [0, 48, 32, 16];
-  for (let i = 0; i < count; i++) {
-    const entry = Buffer.alloc(16);
-    entry[0] = sizes[i];
-    entry[1] = sizes[i];
-    entry[2] = 0;
-    entry[3] = 0;
-    entry.writeUInt16LE(1, 4);
-    entry.writeUInt16LE(32, 6);
-    entry.writeUInt32LE(images[i].length, 8);
-    entry.writeUInt32LE(offset, 12);
-    entries.push(entry);
-    offset += images[i].length;
-  }
-  const header = Buffer.alloc(6);
-  header.writeUInt16LE(0, 0);
-  header.writeUInt16LE(1, 2);
-  header.writeUInt16LE(count, 4);
-  return Buffer.concat([header, ...entries, ...images]);
+function arcPath(cx, cy, r, startDeg, sweepDeg) {
+  const a0 = (startDeg * Math.PI) / 180
+  const a1 = ((startDeg + sweepDeg) * Math.PI) / 180
+  const x0 = cx + r * Math.cos(a0)
+  const y0 = cy + r * Math.sin(a0)
+  const x1 = cx + r * Math.cos(a1)
+  const y1 = cy + r * Math.sin(a1)
+  const large = sweepDeg > 180 ? 1 : 0
+  return `M ${x0.toFixed(2)} ${y0.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`
 }
 
-const size = 256;
-const pixels = Buffer.alloc(size * size * 4);
-const cx = size / 2;
-const cy = size / 2;
+/** 生成指定尺寸档位的矢量图。返回 256 单位坐标系的 SVG 字符串。 */
+function iconSvg(size) {
+  const p = params(size)
+  const start = -90 + p.gap / 2
+  const sweep = 360 - p.gap
+  // 顶部高光只在有大尺寸时才有意义；极细描边从 24px 起加，
+  // 否则深色磁贴在 Windows 深色任务栏上会与背景糊在一起。
+  const sheen = size >= 64
+  const hairline = size >= 24
 
-function lerp(a, b, t) { return a + (b - a) * Math.max(0, Math.min(1, t)); }
+  const parts = []
+  parts.push(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${VB}" height="${VB}" viewBox="0 0 ${VB} ${VB}">`,
+    '<defs>',
+    '<linearGradient id="tile" x1="0" y1="0" x2="0.35" y2="1">',
+    '<stop offset="0" stop-color="#1C2233"/>',
+    '<stop offset="0.55" stop-color="#131826"/>',
+    '<stop offset="1" stop-color="#0B0E15"/>',
+    '</linearGradient>',
+    '<linearGradient id="arc" x1="0.08" y1="0.02" x2="0.95" y2="0.9">',
+    '<stop offset="0" stop-color="#4EA8FF"/>',
+    '<stop offset="0.45" stop-color="#6C6CF5"/>',
+    '<stop offset="1" stop-color="#B15CF7"/>',
+    '</linearGradient>',
+    '<linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">',
+    '<stop offset="0" stop-color="#FFFFFF" stop-opacity="0.14"/>',
+    '<stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>',
+    '</linearGradient>',
+    '<clipPath id="tileClip"><rect x="6" y="6" width="244" height="244" rx="56"/></clipPath>',
+    '</defs>'
+  )
 
-function setPixel(x, y, r, g, b, a) {
-  x = Math.floor(x); y = Math.floor(y);
-  if (x < 0 || x >= size || y < 0 || y >= size) return;
-  const i = (y * size + x) * 4;
-  if (a >= 255) { pixels[i]=r; pixels[i+1]=g; pixels[i+2]=b; pixels[i+3]=255; return; }
-  if (a <= 0) return;
-  const sa = a/255, da = (pixels[i+3]||0)/255, oa = sa + da*(1-sa);
-  if (oa > 0.001) {
-    pixels[i] = Math.round((r*sa + (pixels[i]||0)*da*(1-sa))/oa);
-    pixels[i+1] = Math.round((g*sa + (pixels[i+1]||0)*da*(1-sa))/oa);
-    pixels[i+2] = Math.round((b*sa + (pixels[i+2]||0)*da*(1-sa))/oa);
-    pixels[i+3] = Math.min(255, Math.round(oa * 255));
+  parts.push('<rect x="6" y="6" width="244" height="244" rx="56" fill="url(#tile)"/>')
+
+  if (sheen) {
+    parts.push(
+      '<g clip-path="url(#tileClip)"><rect x="6" y="6" width="244" height="104" fill="url(#sheen)"/></g>'
+    )
   }
+
+  if (hairline) {
+    parts.push(
+      '<rect x="6.5" y="6.5" width="243" height="243" rx="55.5" fill="none" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="1.5"/>'
+    )
+  }
+
+  if (p.track) {
+    parts.push(
+      `<circle cx="${CX}" cy="${CY}" r="${p.r}" fill="none" stroke="#FFFFFF" stroke-opacity="0.08" stroke-width="${p.w}"/>`
+    )
+  }
+
+  parts.push(
+    `<path d="${arcPath(CX, CY, p.r, start, sweep)}" fill="none" stroke="url(#arc)" stroke-width="${p.w}" stroke-linecap="round"/>`
+  )
+
+  if (p.dot > 0) {
+    parts.push(`<circle cx="${CX}" cy="${CY}" r="${p.dot}" fill="#E8EEFF"/>`)
+  }
+
+  parts.push('</svg>')
+  return parts.join('')
 }
 
-function fillCircle(ccx, ccy, r, cr, cg, cb, ca) {
-  for (let y = Math.floor(ccy-r-1); y <= Math.ceil(ccy+r+1); y++) {
-    for (let x = Math.floor(ccx-r-1); x <= Math.ceil(ccx+r+1); x++) {
-      const d = Math.sqrt((x-ccx)**2 + (y-ccy)**2);
-      if (d <= r) {
-        const edgeAlpha = d > r-2 ? (r-d)/2 : 1;
-        setPixel(x, y, cr, cg, cb, Math.round(ca * edgeAlpha));
-      }
-    }
-  }
+/** 矢量渲染到目标尺寸：先 4x 超采样，再 lanczos3 降采样，得到干净的抗锯齿边缘。 */
+async function renderAt(size) {
+  const density = (72 * size * 4) / VB
+  const hiPng = await sharp(Buffer.from(iconSvg(size)), { density }).png().toBuffer()
+  const base = sharp(hiPng).resize(size, size, { kernel: 'lanczos3', fit: 'fill' })
+
+  const png = await base.clone().png({ compressionLevel: 9 }).toBuffer()
+  const { data } = await base.clone().ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+
+  return { png, rgba: data }
 }
 
-function fillRoundedRect(rx, ry, rw, rh, radius, cr, cg, cb, ca) {
-  for (let y = Math.floor(ry); y < Math.ceil(ry+rh); y++) {
-    for (let x = Math.floor(rx); x < Math.ceil(rx+rw); x++) {
-      const dx = Math.abs(x - (rx + rw/2)) / (rw/2);
-      const dy = Math.abs(y - (ry + rh/2)) / (rh/2);
-      const cr2 = radius / (rw/2);
-      let inside = false;
-      if (dx <= 1-cr2 || dy <= 1-cr2) {
-        const cd = Math.sqrt(Math.max(0,Math.abs(dx)-(1-cr2))**2 + Math.max(0,Math.abs(dy)-(1-cr2))**2);
-        if (cd <= cr2) inside = true;
-      }
-      if (!inside) continue;
-      const d = Math.sqrt(dx*dx + dy*dy);
-      const ed = d - 1;
-      let alpha = ca;
-      if (ed > -0.02 && ed < 0.03) alpha = Math.round(ca * (1-(ed+0.02)/0.05));
-      else if (ed >= 0.03) continue;
-      setPixel(x, y, cr, cg, cb, alpha);
-    }
-  }
-}
+/**
+ * 32bpp DIB 条目：BITMAPINFOHEADER + 自下而上的 BGRA 像素 + 全零 AND 掩码。
+ * 小尺寸用 DIB 而非 PNG，是 Windows 图标最稳妥的常规布局。
+ */
+function rgbaToDib(rgba, w, h) {
+  const header = Buffer.alloc(40)
+  header.writeUInt32LE(40, 0)
+  header.writeInt32LE(w, 4)
+  header.writeInt32LE(h * 2, 8) // XOR 位图 + AND 掩码
+  header.writeUInt16LE(1, 12)
+  header.writeUInt16LE(32, 14)
+  header.writeUInt32LE(0, 16) // BI_RGB
+  header.writeUInt32LE(w * h * 4, 20)
 
-// Background: dark rounded square with modern gradient
-for (let y = 0; y < size; y++) {
-  for (let x = 0; x < size; x++) {
-    const dx = (x - cx) / (size * 0.46);
-    const dy = (y - cy) / (size * 0.46);
-    const cr2 = 0.18;
-    let inside = false;
-    if (Math.abs(dx) <= 1-cr2 || Math.abs(dy) <= 1-cr2) {
-      const cd = Math.sqrt(Math.max(0,Math.abs(dx)-(1-cr2))**2 + Math.max(0,Math.abs(dy)-(1-cr2))**2);
-      if (cd <= cr2) inside = true;
-    }
-    if (!inside) continue;
-    const ed = Math.sqrt(dx*dx + dy*dy) - 1;
-    let alpha = 255;
-    if (ed > -0.03 && ed < 0.04) alpha = Math.round((1-(ed+0.03)/0.07)*255);
-    else if (ed >= 0.04) continue;
-    const t = y / size;
-    const s = x / size;
-    setPixel(x, y,
-      Math.round(lerp(lerp(15, 30, t), lerp(20, 10, t), s)),
-      Math.round(lerp(lerp(23, 58, t), lerp(30, 40, t), s)),
-      Math.round(lerp(lerp(42, 110, t), lerp(55, 80, t), s)),
-      alpha
-    );
-  }
-}
-
-// Glassmorphism inner glow
-for (let y = 0; y < size; y++) {
-  for (let x = 0; x < size; x++) {
-    const dx = (x - cx) / (size * 0.42);
-    const dy = (y - cy) / (size * 0.42);
-    const d = Math.sqrt(dx*dx + dy*dy);
-    if (d > 1) continue;
-    const glow = Math.max(0, 1 - d) * 0.08;
-    setPixel(x, y, 120, 160, 255, Math.round(glow * 255));
-  }
-}
-
-// Top highlight (glass effect)
-for (let y = 0; y < size * 0.35; y++) {
-  for (let x = 0; x < size; x++) {
-    const dx = (x - cx) / (size * 0.40);
-    const dy = (y - cy) / (size * 0.40);
-    const d = Math.sqrt(dx*dx + dy*dy);
-    if (d > 1) continue;
-    const t = y / (size * 0.35);
-    const glow = (1 - t) * (1 - d) * 0.12;
-    setPixel(x, y, 200, 220, 255, Math.round(glow * 255));
-  }
-}
-
-// Central focus ring (outer glow)
-const ringR = size * 0.30;
-const ringW = size * 0.035;
-for (let y = 0; y < size; y++) {
-  for (let x = 0; x < size; x++) {
-    const d = Math.sqrt((x-cx)**2 + (y-cy)**2);
-    const ringDist = Math.abs(d - ringR);
-    if (ringDist < ringW + 8) {
-      const t = (y - cy + ringR) / (ringR * 2);
-      const r = Math.round(lerp(99, 59, t));
-      const g = Math.round(lerp(102, 130, t));
-      const b = Math.round(lerp(241, 246, t));
-      if (ringDist < ringW) {
-        const edgeAlpha = ringDist > ringW - 3 ? (ringW - ringDist) / 3 : 1;
-        setPixel(x, y, r, g, b, Math.round(255 * edgeAlpha));
-      } else {
-        const glowAlpha = (1 - (ringDist - ringW) / 8) * 0.3;
-        setPixel(x, y, r, g, b, Math.round(255 * glowAlpha));
-      }
+  const xor = Buffer.alloc(w * h * 4)
+  for (let y = 0; y < h; y++) {
+    const srcRow = y
+    const dstRow = h - 1 - y // DIB 是自下而上
+    for (let x = 0; x < w; x++) {
+      const s = (srcRow * w + x) * 4
+      const d = (dstRow * w + x) * 4
+      xor[d] = rgba[s + 2] // B
+      xor[d + 1] = rgba[s + 1] // G
+      xor[d + 2] = rgba[s] // R
+      xor[d + 3] = rgba[s + 3] // A
     }
   }
+
+  const andStride = Math.ceil(w / 32) * 4
+  const and = Buffer.alloc(andStride * h) // 全零 = 不透明，透明度由 alpha 通道决定
+
+  return Buffer.concat([header, xor, and])
 }
 
-// Progress arc (75% complete) - bright gradient
-const arcStart = -Math.PI * 0.5;
-const arcEnd = arcStart + Math.PI * 1.5;
-const arcR = ringR;
-const arcW = size * 0.035;
-for (let y = 0; y < size; y++) {
-  for (let x = 0; x < size; x++) {
-    const d = Math.sqrt((x-cx)**2 + (y-cy)**2);
-    if (Math.abs(d - arcR) > arcW) continue;
-    let angle = Math.atan2(y - cy, x - cx);
-    if (angle < arcStart) angle += Math.PI * 2;
-    if (angle > arcEnd || angle < arcStart) continue;
-    const progress = (angle - arcStart) / (arcEnd - arcStart);
-    const r = Math.round(lerp(56, 168, progress));
-    const g = Math.round(lerp(189, 85, progress));
-    const b = Math.round(lerp(248, 247, progress));
-    const ringDist = Math.abs(d - arcR);
-    const edgeAlpha = ringDist > arcW - 3 ? (arcW - ringDist) / 3 : 1;
-    setPixel(x, y, r, g, b, Math.round(255 * edgeAlpha));
+/** 组装多尺寸 ICO。大尺寸用 PNG 条目压缩体积，小尺寸用 DIB 条目保兼容。 */
+function buildIco(entries) {
+  const header = Buffer.alloc(6)
+  header.writeUInt16LE(0, 0)
+  header.writeUInt16LE(1, 2)
+  header.writeUInt16LE(entries.length, 4)
+
+  let offset = 6 + entries.length * 16
+  const dirs = []
+  for (const e of entries) {
+    const d = Buffer.alloc(16)
+    d[0] = e.size >= 256 ? 0 : e.size // 256 以 0 表示
+    d[1] = e.size >= 256 ? 0 : e.size
+    d[2] = 0
+    d[3] = 0
+    d.writeUInt16LE(1, 4)
+    d.writeUInt16LE(32, 6)
+    d.writeUInt32LE(e.data.length, 8)
+    d.writeUInt32LE(offset, 12)
+    dirs.push(d)
+    offset += e.data.length
   }
+
+  return Buffer.concat([header, ...dirs, ...entries.map((e) => e.data)])
 }
 
-// Arc end cap (bright dot)
-const endAngle = arcEnd;
-const endX = cx + Math.cos(endAngle) * arcR;
-const endY = cy + Math.sin(endAngle) * arcR;
-fillCircle(endX, endY, arcW * 0.9, 168, 85, 247, 255);
-fillCircle(endX, endY, arcW * 0.5, 220, 180, 255, 255);
+const ICO_SIZES = [16, 24, 32, 48, 64, 128, 256]
+const PNG_ENTRY_FROM = 128
 
-// Center "F" letter (modern, bold)
-const fSize = size * 0.22;
-const fTop = cy - fSize * 0.55;
-const fBot = cy + fSize * 0.55;
-const fLeft = cx - fSize * 0.3;
-const fRight = cx + fSize * 0.3;
-const fStroke = fSize * 0.16;
-const fMid = cy - fSize * 0.05;
+/** 尺寸对照预览：同一图标在深色与浅色背景下的 1x 实际观感 */
+async function writePreview(rendered) {
+  const ladder = [256, 128, 64, 48, 32, 24, 16]
+  const gap = 24
+  const margin = 28
+  const rowH = 280
+  const width = margin * 2 + ladder.reduce((a, s) => a + s, 0) + gap * (ladder.length - 1)
+  const height = rowH * 2
 
-// Vertical bar of F
-for (let y = Math.floor(fTop); y <= Math.ceil(fBot); y++) {
-  for (let x = Math.floor(fLeft); x <= Math.ceil(fLeft + fStroke); x++) {
-    const t = (y - fTop) / (fBot - fTop);
-    const r = Math.round(lerp(240, 200, t));
-    const g = Math.round(lerp(245, 210, t));
-    const b = Math.round(lerp(255, 230, t));
-    setPixel(x, y, r, g, b, 255);
-  }
-}
-
-// Top horizontal bar of F
-for (let y = Math.floor(fTop); y <= Math.ceil(fTop + fStroke); y++) {
-  for (let x = Math.floor(fLeft); x <= Math.ceil(fRight); x++) {
-    const t = (x - fLeft) / (fRight - fLeft);
-    const r = Math.round(lerp(240, 220, t));
-    const g = Math.round(lerp(245, 225, t));
-    const b = Math.round(lerp(255, 240, t));
-    setPixel(x, y, r, g, b, 255);
-  }
-}
-
-// Middle horizontal bar of F
-for (let y = Math.floor(fMid); y <= Math.ceil(fMid + fStroke * 0.85); y++) {
-  for (let x = Math.floor(fLeft); x <= Math.ceil(fLeft + (fRight - fLeft) * 0.75); x++) {
-    const t = (x - fLeft) / ((fRight - fLeft) * 0.75);
-    const r = Math.round(lerp(240, 220, t));
-    const g = Math.round(lerp(245, 225, t));
-    const b = Math.round(lerp(255, 240, t));
-    setPixel(x, y, r, g, b, 255);
-  }
-}
-
-// Sparkle accents
-const sparkles = [
-  [cx + size*0.22, cy - size*0.22, 5, 1.0],
-  [cx - size*0.25, cy - size*0.18, 3.5, 0.7],
-  [cx + size*0.15, cy + size*0.25, 3, 0.6],
-  [cx - size*0.18, cy + size*0.22, 2.5, 0.5],
-];
-sparkles.forEach(([sx, sy, sr, opacity]) => {
-  for (let y = Math.floor(sy-sr*2); y <= Math.ceil(sy+sr*2); y++) {
-    for (let x = Math.floor(sx-sr*2); x <= Math.ceil(sx+sr*2); x++) {
-      const d = Math.sqrt((x-sx)**2 + (y-sy)**2);
-      if (d <= sr) {
-        const a = (1 - d/sr) * opacity;
-        setPixel(x, y, 255, 255, 255, Math.round(a * 255));
-      }
+  const overlays = []
+  for (let row = 0; row < 2; row++) {
+    let x = margin
+    const centerY = row * rowH + rowH / 2
+    for (const size of ladder) {
+      overlays.push({
+        input: rendered.get(size).png,
+        left: x,
+        top: Math.round(centerY - size / 2),
+      })
+      x += size + gap
     }
   }
-});
 
-// Small decorative dots
-const dots = [
-  [cx - size*0.32, cy + size*0.05, 3, 99, 102, 241, 0.4],
-  [cx + size*0.33, cy + size*0.1, 2.5, 168, 85, 247, 0.3],
-  [cx + size*0.05, cy - size*0.35, 2, 56, 189, 248, 0.35],
-];
-dots.forEach(([dx, dy, dr, r, g, b, a]) => {
-  fillCircle(dx, dy, dr, r, g, b, Math.round(a * 255));
-});
-
-// Generate multi-size ICO
-function resizePixels(srcPixels, srcSize, dstSize) {
-  const dst = Buffer.alloc(dstSize * dstSize * 4);
-  for (let y = 0; y < dstSize; y++) {
-    for (let x = 0; x < dstSize; x++) {
-      const sx = Math.floor(x * srcSize / dstSize);
-      const sy = Math.floor(y * srcSize / dstSize);
-      const si = (sy * srcSize + sx) * 4;
-      const di = (y * dstSize + x) * 4;
-      dst[di] = srcPixels[si];
-      dst[di+1] = srcPixels[si+1];
-      dst[di+2] = srcPixels[si+2];
-      dst[di+3] = srcPixels[si+3];
-    }
-  }
-  return dst;
+  await sharp({
+    create: {
+      width,
+      height,
+      channels: 4,
+      background: { r: 15, g: 17, b: 23, alpha: 1 },
+    },
+  })
+    .composite([
+      {
+        input: await sharp({
+          create: {
+            width,
+            height: rowH,
+            channels: 4,
+            background: { r: 242, g: 244, b: 248, alpha: 1 },
+          },
+        })
+          .png()
+          .toBuffer(),
+        left: 0,
+        top: rowH,
+      },
+      ...overlays,
+    ])
+    .png({ compressionLevel: 9 })
+    .toFile(path.join(ROOT, 'build', 'icon-preview.png'))
 }
 
-const png256 = createValidPNG(size, size, pixels);
-const pixels48 = resizePixels(pixels, size, 48);
-const png48 = createValidPNG(48, 48, pixels48);
-const pixels32 = resizePixels(pixels, size, 32);
-const png32 = createValidPNG(32, 32, pixels32);
-const pixels16 = resizePixels(pixels, size, 16);
-const png16 = createValidPNG(16, 16, pixels16);
+async function main() {
+  const rendered = new Map()
+  for (const size of ICO_SIZES) {
+    rendered.set(size, await renderAt(size))
+  }
+  for (const size of [180]) {
+    rendered.set(size, await renderAt(size))
+  }
 
-const ico = createICO(png256, png48, png32, png16);
+  const pngEntries = ICO_SIZES.filter((s) => s >= PNG_ENTRY_FROM).map((s) => ({
+    size: s,
+    data: rendered.get(s).png,
+  }))
+  const dibEntries = ICO_SIZES.filter((s) => s < PNG_ENTRY_FROM).map((s) => ({
+    size: s,
+    data: rgbaToDib(rendered.get(s).rgba, s, s),
+  }))
+  const ico = buildIco([...dibEntries, ...pngEntries].sort((a, b) => a.size - b.size))
 
-fs.writeFileSync('public/icon.png', png256);
-fs.writeFileSync('public/icon.ico', ico);
+  fs.writeFileSync(path.join(PUBLIC_DIR, 'icon.ico'), ico)
+  fs.writeFileSync(path.join(PUBLIC_DIR, 'icon.png'), rendered.get(256).png)
+  fs.writeFileSync(path.join(PUBLIC_DIR, 'icon.svg'), iconSvg(256))
+  fs.writeFileSync(path.join(PUBLIC_DIR, 'icon-light-32x32.png'), rendered.get(32).png)
+  fs.writeFileSync(path.join(PUBLIC_DIR, 'icon-dark-32x32.png'), rendered.get(32).png)
+  fs.writeFileSync(path.join(PUBLIC_DIR, 'apple-icon.png'), rendered.get(180).png)
 
-// Also create SVG version
-const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
-  <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#0F172A"/>
-      <stop offset="100%" style="stop-color:#1E3A5F"/>
-    </linearGradient>
-    <linearGradient id="ring" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#6366F1"/>
-      <stop offset="100%" style="stop-color:#3B82F6"/>
-    </linearGradient>
-    <linearGradient id="arc" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#38BDF8"/>
-      <stop offset="100%" style="stop-color:#A855F7"/>
-    </linearGradient>
-    <linearGradient id="letter" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" style="stop-color:#F0F5FF"/>
-      <stop offset="100%" style="stop-color:#C8D6E6"/>
-    </linearGradient>
-  </defs>
-  <rect x="4" y="4" width="248" height="248" rx="46" fill="url(#bg)"/>
-  <circle cx="128" cy="128" r="77" fill="none" stroke="url(#ring)" stroke-width="9" opacity="0.25"/>
-  <circle cx="128" cy="128" r="77" fill="none" stroke="url(#arc)" stroke-width="9" stroke-dasharray="363 485" stroke-dashoffset="121" stroke-linecap="round"/>
-  <circle cx="89" cy="56" r="5" fill="white" opacity="0.8"/>
-  <circle cx="184" cy="72" r="3.5" fill="white" opacity="0.7"/>
-  <circle cx="166" cy="192" r="3" fill="white" opacity="0.6"/>
-  <circle cx="48" cy="136" r="3" fill="#6366F1" opacity="0.4"/>
-  <circle cx="212" cy="154" r="2.5" fill="#A855F7" opacity="0.3"/>
-  <text x="128" y="148" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="88" font-weight="800" fill="url(#letter)">F</text>
-</svg>`;
+  await writePreview(rendered)
 
-fs.writeFileSync('public/icon.svg', svg);
+  const kb = (n) => `${(n / 1024).toFixed(1)} KB`
+  console.log('[create-icon] FocusFlow 图标已生成')
+  console.log(`  public/icon.ico              ${kb(ico.length)}  尺寸 ${ICO_SIZES.join('/')}`)
+  console.log(`  public/icon.png              ${kb(rendered.get(256).png.length)}  256x256`)
+  console.log(`  public/icon.svg              (矢量母版)`)
+  console.log(`  public/icon-light-32x32.png  ${kb(rendered.get(32).png.length)}`)
+  console.log(`  public/icon-dark-32x32.png   ${kb(rendered.get(32).png.length)}`)
+  console.log(`  public/apple-icon.png        ${kb(rendered.get(180).png.length)}  180x180`)
+  console.log(`  build/icon-preview.png       (尺寸对照预览)`)
+}
 
-console.log('✅ Modern FocusFlow icons generated successfully!');
-console.log(`   📄 public/icon.png (${(png256.length/1024).toFixed(1)} KB)`);
-console.log(`   📄 public/icon.ico (${(ico.length/1024).toFixed(1)} KB)`);
-console.log(`   📄 public/icon.svg`);
+if (require.main === module) {
+  main().catch((err) => {
+    console.error('[create-icon] 失败:', err)
+    process.exit(1)
+  })
+}
+
+module.exports = { iconSvg, renderAt, buildIco, rgbaToDib, params, ICO_SIZES }

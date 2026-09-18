@@ -1,5 +1,6 @@
 import { useAppStore } from '@/lib/store'
 import type { Habit, Goal, HabitCheckIn } from '@/lib/types'
+import { calculateHabitStreak } from '@/lib/habit-streak'
 
 export interface HabitGoalLink {
   habitId: string
@@ -16,75 +17,53 @@ export interface HabitContribution {
   lastCheckIn?: Date
 }
 
-const HABIT_GOAL_LINKS_KEY = 'focusflow-habit-goal-links'
-
-function loadLinksFromStorage(): HabitGoalLink[] {
-  try {
-    const stored = localStorage.getItem(HABIT_GOAL_LINKS_KEY)
-    return stored ? JSON.parse(stored) : []
-  } catch {
-    return []
-  }
-}
-
-function saveLinksToStorage(links: HabitGoalLink[]) {
-  localStorage.setItem(HABIT_GOAL_LINKS_KEY, JSON.stringify(links))
-}
-
+/**
+ * 习惯-目标关联的唯一数据源是 goal.linkedHabits + habit.linkedGoalId
+ * （写入统一走 data-link-service）。本类仅提供兼容的查询/贡献度视图，
+ * 旧的 localStorage 私有注册表（focusflow-habit-goal-links）已移除。
+ */
 export class HabitGoalIntegration {
-  private static _habitGoalLinks: HabitGoalLink[] | null = null
 
-  private static get habitGoalLinks(): HabitGoalLink[] {
-    if (this._habitGoalLinks === null) {
-      this._habitGoalLinks = loadLinksFromStorage()
-    }
-    return this._habitGoalLinks
-  }
-
-  private static set habitGoalLinks(value: HabitGoalLink[]) {
-    this._habitGoalLinks = value
-    saveLinksToStorage(value)
-  }
-  
   static linkHabitToGoal(
     habitId: string,
     goalId: string,
-    contributionWeight: number = 1,
-    milestoneId?: string
+    _contributionWeight: number = 1,
+    _milestoneId?: string
   ): void {
-    const existingIndex = this.habitGoalLinks.findIndex(
-      link => link.habitId === habitId && link.goalId === goalId
-    )
-    
-    if (existingIndex >= 0) {
-      this.habitGoalLinks[existingIndex] = {
-        habitId,
-        goalId,
-        contributionWeight,
-        milestoneId
-      }
-    } else {
-      this.habitGoalLinks.push({
-        habitId,
-        goalId,
-        contributionWeight,
-        milestoneId
-      })
-    }
+    import('@/lib/data-link-service').then(({ dataLinkService }) => {
+      dataLinkService.linkHabitToGoal(habitId, goalId)
+    })
   }
-  
+
   static unlinkHabitFromGoal(habitId: string, goalId: string): void {
-    this.habitGoalLinks = this.habitGoalLinks.filter(
-      link => !(link.habitId === habitId && link.goalId === goalId)
-    )
+    import('@/lib/data-link-service').then(({ dataLinkService }) => {
+      dataLinkService.unlinkHabitFromGoal(habitId, goalId)
+    })
   }
-  
+
   static getHabitsForGoal(goalId: string): HabitGoalLink[] {
-    return this.habitGoalLinks.filter(link => link.goalId === goalId)
+    const { goals } = useAppStore.getState()
+    const goal = goals.find(g => g.id === goalId)
+    return (goal?.linkedHabits ?? []).map(habitId => ({
+      habitId,
+      goalId,
+      contributionWeight: 1,
+    }))
   }
-  
+
   static getGoalsForHabit(habitId: string): HabitGoalLink[] {
-    return this.habitGoalLinks.filter(link => link.habitId === habitId)
+    const { goals, habits } = useAppStore.getState()
+    const habit = habits.find(h => h.id === habitId)
+    const goalIds = new Set<string>()
+    if (habit?.linkedGoalId) goalIds.add(habit.linkedGoalId)
+    for (const g of goals) {
+      if (g.linkedHabits?.includes(habitId)) goalIds.add(g.id)
+    }
+    return [...goalIds].map(goalId => ({
+      habitId,
+      goalId,
+      contributionWeight: 1,
+    }))
   }
   
   static calculateHabitContribution(habitId: string, days: number = 30): number {
@@ -101,37 +80,22 @@ export class HabitGoalIntegration {
     return recentCheckIns.length / days
   }
   
+  /**
+   * @deprecated 目标进度已统一由 data-link-service 单一公式重算
+   * （goal.linkedHabits 为唯一注册表）。此方法仅作兼容保留并转发。
+   */
   static updateGoalProgressFromHabit(habitId: string): void {
-    const { goals, updateGoal, addNotification } = useAppStore.getState()
-    const links = this.getGoalsForHabit(habitId)
-    
-    links.forEach(link => {
-      const goal = goals.find(g => g.id === link.goalId)
-      if (!goal) return
-      
-      const contribution = this.calculateHabitContribution(habitId)
-      const progressIncrement = contribution * link.contributionWeight * 10
-      
-      const newProgress = Math.min(goal.progress + progressIncrement, 100)
-      
-      updateGoal(link.goalId, { progress: newProgress })
-      
-      if (newProgress >= 100 && goal.progress < 100) {
-        addNotification({
-          type: 'achievement',
-          title: '目标达成',
-          message: `恭喜！目标「${goal.title}」已完成！`,
-          relatedType: 'goal',
-          relatedId: goal.id,
-        })
-      } else if (newProgress >= 75 && goal.progress < 75) {
-        addNotification({
-          type: 'achievement',
-          title: '目标进度更新',
-          message: `目标「${goal.title}」已完成 75%！`,
-          relatedType: 'goal',
-          relatedId: goal.id,
-        })
+    const { habits, goals } = useAppStore.getState()
+    const habit = habits.find(h => h.id === habitId)
+    const goalIds = new Set<string>()
+    if (habit?.linkedGoalId) goalIds.add(habit.linkedGoalId)
+    for (const g of goals) {
+      if (g.linkedHabits?.includes(habitId)) goalIds.add(g.id)
+    }
+    if (goalIds.size === 0) return
+    import('@/lib/data-link-service').then(({ dataLinkService }) => {
+      for (const goalId of goalIds) {
+        dataLinkService.updateGoalProgressAfterLink(goalId)
       }
     })
   }
@@ -162,26 +126,15 @@ export class HabitGoalIntegration {
     return contributions
   }
   
+  /** @deprecated 请直接使用 lib/habit-streak.ts 的统一连胜引擎 */
   static getHabitStreak(habitId: string): number {
-    const { habitCheckIns } = useAppStore.getState()
-    let streak = 0
-    const checkDate = new Date()
-    
-    while (true) {
-      const dateStr = checkDate.toDateString()
-      const checkIn = habitCheckIns.find(
-        c => c.habitId === habitId && new Date(c.date).toDateString() === dateStr
-      )
-      
-      if (checkIn?.completed) {
-        streak++
-        checkDate.setDate(checkDate.getDate() - 1)
-      } else {
-        break
-      }
-    }
-    
-    return streak
+    const { habits, habitCheckIns } = useAppStore.getState()
+    const habit = habits.find(h => h.id === habitId)
+    if (!habit) return 0
+    return calculateHabitStreak(
+      habit,
+      habitCheckIns.filter(c => c.habitId === habitId)
+    ).current
   }
   
   static getLastCheckIn(habitId: string): Date | undefined {

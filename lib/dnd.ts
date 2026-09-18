@@ -39,6 +39,11 @@ export function useFocusShield() {
         const res = await api.shieldStart(websites, apps, mode)
         if (res?.success) {
           setActive(true)
+          // success 只代表"写入调用成功"，hosts 可能仍未生效（UAC 被拒 / 杀软回滚）。
+          // 严格模式全屏等无人值守场景必须留痕，否则"锁住了但没屏蔽"完全无感知。
+          if (res.health && !res.health.ok) {
+            console.warn('[shield] 已激活但未真正生效:', res.health.reason)
+          }
         } else if (lastCount === 1) {
           // 首次启动失败则回滚计数，避免后续 stop 时计数失衡
           refCount.current = 0
@@ -88,7 +93,7 @@ const DEFAULT_BLOCKED_WEBSITES = [
 const DEFAULT_BLOCKED_APPS: string[] = []
 
 // 读取用户在专注屏蔽页配置的规则（与 focus-shield.tsx 的存储 key 保持一致）
-function getUserShieldConfig(): { websites: string[]; apps: string[]; mode: 'blacklist' | 'whitelist' } {
+export function getUserShieldConfig(): { websites: string[]; apps: string[]; mode: 'blacklist' | 'whitelist' } {
   if (typeof window === 'undefined') {
     return { websites: DEFAULT_BLOCKED_WEBSITES, apps: DEFAULT_BLOCKED_APPS, mode: 'blacklist' }
   }

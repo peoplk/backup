@@ -12,13 +12,17 @@ import { SettingsView } from '@/components/views/settings-view'
 import { GoalsView } from '@/components/views/goals-view'
 import { CalendarView } from '@/components/views/calendar-view'
 import { TimeBlockView } from '@/components/views/time-block-view'
-import { JournalView } from '@/components/views/journal-view'
 import { GlobalSearch } from '@/components/global-search'
 import { NotificationBell } from '@/components/notification-bell'
+import { SyncStatusIndicator } from '@/components/sync-status-indicator'
+import { useModKeyLabels } from '@/lib/platform'
+import { useOnboardingComplete } from '@/lib/onboarding'
+import { OnboardingDialog } from '@/components/onboarding-dialog'
 import { CommandPalette } from '@/components/command-palette'
 import { KeyboardShortcutsDialog } from '@/components/keyboard-shortcuts-dialog'
 import { MiniTimer } from '@/components/mini-timer'
 import { QuickCapture } from '@/components/quick-capture'
+import { LevelUpModal } from '@/components/level-up-modal'
 import { PrivacyLockOverlay } from '@/components/privacy-lock-overlay'
 import { DailyReviewTrigger } from '@/lib/hooks/use-daily-review-trigger'
 import { useAppStore } from '@/lib/store'
@@ -32,6 +36,7 @@ import { useActivityTracker } from '@/lib/use-activity-tracker'
 import { useShieldSchedule } from '@/lib/use-shield-schedule'
 import { useCalendarSubscriptions } from '@/lib/use-calendar-subscriptions'
 import { VIEW_TITLES } from '@/lib/config'
+import { parseEnhancedInput, buildParsedTaskFields } from '@/lib/smart-input-enhanced'
 import { useKeyboardShortcuts } from '@/lib/shortcuts'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -43,8 +48,11 @@ export function DesktopApp() {
   const { sidebarCollapsed, activeView, toggleSidebar } = useAppStore(
     useShallow((s) => ({ sidebarCollapsed: s.sidebarCollapsed, activeView: s.activeView, toggleSidebar: s.toggleSidebar }))
   )
+  const modKeys = useModKeyLabels()
   const [showMobileMenu, setShowMobileMenu] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
+  const [manualOnboarding, setManualOnboarding] = useState(false)
+  const onboardingDone = useOnboardingComplete()
   const [isElectron, setIsElectron] = useState(false)
   const [mounted, setMounted] = useState(false)
 
@@ -63,6 +71,14 @@ export function DesktopApp() {
 
   useEffect(() => {
     setIsElectron(!!window.electronAPI)
+  }, [])
+
+  // 设置页「重新查看引导」入口
+  useEffect(() => {
+    window.__openOnboarding = () => setManualOnboarding(true)
+    return () => {
+      window.__openOnboarding = undefined
+    }
   }, [])
 
   useEffect(() => {
@@ -87,7 +103,7 @@ export function DesktopApp() {
     }
 
     off(window.electronAPI.onMenuNavigate?.((view: string) => {
-      const validViews = ['focus', 'tasks', 'habits', 'dashboard', 'goals', 'calendar', 'anniversaries', 'analytics', 'settings', 'time-block', 'journal'] as const
+      const validViews = ['focus', 'tasks', 'habits', 'dashboard', 'goals', 'calendar', 'anniversaries', 'analytics', 'settings', 'time-block'] as const
       if (validViews.includes(view as typeof validViews[number])) {
         useAppStore.getState().setActiveView(view as typeof validViews[number])
       }
@@ -106,20 +122,30 @@ export function DesktopApp() {
       window.dispatchEvent(new CustomEvent('focusflow:toggle-pomodoro'))
     }))
     off(window.electronAPI.onClipboardCapture?.((data: { text: string; type: string }) => {
-      let title = data.text
+      const raw = data.text.trim()
+      if (!raw) return
+      let title = raw
+      let parsedFields: ReturnType<typeof buildParsedTaskFields> | null = null
+      let estimatedPomodoros: number | undefined
       try {
-        const hostname = new URL(data.text).hostname.replace(/^www\./, '')
-        title = hostname || data.text
+        const hostname = new URL(raw).hostname.replace(/^www\./, '')
+        title = hostname || raw
       } catch {
-        // 保留原文
+        // 非 URL 文本走智能解析；过长或多行文本视为参考材料，仅保留原文不做 NLP
+        if (raw.length <= 200 && !data.text.includes('\n')) {
+          const parsed = parseEnhancedInput(raw)
+          if (parsed.title) title = parsed.title
+          parsedFields = buildParsedTaskFields(parsed)
+          estimatedPomodoros = parsed.estimatedPomodoros
+        }
       }
       useAppStore.getState().addTask({
         title,
         type: 'task',
-        priority: 'medium',
         status: 'todo',
-        tags: [],
         notes: data.text,
+        ...(parsedFields ?? { priority: 'medium' as const, tags: [] }),
+        ...(estimatedPomodoros ? { estimatedPomodoros } : {}),
       })
       useAppStore.getState().setActiveView('tasks')
       toast.success('已从剪贴板创建任务', { description: title })
@@ -212,12 +238,16 @@ export function DesktopApp() {
       const store = useAppStore.getState()
       const created = files.map((f) => {
         const name = f.name.replace(/\.[^.]+$/, '') || f.name
+        // 文件名仅提取显式标记（#标签 / @项目 / 优先级 / 能量），忽略日期时间类解析，避免截图等文件名误判
+        const parsed = parseEnhancedInput(name)
         store.addTask({
           title: name,
           type: 'task',
-          priority: 'medium',
           status: 'todo',
-          tags: [],
+          priority: parsed.priority || 'medium',
+          tags: parsed.tags || [],
+          ...(parsed.project ? { project: parsed.project } : {}),
+          ...(parsed.energy ? { energy: parsed.energy } : {}),
           notes: f.name,
         })
         return name
@@ -267,8 +297,6 @@ export function DesktopApp() {
         return <ErrorBoundary fallback={viewFallback('纪念日')}><AnniversariesView /></ErrorBoundary>
       case 'time-block':
         return <ErrorBoundary fallback={viewFallback('时间块')}><TimeBlockView /></ErrorBoundary>
-      case 'journal':
-        return <ErrorBoundary fallback={viewFallback('日志')}><JournalView /></ErrorBoundary>
       case 'settings':
         return <ErrorBoundary fallback={viewFallback('设置')}><SettingsView /></ErrorBoundary>
       default:
@@ -341,12 +369,13 @@ export function DesktopApp() {
                   window.__openQuickCapture?.()
                 }
               }}
-              title="快速捕获任务 (Ctrl+Shift+A)"
+              title={`快速捕获任务 (${modKeys.mod}${modKeys.shift}A)`}
             >
               <Zap className="h-4 w-4" />
               <span className="text-sm">快速添加</span>
               <kbd className="pointer-events-none ml-0.5 hidden lg:inline-flex h-5 select-none items-center gap-0.5 rounded-md border bg-muted/50 px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
-                <span className="text-[10px]">⌘</span>⇧A
+                {modKeys.mod}
+                {modKeys.shift}A
               </kbd>
             </Button>
             <Button
@@ -373,7 +402,7 @@ export function DesktopApp() {
               <Search className="h-4 w-4" />
               <span className="text-sm">搜索...</span>
               <kbd className="pointer-events-none ml-1 inline-flex h-5 select-none items-center gap-1 rounded-md border bg-muted/50 px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
-                <span className="text-xs">⌘</span>K
+                {modKeys.mod}K
               </kbd>
             </Button>
 
@@ -388,12 +417,14 @@ export function DesktopApp() {
               <Search className="h-5 w-5" />
             </Button>
 
+            <SyncStatusIndicator />
+
             <NotificationBell />
           </div>
         </header>
 
         <div className={cn(
-          'flex-1 overflow-y-auto overflow-x-hidden',
+          'flex-1 overflow-y-auto overflow-x-hidden pb-24',
           activeView === 'dashboard' ? 'p-3 lg:p-4' : 'p-5 lg:p-8'
         )}>
           {renderView()}
@@ -406,7 +437,14 @@ export function DesktopApp() {
       <MiniTimer />
       <QuickCapture />
       <DailyReviewTrigger />
+      <OnboardingDialog
+        open={manualOnboarding || !onboardingDone}
+        onOpenChange={(open) => {
+          if (!open) setManualOnboarding(false)
+        }}
+      />
       <PrivacyLockOverlay />
+      <LevelUpModal />
     </div>
   )
 }

@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import { useAppStore } from '@/lib/store'
@@ -38,12 +38,14 @@ import {
   Clock,
   ArrowUpRight,
   Sparkle,
+  TrendingDown,
 } from 'lucide-react'
 import { SmartQuickAddTask } from '@/components/smart-quick-add-task'
 import { GoalCelebration } from '@/components/goal-celebration'
 import { useDailyGoalWatcher } from '@/lib/hooks/use-daily-goal'
 import { cn } from '@/lib/utils'
 import { useIsMobile } from '@/components/ui/use-mobile'
+
 
 const GREETINGS = [
   { start: 0, end: 6, text: '夜深了', subtext: '注意休息，明天继续', icon: Moon, accent: 'from-indigo-500/20 to-purple-500/10' },
@@ -100,10 +102,23 @@ export function DashboardView() {
   }, [])
 
   const greeting = useMemo(() => GREETINGS.find(g => hour >= g.start && hour < g.end) || GREETINGS[0], [hour])
-  const GreetingIcon = useMemo(() => greeting.icon, [greeting])
 
   const todayMinutes = useMemo(() => Math.round(stats.todayFocusSeconds / 60), [stats.todayFocusSeconds])
   const dailyGoalProgress = useMemo(() => Math.min((todayMinutes / focusGoals.dailyMinutes) * 100, 100), [todayMinutes, focusGoals.dailyMinutes])
+
+  const yesterdayFocusSeconds = useMemo(() => {
+    const y = new Date(today)
+    y.setDate(y.getDate() - 1)
+    const yStr = y.toDateString()
+    return pomodoroSessions
+      .filter((s) => s.type === 'work' && new Date(s.completedAt).toDateString() === yStr)
+      .reduce((acc, s) => acc + s.duration, 0)
+  }, [pomodoroSessions, today])
+
+  const dayOverDayPct = useMemo(() => {
+    if (yesterdayFocusSeconds <= 0) return null
+    return ((stats.todayFocusSeconds - yesterdayFocusSeconds) / yesterdayFocusSeconds) * 100
+  }, [stats.todayFocusSeconds, yesterdayFocusSeconds])
   const isMobile = useIsMobile()
 
   const todayHabits = useMemo(() => {
@@ -192,36 +207,29 @@ export function DashboardView() {
         </Card>
       )}
 
-      {/* Hero Section */}
+      {/* Hero Section（黑板报：与自习室同一套教室语言） */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 shrink-0">
-        <Card className="lg:col-span-2 border-border/40 overflow-hidden relative">
-          <div className={cn('absolute inset-0 bg-gradient-to-br opacity-50', greeting.accent)} />
-          <CardContent className="p-5 sm:p-6 relative">
+        <Card className="lg:col-span-2 overflow-hidden relative border-border">
+          <CardContent className="relative h-full flex flex-col p-5 sm:p-6">
             <div className="flex items-start justify-between gap-4 flex-wrap">
-              <div className="flex items-start gap-3 flex-1 min-w-0">
-                <div className={cn(
-                  'rounded-2xl p-3 shrink-0 shadow-sm',
-                  hour >= 6 && hour < 18
-                    ? 'bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-900/40 dark:to-orange-900/40'
-                    : 'bg-gradient-to-br from-indigo-100 to-purple-100 dark:from-indigo-900/40 dark:to-purple-900/40'
-                )}>
-                  <GreetingIcon className={cn(
-                    'h-6 w-6',
-                    hour >= 6 && hour < 18 ? 'text-amber-600 dark:text-amber-400' : 'text-indigo-600 dark:text-indigo-400'
-                  )} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs text-muted-foreground font-medium tracking-wide">{dayString}</p>
-                  <h1 className={cn('font-bold tracking-tight mt-1', isMobile ? 'text-2xl' : 'text-3xl')}>
-                    {greeting.text}
-                    <span className="ml-2 text-base font-normal text-muted-foreground tabular-nums">{timeString}</span>
-                  </h1>
-                  <p className="text-sm text-muted-foreground mt-1">{greeting.subtext}</p>
-                </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm text-muted-foreground">{dayString}</p>
+                <h1
+                  className={cn('font-bold tracking-tight mt-1 text-foreground', isMobile ? 'text-3xl' : 'text-4xl')}
+                >
+                  {greeting.text}
+                  <span
+                    className="ml-3 text-xl font-normal text-muted-foreground tabular-nums"
+                    style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' }}
+                  >
+                    {timeString}
+                  </span>
+                </h1>
               </div>
               <Button
                 onClick={() => setActiveView('focus')}
-                className="gap-2 shadow-lg shadow-primary/25 h-10 px-5 rounded-xl"
+                className="gap-2 h-10 px-5 rounded-full"
+                variant="outline"
                 size="default"
               >
                 <Play className="h-4 w-4 fill-current" />
@@ -229,37 +237,44 @@ export function DashboardView() {
               </Button>
             </div>
 
-            {/* 进度概览 */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
-              <div className="rounded-xl bg-background/60 backdrop-blur-sm border border-border/40 p-3">
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <Timer className="h-3.5 w-3.5" />
-                  <span className="text-[11px] font-medium">今日专注</span>
+            <div className="mt-auto pt-5 border-t border-border flex items-end justify-between gap-4 flex-wrap">
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground font-medium">今日专注</p>
+                <div className="flex items-baseline gap-2.5 flex-wrap mt-1">
+                  <span className="text-4xl sm:text-5xl font-bold tracking-tight text-foreground tabular-nums">
+                    {formatDuration(stats.todayFocusSeconds)}
+                  </span>
+                  {dayOverDayPct !== null && (
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        'gap-1 text-[11px] font-medium shrink-0',
+                        dayOverDayPct >= 0
+                          ? 'text-emerald-600 border-emerald-500/30 bg-emerald-500/10'
+                          : 'text-rose-600 border-rose-500/30 bg-rose-500/10'
+                      )}
+                    >
+                      {dayOverDayPct >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                      {Math.abs(Math.round(dayOverDayPct))}% 较昨日
+                    </Badge>
+                  )}
                 </div>
-                <p className="text-lg font-bold mt-1.5 tabular-nums">{formatDuration(stats.todayFocusSeconds)}</p>
               </div>
-              <div className="rounded-xl bg-background/60 backdrop-blur-sm border border-border/40 p-3">
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  <span className="text-[11px] font-medium">完成任务</span>
+              <div className="flex gap-6 sm:gap-8 pb-0.5 shrink-0">
+                <div className="px-3 py-2">
+                  <p className="text-[11px] text-muted-foreground">完成任务</p>
+                  <p className="text-lg font-bold text-foreground tabular-nums">{stats.completedToday} 项</p>
                 </div>
-                <p className="text-lg font-bold mt-1.5 tabular-nums">{stats.completedToday}</p>
-              </div>
-              <div className="rounded-xl bg-background/60 backdrop-blur-sm border border-border/40 p-3">
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <Flame className="h-3.5 w-3.5" />
-                  <span className="text-[11px] font-medium">连续天数</span>
+                <div className="px-3 py-2">
+                  <p className="text-[11px] text-muted-foreground">连续专注</p>
+                  <p className="text-lg font-bold text-foreground tabular-nums">{streak} 天</p>
                 </div>
-                <p className="text-lg font-bold mt-1.5 tabular-nums">{streak} <span className="text-xs font-normal text-muted-foreground">天</span></p>
-              </div>
-              <div className="rounded-xl bg-background/60 backdrop-blur-sm border border-border/40 p-3">
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <Sparkle className="h-3.5 w-3.5" />
-                  <span className="text-[11px] font-medium">效率评分</span>
+                <div className="px-3 py-2">
+                  <p className="text-[11px] text-muted-foreground">效率评分</p>
+                  <p className="text-lg font-bold text-foreground tabular-nums">
+                    {stats.todayFocusSeconds > 0 || stats.completedToday > 0 ? `${stats.efficiencyScore}%` : '—'}
+                  </p>
                 </div>
-                <p className="text-lg font-bold mt-1.5 tabular-nums">
-                  {stats.efficiencyScore > 0 ? `${stats.efficiencyScore}%` : '—'}
-                </p>
               </div>
             </div>
           </CardContent>
@@ -325,7 +340,6 @@ export function DashboardView() {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold">{item.label}</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">点击进入</p>
               </div>
               <ArrowUpRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-primary group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
             </button>

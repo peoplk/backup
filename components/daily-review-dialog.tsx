@@ -32,9 +32,11 @@ import {
   CloudRain,
   Zap,
   BookOpen,
+  History,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
+import { JournalHistoryDialog } from '@/components/journal-history-dialog'
 
 interface DailyReviewDialogProps {
   open: boolean
@@ -79,6 +81,7 @@ export function DailyReviewDialog({ open, onOpenChange, onComplete }: DailyRevie
   const [gratitude, setGratitude] = useState<string[]>([])
   const [gratitudeInput, setGratitudeInput] = useState('')
   const [reflection, setReflection] = useState('')
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   const today = useMemo(() => {
     const d = new Date()
@@ -183,28 +186,40 @@ export function DailyReviewDialog({ open, onOpenChange, onComplete }: DailyRevie
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0">
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto p-0">
         <div className="relative overflow-hidden bg-gradient-to-br from-chart-1/10 via-chart-2/5 to-chart-3/10 px-6 pt-6 pb-4">
           <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-chart-1/15 blur-2xl" />
           <div className="absolute -left-8 -bottom-8 h-32 w-32 rounded-full bg-chart-3/10 blur-2xl" />
           <DialogHeader className="relative">
-            <div className="flex items-center gap-2">
-              <div className="rounded-xl bg-gradient-to-br from-chart-1 to-chart-3 p-2 shadow-lg shadow-chart-1/25">
-                <Sparkles className="h-5 w-5 text-white" />
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2">
+                <div className="rounded-xl bg-gradient-to-br from-chart-1 to-chart-3 p-2 shadow-lg shadow-chart-1/25">
+                  <Sparkles className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <DialogTitle className="text-xl font-bold tracking-tight">每日回顾</DialogTitle>
+                  <DialogDescription className="text-xs mt-0.5 flex items-center gap-1.5">
+                    <Calendar className="h-3 w-3" />
+                    {today.toLocaleDateString('zh-CN', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      weekday: 'long',
+                    })}
+                  </DialogDescription>
+                </div>
               </div>
-              <div>
-                <DialogTitle className="text-xl font-bold tracking-tight">每日回顾</DialogTitle>
-                <DialogDescription className="text-xs mt-0.5 flex items-center gap-1.5">
-                  <Calendar className="h-3 w-3" />
-                  {today.toLocaleDateString('zh-CN', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                    weekday: 'long',
-                  })}
-                </DialogDescription>
-              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="回顾历史"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                onClick={() => setHistoryOpen(true)}
+              >
+                <History className="h-4 w-4" />
+              </Button>
             </div>
           </DialogHeader>
         </div>
@@ -391,8 +406,10 @@ export function DailyReviewDialog({ open, onOpenChange, onComplete }: DailyRevie
             </Button>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+      <JournalHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} />
+    </>
   )
 }
 

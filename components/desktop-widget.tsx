@@ -30,7 +30,6 @@ import {
   LogOut,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { dataLinkService } from '@/lib/data-link-service'
 
 const modeConfig = {
   work: {
@@ -333,9 +332,8 @@ export function DesktopWidget() {
 
   const handleCheckIn = useCallback((habitId: string, isCompleted: boolean) => {
     if (!isCompleted) {
+      // checkInHabit 内部已统一委托 data-link-service 处理连胜/积分/目标进度
       checkInHabit(habitId, new Date(), true)
-      // 与主视图保持一致：更新关联目标进度
-      dataLinkService.handleHabitCheck(habitId, new Date(), true)
     }
   }, [checkInHabit])
 

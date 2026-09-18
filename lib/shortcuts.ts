@@ -161,6 +161,14 @@ export function useKeyboardShortcuts() {
     pomodoroTimerState.mode === 'work' &&
     pomodoroTimerState.isRunning
 
+  // 全屏严格模式：窗口被 kiosk 锁定期间禁用全部应用快捷键（含退出全屏），
+  // 只保留沉浸页内部的按钮操作，避免用键盘绕开锁定
+  const isStrictFullscreenLocked =
+    isFullscreen &&
+    pomodoroStrictMode.enabled &&
+    (pomodoroStrictMode.fullscreenLock ?? false) &&
+    pomodoroTimerState.mode === 'work'
+
   const pomodoroShortcuts: Shortcut[] = [
     {
       key: ' ',
@@ -282,6 +290,7 @@ export function useKeyboardShortcuts() {
   ]
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (isStrictFullscreenLocked) return
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
       if (e.key === 'Escape') {
         ;(e.target as HTMLElement).blur()
@@ -302,7 +311,7 @@ export function useKeyboardShortcuts() {
         break
       }
     }
-  }, [shortcuts, pomodoroShortcuts, activeTimeEntry, stopTimeEntry, activeView, pomodoroTimerState, pomodoroSettings, pomodoroStrictMode, isFullscreen])
+  }, [shortcuts, pomodoroShortcuts, activeTimeEntry, stopTimeEntry, activeView, pomodoroTimerState, pomodoroSettings, pomodoroStrictMode, isFullscreen, isStrictFullscreenLocked])
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)

@@ -30,7 +30,18 @@ if (!fs.existsSync(actualStandaloneDir) || !fs.existsSync(path.join(actualStanda
 }
 
 if (fs.existsSync(serverDir)) {
-  fs.rmSync(serverDir, { recursive: true })
+  try {
+    fs.rmSync(serverDir, { recursive: true, maxRetries: 5, retryDelay: 200 })
+  } catch (err) {
+    // Windows 上若 FocusFlow 正在运行，它会占用 server/ 下的文件，
+    // 此时 rmSync 既删不掉也不会自动失败，表现为构建永久卡住且没有任何输出。
+    // 这里主动失败并给出可执行的原因，避免又一次静默挂起。
+    console.error('')
+    console.error(`[build:server] 无法清空 server/ 目录: ${err.code || err.message}`)
+    console.error('  最常见原因：FocusFlow 应用（含它拉起的 node server.js 后端）仍在运行，占用了 server/ 下的文件。')
+    console.error('  请先完全退出 FocusFlow（含托盘图标），再重新执行构建。')
+    process.exit(1)
+  }
 }
 
 fs.mkdirSync(serverDir, { recursive: true })
@@ -46,7 +57,15 @@ function copyDir(src, dest) {
     if (entry.isDirectory()) {
       copyDir(srcPath, destPath)
     } else {
-      fs.copyFileSync(srcPath, destPath)
+      try {
+        fs.copyFileSync(srcPath, destPath)
+      } catch (err) {
+        console.error('')
+        console.error(`[build:server] 复制失败: ${destPath}`)
+        console.error(`  原因: ${err.code || err.message}`)
+        console.error('  目标文件被占用时，通常意味着 FocusFlow 仍在运行，请完全退出后重试。')
+        process.exit(1)
+      }
     }
   }
 }

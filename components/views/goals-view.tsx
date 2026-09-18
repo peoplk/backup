@@ -175,6 +175,26 @@ export function GoalsView() {
   const handleAddGoal = () => {
     if (!newGoal.title.trim()) return
 
+    // 未填截止日期时按目标类型给默认值，避免新目标当天就显示「已过期」
+    const defaultEndDate = (type: Goal['type']): Date => {
+      const d = new Date()
+      switch (type) {
+        case 'weekly':
+          d.setDate(d.getDate() + 7)
+          break
+        case 'monthly':
+          d.setMonth(d.getMonth() + 1)
+          break
+        case 'quarterly':
+          d.setMonth(d.getMonth() + 3)
+          break
+        case 'yearly':
+          d.setMonth(11, 31)
+          break
+      }
+      return d
+    }
+
     addGoal({
       ...newGoal,
       status: 'not-started',
@@ -182,7 +202,7 @@ export function GoalsView() {
       milestones: [],
       linkedTasks: [],
       startDate: new Date(newGoal.startDate),
-      endDate: newGoal.endDate ? new Date(newGoal.endDate) : new Date(),
+      endDate: newGoal.endDate ? new Date(newGoal.endDate) : defaultEndDate(newGoal.type),
     })
 
     resetNewGoal()
@@ -242,11 +262,9 @@ export function GoalsView() {
     setNewMilestone('')
   }
 
-  const calculateProgress = (goal: Goal) => {
-    if (goal.milestones.length === 0) return goal.progress
-    const completedMilestones = goal.milestones.filter((m) => m.completed).length
-    return Math.round((completedMilestones / goal.milestones.length) * 100)
-  }
+  // 进度单一口径：显示 store 中由 data-link-service 统一公式维护的 goal.progress
+  // （里程碑/任务/习惯完成时由 goal-slice 触发重算），不再本地另算一套
+  const calculateProgress = (goal: Goal) => goal.progress
 
   const getDaysRemaining = (endDate: Date) => {
     const end = new Date(endDate)
@@ -663,7 +681,7 @@ export function GoalsView() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">目标管理</h1>
-          <p className="text-muted-foreground mt-0.5">设定目标，追踪进度，实现梦想</p>
+          <p className="text-muted-foreground mt-0.5">拆解长期目标，用里程碑与任务追踪进度</p>
         </div>
       </div>
 
@@ -799,64 +817,6 @@ export function GoalsView() {
             </div>
           </DialogContent>
         </Dialog>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="rounded-2xl bg-chart-1/10 p-3">
-                <Target className="h-5 w-5 text-chart-1" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">总目标</p>
-                <p className="text-xl font-bold tracking-tight">{stats.total}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="rounded-2xl bg-chart-2/10 p-3">
-                <CheckCircle2 className="h-5 w-5 text-chart-2" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">已完成</p>
-                <p className="text-xl font-bold tracking-tight">{stats.completed}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="rounded-2xl bg-chart-3/10 p-3">
-                <TrendingUp className="h-5 w-5 text-chart-3" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">进行中</p>
-                <p className="text-xl font-bold tracking-tight">{stats.inProgress}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="rounded-2xl bg-chart-4/10 p-3">
-                <Award className="h-5 w-5 text-chart-4" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">平均进度</p>
-                <p className="text-xl font-bold tracking-tight">{stats.avgProgress}%</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       <div className="flex gap-2 overflow-x-auto pb-2">

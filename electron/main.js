@@ -1,7 +1,9 @@
-const { app, BrowserWindow, shell, Menu, Tray, nativeImage, ipcMain, dialog, screen, globalShortcut, clipboard, Notification, powerMonitor, safeStorage } = require('electron')
+const { app, BrowserWindow, shell, Menu, Tray, nativeImage, ipcMain, dialog, screen, globalShortcut, clipboard, Notification, powerMonitor, powerSaveBlocker, safeStorage } = require('electron')
 const path = require('path')
 const { spawn } = require('child_process')
-const { registerSystemShieldIPC, cleanupShield } = require('./system-shield')
+const { registerSystemShieldIPC, cleanupShield, startSystemShield, stopSystemShield, getShieldStatus } = require('./system-shield')
+const { createShieldScheduler } = require('./shield-scheduler')
+let shieldScheduler = null
 
 let mainWindow = null
 let widgetWindow = null
@@ -13,6 +15,84 @@ let lastClipboardText = ''
 let trayState = { todayCount: 0, pomodoroStatus: '空闲' }
 let isQuitting = false
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
+
+// ─── 全屏严格模式：主进程级窗口锁定 ───
+// 渲染层只负责「请求」锁定，真正的强制力放在主进程：即便渲染层被刷新/卡死，
+// kiosk 与置顶仍由窗口自己维持；退出必须经过渲染层的长按放弃流程解锁。
+let strictLockActive = false
+let strictSleepBlockerId = null
+let lastBlurPullbackAt = 0
+
+function notifyStrictViolation(reason) {
+  try {
+    mainWindow?.webContents.send('strict-lock-violation', { reason })
+  } catch {
+    // 窗口已销毁时忽略
+  }
+}
+
+function applyStrictLock(locked, opts = {}) {
+  if (!mainWindow || mainWindow.isDestroyed()) return { success: false, locked: false }
+
+  if (locked) {
+    strictLockActive = true
+    try {
+      // kiosk 会隐藏菜单栏与窗口边框，并压制 Esc / Alt+Tab 等系统级退出路径
+      mainWindow.setKiosk(true)
+      mainWindow.setAlwaysOnTop(true, 'screen-saver')
+      mainWindow.show()
+      mainWindow.focus()
+    } catch (err) {
+      console.error('[strict-lock] enable failed:', err)
+    }
+    if (opts.preventSleep !== false && strictSleepBlockerId === null) {
+      try {
+        strictSleepBlockerId = powerSaveBlocker.start('prevent-display-sleep')
+      } catch (err) {
+        console.error('[strict-lock] powerSaveBlocker start failed:', err)
+        strictSleepBlockerId = null
+      }
+    }
+    return { success: true, locked: true, supported: true }
+  }
+
+  strictLockActive = false
+  if (strictSleepBlockerId !== null) {
+    try {
+      powerSaveBlocker.stop(strictSleepBlockerId)
+    } catch {
+      // 停止失败无需阻塞解锁
+    }
+    strictSleepBlockerId = null
+  }
+  try {
+    mainWindow.setAlwaysOnTop(false)
+    if (mainWindow.isKiosk()) mainWindow.setKiosk(false)
+  } catch (err) {
+    console.error('[strict-lock] disable failed:', err)
+  }
+  // 广播解锁结果：托盘紧急解锁 / 快捷键解锁时，渲染层需要同步退出锁定态
+  try {
+    mainWindow?.webContents.send('strict-lock-changed', { locked: false })
+  } catch {
+    // 窗口已销毁时忽略
+  }
+  return { success: true, locked: false, supported: true }
+}
+
+/** 严格模式下的兜底拉回：失焦/退出全屏/关闭窗口都重新进入 kiosk */
+function pullBackToStrictLock(reason) {
+  if (!strictLockActive || !mainWindow || mainWindow.isDestroyed()) return
+  try {
+    if (!mainWindow.isKiosk()) mainWindow.setKiosk(true)
+    mainWindow.setAlwaysOnTop(true, 'screen-saver')
+    mainWindow.show()
+    mainWindow.focus()
+    notifyStrictViolation(reason)
+  } catch (err) {
+    console.error('[strict-lock] pull back failed:', err)
+  }
+}
 
 const PORT = 3000
 const TRUSTED_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000']
@@ -177,6 +257,12 @@ function createWindow() {
   })
 
   mainWindow.on('leave-full-screen', () => {
+    // 严格模式下 Esc 触发的退出全屏必须被拉回，否则锁定形同虚设
+    if (strictLockActive) {
+      pullBackToStrictLock('leave-fullscreen')
+      mainWindow?.webContents.send('fullscreen-change', true)
+      return
+    }
     mainWindow?.setResizable(true)
     mainWindow?.webContents.send('fullscreen-change', false)
   })
@@ -540,6 +626,8 @@ function registerPowerMonitor() {
   })
   powerMonitor.on('resume', () => {
     mainWindow?.webContents.send('system-resume')
+    // 休眠/锁屏恢复后窗口可能掉出 kiosk，严格模式下重新拉回
+    if (strictLockActive) pullBackToStrictLock('blur')
   })
   powerMonitor.on('lock-screen', () => {
     mainWindow?.webContents.send('system-suspend')
@@ -618,6 +706,17 @@ ipcMain.on('set-fullscreen', (event, fullscreen) => {
 
 ipcMain.handle('is-fullscreen', () => {
   return mainWindow?.isFullScreen() ?? false
+})
+
+// 全屏严格模式：窗口级锁定（kiosk + 置顶 + 防休眠 + 拦截退出）
+ipcMain.handle('strict-lock-set', (event, opts = {}) => {
+  if (!isTrustedSender(event)) return { success: false, locked: strictLockActive, supported: false }
+  const options = opts && typeof opts === 'object' ? opts : {}
+  return applyStrictLock(!!options.locked, options)
+})
+
+ipcMain.handle('strict-lock-status', () => {
+  return { locked: strictLockActive, supported: true }
 })
 
 ipcMain.on('toggle-widget', (event) => {
@@ -785,10 +884,39 @@ ipcMain.handle('credential-decrypt', (event, sealed) => {
   }
 })
 
+
+// 屏蔽可靠性：主进程调度器（崩溃重放 + 定时窗口推进，不依赖渲染层存活）
+function initShieldScheduler() {
+  try {
+    shieldScheduler = createShieldScheduler({
+      statePath: path.join(app.getPath('userData'), 'shield-state.json'),
+      applyBlock: (websites, apps, mode) => startSystemShield(websites, apps, mode),
+      removeBlock: () => stopSystemShield(),
+      onNotify: (payload) => {
+        const win = BrowserWindow.getAllWindows()[0]
+        if (win && !win.isDestroyed()) win.webContents.send('shield-status-changed', payload)
+      },
+    })
+    void shieldScheduler.replay()
+    shieldScheduler.start()
+  } catch (err) {
+    console.error('[shield-scheduler] init failed:', err)
+  }
+  ipcMain.handle('shield-schedule-sync', (event, windows) => {
+    if (!isTrustedSender(event)) return { success: false }
+    if (shieldScheduler) shieldScheduler.syncSchedule(Array.isArray(windows) ? windows : [])
+    return { success: true }
+  })
+}
+
 app.whenReady().then(async () => {
   try {
     Menu.setApplicationMenu(null)
-    registerSystemShieldIPC(isTrustedSender)
+    initShieldScheduler()
+    registerSystemShieldIPC(isTrustedSender, {
+      onSessionStart: (session) => shieldScheduler ? shieldScheduler.startSession(session) : Promise.resolve(),
+      onSessionStop: () => shieldScheduler ? shieldScheduler.stopSession() : Promise.resolve(),
+    })
     registerPowerMonitor()
     registerGlobalShortcuts()
     await startNextServer()
@@ -797,7 +925,7 @@ app.whenReady().then(async () => {
     startClipboardWatcher()
     setupAutoUpdater()
 
-    app.on('activate', () => {
+  app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         createWindow()
       }
@@ -818,12 +946,14 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   isQuitting = true
   stopNextServer()
+  if (shieldScheduler) shieldScheduler.dispose()
   cleanupShield()
   stopClipboardWatcher()
   globalShortcut.unregisterAll()
 })
 
 app.on('will-quit', () => {
+  if (strictLockActive) applyStrictLock(false)
   stopNextServer()
   cleanupShield()
   stopClipboardWatcher()

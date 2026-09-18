@@ -37,6 +37,8 @@
   ],
   "exclude": [
     "node_modules",
-    "android-app"
+    "android-app",
+    "scripts/_test-shared",
+    ".next"
   ]
 }

@@ -24,13 +24,15 @@ import {
   Keyboard,
   Lightbulb,
 } from 'lucide-react'
-import { parseEnhancedInput, validateParsedInput, getSmartSuggestions } from '@/lib/smart-input-enhanced'
+import { parseEnhancedInput, validateParsedInput, getSmartSuggestions, buildParsedTaskFields } from '@/lib/smart-input-enhanced'
+import { useModKeyLabels } from '@/lib/platform'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 
 const QUICK_CAPTURE_HOTKEYS = ['ctrl+shift+a', 'meta+shift+a']
 
 export function QuickCapture() {
+  const modKeys = useModKeyLabels()
   const { addTask } = useAppStore()
   const [open, setOpen] = useState(false)
   const [input, setInput] = useState('')
@@ -89,15 +91,9 @@ export function QuickCapture() {
       title: parsed.title,
       description: undefined,
       type: 'task',
-      priority: parsed.priority || 'medium',
-      project: parsed.project || '',
-      tags: parsed.tags || [],
-      dueDate: parsed.dueDate,
-      startTime: parsed.startTime,
-      endTime: parsed.endTime,
+      ...buildParsedTaskFields(parsed),
       status: 'todo',
       estimatedPomodoros: parsed.estimatedPomodoros || 1,
-      energy: parsed.energy,
     })
     toast.success('任务已添加')
     setInput('')
@@ -118,11 +114,11 @@ export function QuickCapture() {
                 <DialogTitle className="text-base font-semibold flex items-center gap-2">
                   快速捕获
                   <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded-md border bg-muted/50 px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
-                    Ctrl
+                    {modKeys.mod}
                   </kbd>
                   <span className="text-muted-foreground text-xs">+</span>
                   <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded-md border bg-muted/50 px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
-                    Shift
+                    {modKeys.shift}
                   </kbd>
                   <span className="text-muted-foreground text-xs">+</span>
                   <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded-md border bg-muted/50 px-1.5 font-mono text-[10px] font-medium text-muted-foreground">

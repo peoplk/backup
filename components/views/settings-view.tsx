@@ -1,10 +1,7 @@
 'use client'
 
 import { useAppStore } from '@/lib/store'
-import { useSyncStore, pullDataFromCloud, resolveConflict } from '@/lib/sync-store'
-import { useS3SyncStore, pushDataToS3, pullDataFromS3, resolveS3Conflict } from '@/lib/s3-store'
-import { getIsFirebaseConfigured, getFirebaseConfig } from '@/lib/firebase'
-import type { FirebaseConfigInput } from '@/lib/firebase'
+import { useS3SyncStore, pullDataFromS3, resolveS3Conflict } from '@/lib/s3-store'
 import { getIsS3Configured, getS3Config, saveS3Config, S3_PRESET_SERVICES, type S3ConfigInput } from '@/lib/s3-sync'
 import { getCredentialVaultStatus, getCredentialVaultStatusAsync } from '@/lib/credential-vault'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -52,7 +49,6 @@ import {
   Settings,
   Eye,
   EyeOff,
-  Flame,
 HardDrive,
 Power,
 Sparkles,
@@ -361,7 +357,6 @@ export function SettingsView() {
     updateDailyReviewSettings: state.updateDailyReviewSettings,
   })))
   
-  const syncStore = useSyncStore()
   const s3SyncStore = useS3SyncStore()
   const [llmConfig, setLLMConfigState] = useState(() => getLLMConfig())
   const [vaultStatus, setVaultStatus] = useState(() => getCredentialVaultStatus())
@@ -390,22 +385,14 @@ export function SettingsView() {
       setLLMTesting(false)
     }
   }
-  const [firebaseConfigForm, setFirebaseConfigForm] = useState<FirebaseConfigInput>({
-    apiKey: '',
-    authDomain: '',
-    projectId: '',
-    storageBucket: '',
-    messagingSenderId: '',
-    appId: '',
-  })
-  const [showFirebaseConfig, setShowFirebaseConfig] = useState(false)
-  const [showApiKey, setShowApiKey] = useState(false)
   const [idleMinutes, setStateIdleMinutes] = useState(() => getIdleMinutes())
 
   // 统一的云同步面板状态
-  const [selectedProvider, setSelectedProvider] = useState<'none' | 'firebase' | 's3'>(() => {
+  const [selectedProvider, setSelectedProvider] = useState<'none' | 's3'>(() => {
     if (typeof window === 'undefined') return 'none'
-    return (localStorage.getItem('sync-provider-selected') as 'none' | 'firebase' | 's3') || 'none'
+    const saved = localStorage.getItem('sync-provider-selected')
+    // 历史值 'firebase' 已废弃（Firebase 方案已移除），回落到未配置
+    return saved === 's3' ? 's3' : 'none'
   })
   const [s3ConfigForm, setS3ConfigForm] = useState<S3ConfigInput>({
     endpoint: '',
@@ -426,10 +413,6 @@ export function SettingsView() {
     void import('@/lib/llm-assistant').then(({ initLLMConfig, getLLMConfig }) =>
       initLLMConfig().then(() => setLLMConfigState(getLLMConfig()))
     )
-    const config = getFirebaseConfig()
-    if (config) {
-      setFirebaseConfigForm(config)
-    }
     const s3 = getS3Config()
     if (s3) {
       setS3ConfigForm({
@@ -452,13 +435,7 @@ export function SettingsView() {
   }, [selectedProvider])
 
   // Show the enabled provider's status, or fall back to selected provider
-  const activeSyncStore = s3SyncStore.isEnabled
-    ? s3SyncStore
-    : syncStore.isEnabled
-      ? syncStore
-      : selectedProvider === 's3'
-        ? s3SyncStore
-        : syncStore
+  const activeSyncStore = s3SyncStore
 
   const [soundEnabled, setSoundEnabled] = useState(true)
   const [notificationEnabled, setNotificationEnabled] = useState(true)
@@ -1097,6 +1074,25 @@ export function SettingsView() {
             </div>
             <Separator />
             <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">新手引导</p>
+                <p className="text-xs text-muted-foreground">重新查看应用功能分步介绍</p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => {
+                  if (typeof window !== 'undefined') {
+                    window.__openOnboarding?.()
+                  }
+                }}
+              >
+                查看引导
+              </Button>
+            </div>
+            <Separator />
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4 text-muted-foreground" />
                 <div>
@@ -1241,7 +1237,6 @@ export function SettingsView() {
                   <span className="text-muted-foreground">当前服务：</span>
                   <Badge variant="secondary" className="text-[10px]">
                     {selectedProvider === 'none' && '未配置'}
-                    {selectedProvider === 'firebase' && 'Firebase'}
                     {selectedProvider === 's3' && 'S3'}
                   </Badge>
                 </div>
@@ -1294,7 +1289,6 @@ export function SettingsView() {
                       className="h-7 text-xs gap-1"
                       onClick={() => activeSyncStore.setSyncEnabled(true)}
                       disabled={
-                        (selectedProvider === 'firebase' && !getIsFirebaseConfigured()) ||
                         (selectedProvider === 's3' && !getIsS3Configured()) ||
                         selectedProvider === 'none'
                       }
@@ -1367,13 +1361,12 @@ export function SettingsView() {
               </div>
             )}
 
-            {/* 提供方选择器：3 列分段控件 */}
+            {/* 提供方选择器：2 列分段控件 */}
             <div>
               <p className="text-sm font-medium mb-2">服务提供商</p>
-              <div role="tablist" className="grid grid-cols-3 gap-1 rounded-xl border border-border/50 bg-muted/20 p-1">
+              <div role="tablist" className="grid grid-cols-2 gap-1 rounded-xl border border-border/50 bg-muted/20 p-1">
                 {[
                   { key: 'none' as const, label: '未配置', Icon: Power },
-                  { key: 'firebase' as const, label: 'Firebase', Icon: Flame },
                   { key: 's3' as const, label: 'S3', Icon: HardDrive },
                 ].map(({ key, label, Icon }) => (
                   <button
@@ -1400,27 +1393,7 @@ export function SettingsView() {
 
             {/* === 概览页：未配置 === */}
             {selectedProvider === 'none' && (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-xl border border-border/50 p-4 space-y-2 hover:border-primary/30 transition-colors">
-                  <div className="flex items-center gap-2">
-                    <div className="h-8 w-8 rounded-lg bg-orange-500/10 flex items-center justify-center">
-                      <Flame className="h-4 w-4 text-orange-500" />
-                    </div>
-                    <p className="text-sm font-semibold">Firebase</p>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Google 旗下，匿名或 Google 账号登录，实时推送
-                  </p>
-                  <div className="flex flex-wrap gap-1">
-                    <Badge variant="secondary" className="text-[10px]">Google账号</Badge>
-                    <Badge variant="secondary" className="text-[10px]">实时</Badge>
-                    <Badge variant="secondary" className="text-[10px]">适合个人</Badge>
-                  </div>
-                  <Button size="sm" variant="outline" className="w-full mt-2 gap-1" onClick={() => setSelectedProvider('firebase')}>
-                    配置 Firebase
-                  </Button>
-                </div>
-
+              <div className="grid gap-3">
                 <div className="rounded-xl border border-border/50 p-4 space-y-2 hover:border-primary/30 transition-colors">
                   <div className="flex items-center gap-2">
                     <div className="h-8 w-8 rounded-lg bg-sky-500/10 flex items-center justify-center">
@@ -1440,269 +1413,6 @@ export function SettingsView() {
                     配置 S3
                   </Button>
                 </div>
-              </div>
-            )}
-
-            {/* === Firebase === */}
-            {selectedProvider === 'firebase' && (
-              <div className="space-y-4">
-                {!getIsFirebaseConfigured() && (
-                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
-                    <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">Firebase 未配置</p>
-                    <p className="text-[11px] text-muted-foreground mt-1">请填写下方 Firebase 配置信息后保存</p>
-                  </div>
-                )}
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full gap-2"
-                  onClick={() => setShowFirebaseConfig(!showFirebaseConfig)}
-                >
-                  <Settings className="h-3.5 w-3.5" />
-                  {showFirebaseConfig ? '收起配置' : (getIsFirebaseConfigured() ? '修改 Firebase 配置' : '填写 Firebase 配置')}
-                </Button>
-
-                {showFirebaseConfig && (
-                  <div className="space-y-3 rounded-xl border border-border/50 p-3">
-                    <div className="space-y-2">
-                      <label htmlFor="fb-api-key" className="text-xs font-medium">接口密钥（API Key）*</label>
-                      <div className="relative">
-                        <Input
-                          id="fb-api-key"
-                          type={showApiKey ? 'text' : 'password'}
-                          placeholder="AIzaSy..."
-                          value={firebaseConfigForm.apiKey}
-                          onChange={(e) => setFirebaseConfigForm(prev => ({ ...prev, apiKey: e.target.value }))}
-                          className="h-8 text-xs pr-9"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowApiKey(!showApiKey)}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                        >
-                          {showApiKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <label htmlFor="fb-auth-domain" className="text-xs font-medium">认证域名（Auth Domain）*</label>
-                      <Input
-                        id="fb-auth-domain"
-                        placeholder="your-project.firebaseapp.com"
-                        value={firebaseConfigForm.authDomain}
-                        onChange={(e) => setFirebaseConfigForm(prev => ({ ...prev, authDomain: e.target.value }))}
-                        className="h-8 text-xs"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label htmlFor="fb-project-id" className="text-xs font-medium">项目 ID（Project ID）*</label>
-                      <Input
-                        id="fb-project-id"
-                        placeholder="your-project-id"
-                        value={firebaseConfigForm.projectId}
-                        onChange={(e) => setFirebaseConfigForm(prev => ({ ...prev, projectId: e.target.value }))}
-                        className="h-8 text-xs"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label htmlFor="fb-storage-bucket" className="text-xs font-medium">存储桶（Storage Bucket）</label>
-                      <Input
-                        id="fb-storage-bucket"
-                        placeholder="your-project.appspot.com"
-                        value={firebaseConfigForm.storageBucket}
-                        onChange={(e) => setFirebaseConfigForm(prev => ({ ...prev, storageBucket: e.target.value }))}
-                        className="h-8 text-xs"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label htmlFor="fb-messaging-id" className="text-xs font-medium">消息发送 ID（Messaging Sender ID）</label>
-                      <Input
-                        id="fb-messaging-id"
-                        placeholder="123456789"
-                        value={firebaseConfigForm.messagingSenderId}
-                        onChange={(e) => setFirebaseConfigForm(prev => ({ ...prev, messagingSenderId: e.target.value }))}
-                        className="h-8 text-xs"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label htmlFor="fb-app-id" className="text-xs font-medium">应用 ID（App ID）</label>
-                      <Input
-                        id="fb-app-id"
-                        placeholder="1:123...:web:abc..."
-                        value={firebaseConfigForm.appId}
-                        onChange={(e) => setFirebaseConfigForm(prev => ({ ...prev, appId: e.target.value }))}
-                        className="h-8 text-xs"
-                      />
-                    </div>
-                    <Button
-                      size="sm"
-                      className="w-full gap-2"
-                      onClick={async () => {
-                        if (!firebaseConfigForm.apiKey || !firebaseConfigForm.authDomain || !firebaseConfigForm.projectId) {
-                          toast.error('请填写 API Key、Auth Domain 和 Project ID')
-                          return
-                        }
-                        const success = await syncStore.saveConfig(firebaseConfigForm)
-                        if (success) {
-                          toast.success('配置已保存，Firebase 已初始化')
-                          setShowFirebaseConfig(false)
-                        } else {
-                          toast.error('配置保存失败，请检查输入')
-                        }
-                      }}
-                    >
-                      <Check className="h-3.5 w-3.5" />
-                      保存配置
-                    </Button>
-                    <p className="text-[11px] text-muted-foreground">
-                      💡 配置信息来自 Firebase 控制台 → 项目设置 → 常规 → 您的应用 → SDK 设置和配置
-                    </p>
-                  </div>
-                )}
-
-                {getIsFirebaseConfigured() && (
-                  <>
-                    <Separator />
-
-                    {syncStore.authProvider === 'google' && syncStore.userName && (
-                      <div className="flex items-center justify-between rounded-xl bg-chart-1/8 p-3">
-                        <div className="flex items-center gap-2">
-                          <div className="h-8 w-8 rounded-full bg-chart-1/20 flex items-center justify-center text-xs font-bold text-chart-1">
-                            {syncStore.userName.charAt(0).toUpperCase()}
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium">{syncStore.userName}</p>
-                            <p className="text-xs text-muted-foreground">{syncStore.userEmail}</p>
-                          </div>
-                        </div>
-                        <Badge variant="default" className="text-[10px] gap-1">
-                          <svg className="h-3 w-3" viewBox="0 0 24 24"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-                          Google
-                        </Badge>
-                      </div>
-                    )}
-
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1 gap-1.5"
-                        onClick={async () => {
-                          try {
-                            await syncStore.forceSync()
-                            toast.success('数据已推送到云端')
-                          } catch {
-                            toast.error('推送失败')
-                          }
-                        }}
-                        disabled={syncStore.status === 'syncing' || !syncStore.isEnabled}
-                      >
-                        <RefreshCw className={cn('h-3.5 w-3.5', syncStore.status === 'syncing' && 'animate-spin')} />
-                        推送数据
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1 gap-1.5"
-                        onClick={async () => {
-                          try {
-                            const cloudData = await pullDataFromCloud()
-                            if (cloudData) {
-                              const store = useAppStore.getState()
-                              const localData: Record<string, unknown> = {}
-                              SYNC_DATA_KEYS.forEach(key => {
-                                if ((store as any)[key] !== undefined) localData[key] = (store as any)[key]
-                              })
-                              const merged = await resolveConflict(localData)
-                              const keys = Object.keys(merged) as string[]
-                              keys.forEach(key => {
-                                if (typeof (useAppStore.getState() as any)[key] !== 'function') {
-                                  (useAppStore.setState as any)({ [key]: merged[key] })
-                                }
-                              })
-                              toast.success('已从云端拉取并合并数据')
-                            } else {
-                              toast.info('云端暂无数据')
-                            }
-                          } catch {
-                            toast.error('拉取失败')
-                          }
-                        }}
-                        disabled={syncStore.status === 'syncing' || !syncStore.isEnabled}
-                      >
-                        <Download className="h-3.5 w-3.5" />
-                        拉取数据
-                      </Button>
-                    </div>
-
-                    <Separator />
-
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium">同步方式</p>
-                      {syncStore.authProvider === 'google' ? (
-                        <div className="flex items-center justify-between rounded-xl border border-chart-1/20 bg-chart-1/5 p-3">
-                          <div className="flex items-center gap-2">
-                            <svg className="h-4 w-4" viewBox="0 0 24 24"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-                            <span className="text-sm">Google 账号同步</span>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:text-destructive h-7 text-xs"
-                            onClick={async () => {
-                              await syncStore.logout()
-                              toast.success('已退出登录')
-                            }}
-                          >
-                            退出登录
-                          </Button>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="flex items-center justify-between rounded-xl border border-border/50 p-3">
-                            <div className="flex items-center gap-2">
-                              <div className="h-4 w-4 rounded-full bg-muted-foreground/20" />
-                              <span className="text-sm text-muted-foreground">匿名同步</span>
-                            </div>
-                            <Badge variant="outline" className="text-[10px]">当前</Badge>
-                          </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full gap-2"
-                            onClick={async () => {
-                              try {
-                                await syncStore.loginWithGoogle()
-                                toast.success('Google 登录成功')
-                              } catch {
-                                toast.error('Google 登录失败')
-                              }
-                            }}
-                            disabled={syncStore.status === 'syncing'}
-                          >
-                            <svg className="h-4 w-4" viewBox="0 0 24 24"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-                            切换为 Google 账号同步
-                          </Button>
-                          <p className="text-[11px] text-muted-foreground/70">
-                            💡 使用 Google 账号可在不同设备间同步数据，匿名同步仅限当前设备
-                          </p>
-                        </>
-                      )}
-                    </div>
-
-                    {syncStore.userId && syncStore.authProvider !== 'google' && (
-                      <div className="rounded-xl bg-muted/30 p-3">
-                        <p className="text-xs text-muted-foreground">
-                          用户 ID：{syncStore.userId.slice(0, 8)}...
-                        </p>
-                        <p className="text-[11px] text-muted-foreground/70 mt-1">
-                          数据通过匿名认证存储，更换设备时需使用同一账号
-                        </p>
-                      </div>
-                    )}
-                  </>
-                )}
               </div>
             )}
 
@@ -2005,7 +1715,7 @@ export function SettingsView() {
                       <p className="text-[11px] text-muted-foreground leading-relaxed">
                         • S3 同步依赖 AccessKey，请妥善保管<br />
                         • 首次推送会自动创建远端对象；支持手动推送/拉取<br />
-                        • 与 Firebase 互不影响，可任选其一或同时使用
+                        • 定时轮询自动同步，也可手动推送/拉取
                       </p>
                     </div>
                   </>

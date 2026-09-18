@@ -32,8 +32,15 @@ import {
   Trash2,
   Edit,
   Bell,
+  MoreVertical,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { APP_COLORS } from '@/lib/config'
 
 const anniversaryIcons = ['🎂', '💍', '📅', '🎉', '❤️', '🎓', '🏆', '🌟', '🎄', '🎃']
@@ -418,30 +425,30 @@ export function AnniversariesView() {
                         <div>
                           <h3 className="font-semibold">{anniversary.title}</h3>
                           <p className="text-sm text-muted-foreground">
-                            {formatDate(anniversary.date)}
+                            {formatDate(getNextOccurrence(anniversary.date, !!anniversary.repeat))}
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => openEditDialog(anniversary)}
-                          aria-label="编辑纪念日"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() => deleteAnniversary(anniversary.id)}
-                          aria-label="删除纪念日"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="纪念日操作">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => openEditDialog(anniversary)}>
+                            <Edit className="mr-2 h-4 w-4" />
+                            编辑
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => deleteAnniversary(anniversary.id)}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            删除
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                     <div className="mt-4 flex items-center justify-between">
                       <Badge variant="secondary" className="gap-1">
@@ -506,30 +513,30 @@ export function AnniversariesView() {
                         <div>
                           <h3 className="font-semibold">{anniversary.title}</h3>
                           <p className="text-sm text-muted-foreground">
-                            {formatDate(anniversary.date)}
+                            {formatDate(getNextOccurrence(anniversary.date, !!anniversary.repeat))}
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => openEditDialog(anniversary)}
-                          aria-label="编辑纪念日"
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() => deleteAnniversary(anniversary.id)}
-                          aria-label="删除纪念日"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="纪念日操作">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => openEditDialog(anniversary)}>
+                            <Edit className="mr-2 h-4 w-4" />
+                            编辑
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => deleteAnniversary(anniversary.id)}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            删除
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                     <div className="mt-4 flex items-center justify-between">
                       <Badge variant="secondary" className="gap-1">

@@ -22,9 +22,12 @@ import {
   AlertTriangle,
   Monitor,
   Cpu,
+  ShieldCheck,
+  RefreshCw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { FocusShieldItem } from '@/lib/types'
+import type { ShieldHealth } from '@/lib/types/electron'
 import {
   DEFAULT_BLOCKED_WEBSITES,
   DEFAULT_BLOCKED_APPS,
@@ -57,6 +60,18 @@ function isElectron() {
   return typeof window !== 'undefined' && !!window.electronAPI?.shieldStart
 }
 
+/** 自检原因码 → 用户能看懂的话。除 ok 外都意味着屏蔽没有真正生效。 */
+const SHIELD_HEALTH_TEXT: Record<ShieldHealth['reason'], string> = {
+  ok: '屏蔽已生效',
+  uac_declined: '写入 hosts 需要管理员权限，UAC 弹窗被拒绝或超时',
+  write_failed: 'hosts 文件写入失败，可能被安全软件拦截',
+  reverted: 'hosts 文件被还原，可能被安全软件回滚',
+  exception: '写入 hosts 时发生异常，请查看日志',
+  never_run: '尚未执行屏蔽',
+  stopped: '屏蔽已停止',
+  denied: '无权限执行自检',
+}
+
 export function FocusShield() {
   const [items, setItems] = useState<BlockedItem[]>([])
   const [mode, setMode] = useState<ShieldMode>('blacklist')
@@ -69,6 +84,7 @@ export function FocusShield() {
   const [remainingTime, setRemainingTime] = useState('')
   const [isElectronApp, setIsElectronApp] = useState(false)
   const [systemShieldStatus, setSystemShieldStatus] = useState<'idle' | 'applying' | 'active' | 'error'>('idle')
+  const [shieldHealth, setShieldHealth] = useState<ShieldHealth | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
@@ -204,14 +220,15 @@ export function FocusShield() {
       const websites = items.filter(i => i.enabled && i.type === 'website').map(i => i.pattern)
       const apps = items.filter(i => i.enabled && i.type === 'app').map(i => i.pattern)
       const result = await window.electronAPI!.shieldStart(websites, apps, mode)
-      if (result.success) {
-        setSystemShieldStatus('active')
-        return true
-      }
-      setSystemShieldStatus('error')
-      return false
+      const health = result.health ?? null
+      setShieldHealth(health)
+      // success 只代表"写入调用成功"，不代表 hosts 真的生效；以回读自检结果为准
+      const effective = !!result.success && (!health || health.ok)
+      setSystemShieldStatus(effective ? 'active' : 'error')
+      return effective
     } catch {
       setSystemShieldStatus('error')
+      setShieldHealth(null)
       return false
     }
   }
@@ -221,6 +238,7 @@ export function FocusShield() {
     try {
       await window.electronAPI!.shieldStop()
       setSystemShieldStatus('idle')
+      setShieldHealth(null)
     } catch {
     }
   }
@@ -266,6 +284,46 @@ export function FocusShield() {
     }
   }, [items, mode])
 
+  // 屏蔽生效自检：定期回读 hosts，能发现中途被安全软件回滚的情况
+  useEffect(() => {
+    if (!isActive || !isElectronApp || !window.electronAPI?.shieldStatus) return
+    let cancelled = false
+    const check = async () => {
+      try {
+        const status = await window.electronAPI!.shieldStatus()
+        if (!cancelled) setShieldHealth(status.health ?? null)
+      } catch {
+        // 自检失败不打断屏蔽，保留上一次结果
+      }
+    }
+    check()
+    const timer = setInterval(check, 30000)
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [isActive, isElectronApp])
+
+  const retryShield = async () => {
+    if (!window.electronAPI?.shieldVerify) return
+    setSystemShieldStatus('applying')
+    try {
+      const health = await window.electronAPI.shieldVerify()
+      setShieldHealth(health)
+      setSystemShieldStatus(health.ok ? 'active' : 'error')
+    } catch {
+      setSystemShieldStatus('error')
+    }
+  }
+
+  // 屏蔽"运行中"但 hosts 实际没生效——这是最危险的状态，界面必须如实反映
+  const shieldUnhealthy =
+    isElectronApp &&
+    isActive &&
+    !!shieldHealth &&
+    !shieldHealth.ok &&
+    shieldHealth.reason !== 'stopped'
+
   const enabledCount = items.filter(i => i.enabled).length
   const websiteCount = items.filter(i => i.enabled && i.type === 'website').length
   const appCount = items.filter(i => i.enabled && i.type === 'app').length
@@ -294,14 +352,26 @@ export function FocusShield() {
             </div>
             {isActive && (
               <div className="flex items-center gap-1.5">
-                <div className="h-2 w-2 rounded-full bg-chart-1 animate-pulse" />
-                <span className="text-xs text-chart-1 font-medium">运行中</span>
+                <div
+                  className={cn(
+                    'h-2 w-2 rounded-full animate-pulse',
+                    shieldUnhealthy ? 'bg-destructive' : 'bg-chart-1'
+                  )}
+                />
+                <span
+                  className={cn(
+                    'text-xs font-medium',
+                    shieldUnhealthy ? 'text-destructive' : 'text-chart-1'
+                  )}
+                >
+                  {shieldUnhealthy ? '未生效' : '运行中'}
+                </span>
               </div>
             )}
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {isElectronApp && (
+          {isElectronApp && !isActive && (
             <div className="rounded-xl bg-primary/5 border border-primary/20 p-3 flex items-start gap-2.5">
               <Monitor className="h-4 w-4 text-primary shrink-0 mt-0.5" />
               <div>
@@ -310,6 +380,42 @@ export function FocusShield() {
                   网站通过Hosts文件拦截，应用通过进程终止屏蔽。需要管理员权限。
                 </p>
               </div>
+            </div>
+          )}
+
+          {shieldUnhealthy && shieldHealth && (
+            <div className="rounded-xl bg-destructive/10 border border-destructive/30 p-3 flex items-start gap-2.5">
+              <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-destructive">屏蔽未真正生效</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  {SHIELD_HEALTH_TEXT[shieldHealth.reason]}
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-[10px] px-2 gap-1 shrink-0"
+                onClick={retryShield}
+                disabled={systemShieldStatus === 'applying'}
+              >
+                <RefreshCw
+                  className={cn(
+                    'h-3 w-3',
+                    systemShieldStatus === 'applying' && 'animate-spin'
+                  )}
+                />
+                重试
+              </Button>
+            </div>
+          )}
+
+          {isElectronApp && isActive && shieldHealth?.ok && (
+            <div className="rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900 p-3 flex items-center gap-2.5">
+              <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0" />
+              <p className="text-xs text-emerald-700 dark:text-emerald-400">
+                已生效 · hosts 回读校验通过（{shieldHealth.blockedCount} 个域名）
+              </p>
             </div>
           )}
 

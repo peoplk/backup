@@ -5,10 +5,29 @@ export interface PomodoroSyncState {
   mode: 'work' | 'short-break' | 'long-break'
 }
 
+/** hosts 写入自检结果。reason 为 'ok' 之外的值都意味着屏蔽没有真正生效。 */
+export interface ShieldHealth {
+  ok: boolean
+  reason:
+    | 'ok'
+    | 'uac_declined'
+    | 'write_failed'
+    | 'reverted'
+    | 'exception'
+    | 'never_run'
+    | 'stopped'
+    | 'denied'
+  elevated: boolean
+  verified: boolean
+  blockedCount: number
+  at: number | null
+}
+
 export interface ShieldStatus {
   active: boolean
   websitesBlocked: string[]
   appsBlocked: string[]
+  health?: ShieldHealth
 }
 
 export interface ActivitySampleData {
@@ -37,7 +56,7 @@ export interface ElectronAPI {
     websites: string[],
     apps: string[],
     mode?: string
-  ) => Promise<{ success: boolean; mode?: string }>
+  ) => Promise<{ success: boolean; mode?: string; health?: ShieldHealth }>
   shieldStop: () => Promise<{ success: boolean; mode: string }>
   shieldUpdate: (
     websites: string[],
@@ -45,6 +64,24 @@ export interface ElectronAPI {
     mode?: string
   ) => Promise<{ success: boolean }>
   shieldStatus: () => Promise<ShieldStatus>
+  /** 自检 / 重试：屏蔽中重放一次 hosts 写入，未激活时只回读。返回最新自检结果 */
+  shieldVerify?: () => Promise<ShieldHealth>
+  /** 把定时封锁窗口清单推送到主进程调度器（主进程负责边界启停与崩溃重放） */
+  shieldScheduleSync?: (
+    windows: Array<{
+      id: string
+      start: string
+      end: string
+      days?: number[]
+      websites: string[]
+      apps: string[]
+      mode: string
+    }>
+  ) => Promise<{ success: boolean }>
+  /** 主进程屏蔽状态变化广播（窗口启停/会话到期） */
+  onShieldStatusChanged?: (
+    callback: (payload: { type: string; reason?: string; active?: boolean }) => void
+  ) => (() => void) | undefined
 
   notify: (options: { title: string; body: string }) => Promise<void>
   setAutoLaunch: (enabled: boolean) => Promise<boolean>
@@ -73,6 +110,21 @@ export interface ElectronAPI {
   // 自动时间线追踪（仅 Windows 生效，本地存储）
   setActivityTracking?: (enabled: boolean) => void
   onActivitySample?: (callback: (data: ActivitySampleData) => void) => (() => void) | undefined
+
+  // 全屏严格模式：主进程级窗口锁定（kiosk + 置顶 + 防休眠 + 拦截退出）
+  setStrictLock?: (opts: {
+    locked: boolean
+    preventSleep?: boolean
+    /** 锁定原因，仅用于日志与事件回传 */
+    reason?: string
+  }) => Promise<{ success: boolean; locked?: boolean; supported?: boolean }>
+  getStrictLockStatus?: () => Promise<{ locked: boolean; supported: boolean }>
+  /** 用户尝试绕过锁定（Esc 退出全屏 / 关闭窗口 / 窗口失焦）时的回传 */
+  onStrictLockViolation?: (
+    callback: (payload: { reason: 'leave-fullscreen' | 'close' | 'blur' }) => void
+  ) => (() => void) | undefined
+  /** 主进程侧状态变化（如托盘紧急解锁）广播 */
+  onStrictLockChanged?: (callback: (payload: { locked: boolean }) => void) => (() => void) | undefined
 }
 
 declare global {
@@ -82,6 +134,7 @@ declare global {
     __openQuickCapture?: () => void
     __openKeyboardShortcuts?: () => void
     __openDailyReview?: () => void
+    __openOnboarding?: () => void
     __SYNC_DATA__?: Record<string, unknown>
   }
 }

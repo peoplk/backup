@@ -49,15 +49,20 @@ export const createGoalSlice = (
         ],
       }
     }),
-  addMilestone: (goalId: string, milestone: Omit<Milestone, 'id'>) =>
+  addMilestone: (goalId: string, milestone: Omit<Milestone, 'id'>) => {
     set((state) => ({
       goals: state.goals.map((g) =>
         g.id === goalId
           ? { ...g, milestones: [...g.milestones, { ...milestone, id: generateId() }] }
           : g
       ),
-    })),
-  toggleMilestone: (goalId: string, milestoneId: string) =>
+    }))
+    // 里程碑增删/勾选影响目标进度，统一触发 data-link-service 单一公式重算
+    import('@/lib/data-link-service').then(({ dataLinkService }) => {
+      dataLinkService.updateGoalProgressAfterLink(goalId)
+    })
+  },
+  toggleMilestone: (goalId: string, milestoneId: string) => {
     set((state) => ({
       goals: state.goals.map((g) =>
         g.id === goalId
@@ -71,15 +76,23 @@ export const createGoalSlice = (
             }
           : g
       ),
-    })),
-  deleteMilestone: (goalId: string, milestoneId: string) =>
+    }))
+    import('@/lib/data-link-service').then(({ dataLinkService }) => {
+      dataLinkService.updateGoalProgressAfterLink(goalId)
+    })
+  },
+  deleteMilestone: (goalId: string, milestoneId: string) => {
     set((state) => ({
       goals: state.goals.map((g) =>
         g.id === goalId
           ? { ...g, milestones: g.milestones.filter((m) => m.id !== milestoneId) }
           : g
       ),
-    })),
+    }))
+    import('@/lib/data-link-service').then(({ dataLinkService }) => {
+      dataLinkService.updateGoalProgressAfterLink(goalId)
+    })
+  },
   reorderMilestones: (goalId: string, milestoneIds: string[]) =>
     set((state) => ({
       goals: state.goals.map((g) => {

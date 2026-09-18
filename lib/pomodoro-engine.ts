@@ -6,7 +6,7 @@ import {
 } from '@/lib/pomodoro-completion'
 import { dataLinkService } from '@/lib/data-link-service'
 import { notifyPomodoroComplete, notifyBreakComplete } from '@/lib/browser-notifications'
-import { playPresetSound, type SoundPresetId } from '@/lib/focus-sounds'
+import { playPresetSound, type SoundPresetId } from '@/lib/focus-sound-engine'
 import { getNextTreeState } from '@/lib/forest-tree'
 
 export interface PomodoroCompletionInfo {
@@ -344,8 +344,12 @@ export function ensurePomodoroEngine(): void {
   }
 }
 
-export function subscribePomodoroCompletion(listener: CompletionListener): () => void {
-  completionListeners.add(listener)
+/** 供自习室等独立界面控制专注：复用严格模式校验，会话记录走同一链路 */
+export function togglePomodoro(): void {
+  handleToggle()
+}
+
+export function subscribePomodoroCompletion(listener: CompletionListener): () => void {  completionListeners.add(listener)
   return () => {
     completionListeners.delete(listener)
   }

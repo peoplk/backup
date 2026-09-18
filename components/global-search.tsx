@@ -55,6 +55,14 @@ export function GlobalSearch({ open, onOpenChange, onNavigate }: GlobalSearchPro
 
   const totalResults = results.tasks.length + results.habits.length + results.anniversaries.length + results.timeEntries.length
 
+  // 空查询时展示最近添加的任务，让搜索首帧有价值
+  const recentTasks = useMemo(
+    () => [...tasks]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 5),
+    [tasks]
+  )
+
   const handleSelect = (type: string, itemId?: string) => {
     if (itemId) {
       localStorage.setItem('focusflow-selected-item', itemId)
@@ -96,7 +104,7 @@ export function GlobalSearch({ open, onOpenChange, onNavigate }: GlobalSearchPro
         />
       </div>
 
-      {query.trim() && (
+      {query.trim() ? (
         <div className="max-h-[400px] overflow-y-auto">
           {totalResults === 0 ? (
             <div className="py-8 text-center text-muted-foreground">
@@ -210,6 +218,41 @@ export function GlobalSearch({ open, onOpenChange, onNavigate }: GlobalSearchPro
                 </div>
               )}
             </div>
+          )}
+        </div>
+      ) : (
+        <div className="max-h-[400px] overflow-y-auto">
+          <div className="px-4 py-2 text-xs font-medium text-muted-foreground">
+            最近添加的任务
+          </div>
+          {recentTasks.length === 0 ? (
+            <div className="py-6 text-center text-sm text-muted-foreground">
+              输入关键词搜索任务、习惯、纪念日
+            </div>
+          ) : (
+            <>
+              {recentTasks.map((task) => (
+                <button
+                  key={task.id}
+                  className="w-full px-4 py-2 flex items-center gap-3 hover:bg-muted/50 transition-colors text-left"
+                  onClick={() => handleSelect('tasks', task.id)}
+                >
+                  <div className={cn(
+                    'h-2 w-2 rounded-full shrink-0',
+                    task.priority === 'urgent' ? 'bg-destructive' :
+                    task.priority === 'high' ? 'bg-chart-3' :
+                    task.priority === 'medium' ? 'bg-chart-1' : 'bg-muted-foreground'
+                  )} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{task.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {task.status === 'done' ? '已完成' : task.status === 'in-progress' ? '进行中' : '待办'}
+                    </p>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                </button>
+              ))}
+            </>
           )}
         </div>
       )}

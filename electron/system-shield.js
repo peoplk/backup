@@ -22,6 +22,18 @@ let blockedAppsCache = new Set()
 let blockedWebsitesCache = new Set()
 let isShieldActive = false
 
+// 屏蔽生效自检状态。startSystemShield 历史上只回传布尔值，"为什么失败"无处可查，
+// 渲染层因此无法区分「成功」「UAC 被拒」「杀软回滚」。这里记录最近一次 hosts 写入的
+// 真实结果，由 getShieldStatus() 与 shield-verify 回传给界面。
+let lastShieldHealth = {
+  ok: false,
+  reason: 'never_run',
+  elevated: false,
+  verified: false,
+  blockedCount: 0,
+  at: null,
+}
+
 // 白名单模式下，屏蔽这些常见干扰站点中不在白名单里的
 const DEFAULT_DISTRACTING_WEBSITES = [
   'weibo.com',
@@ -104,10 +116,10 @@ function getHostsBackupPath() {
 
 // Backup original hosts file
 // 先移除自身残留的屏蔽块，确保备份的是"干净"版本
-function backupHosts() {
+async function backupHosts() {
   try {
     const backupPath = getHostsBackupPath()
-    removeShieldFromHosts()
+    await removeShieldFromHosts()
     fs.copyFileSync(HOSTS_FILE, backupPath)
     return true
   } catch (err) {
@@ -117,17 +129,18 @@ function backupHosts() {
 }
 
 // Restore original hosts file
-function restoreHosts() {
+async function restoreHosts() {
   try {
     const backupPath = getHostsBackupPath()
     if (fs.existsSync(backupPath)) {
-      fs.copyFileSync(backupPath, HOSTS_FILE)
-      flushDns()
-      return true
+      const content = fs.readFileSync(backupPath, 'utf8')
+      const { ok } = await writeHostsWithFallback(content)
+      if (ok) flushDns()
+      return ok
     }
     // If no backup, try to remove FocusFlow markers manually
-    removeShieldFromHosts()
-    return true
+    const removed = await removeShieldFromHosts()
+    return removed
   } catch (err) {
     console.error('Failed to restore hosts file:', err)
     return false
@@ -135,7 +148,7 @@ function restoreHosts() {
 }
 
 // Remove FocusFlow entries from hosts without backup
-function removeShieldFromHosts() {
+async function removeShieldFromHosts() {
   try {
     const content = fs.readFileSync(HOSTS_FILE, 'utf8')
     const lines = content.split('\n')
@@ -156,9 +169,9 @@ function removeShieldFromHosts() {
       }
     }
 
-    fs.writeFileSync(HOSTS_FILE, result.join('\n'), 'utf8')
-    flushDns()
-    return true
+    const { ok } = await writeHostsWithFallback(result.join('\n'))
+    if (ok) flushDns()
+    return ok
   } catch (err) {
     console.error('Failed to remove shield from hosts:', err)
     return false
@@ -174,10 +187,97 @@ function flushDns() {
   }
 }
 
-// Apply website blocks to hosts file
-function applyWebsiteBlocks(websites) {
+// ---------------------------------------------------------------------------
+// hosts 提权写入：普通权限直写失败（EACCES/EPERM）时，弹出 UAC 提权窗口，
+// 由临时提权的 PowerShell 完成 hosts 写入。内容以 Base64 内嵌于命令行，
+// 不落临时文件（避免写入间隙被替换），也不经 shell 拼接（杜绝注入）。
+// ---------------------------------------------------------------------------
+
+/** 用提权 PowerShell 将 content 写入 hosts；以最终文件内容是否一致判定成败 */
+function writeHostsElevated(content) {
+  if (!isWindows) return Promise.resolve(false)
+  const payload = Buffer.from(content, 'utf8').toString('base64')
+  const innerCmd =
+    '$c=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(\'' + payload + '\'));' +
+    '[IO.File]::WriteAllText(\'' + HOSTS_FILE + '\', $c);'
+  const innerB64 = Buffer.from(innerCmd, 'utf16le').toString('base64')
+  const outerArgs = [
+    '-NoProfile',
+    '-NonInteractive',
+    '-Command',
+    'Start-Process powershell -Verb RunAs -Wait -WindowStyle Hidden -ArgumentList \'-NoProfile\',\'-EncodedCommand\',\'' + innerB64 + '\'',
+  ]
+  return new Promise((resolve) => {
+    let child
+    try {
+      child = spawn('powershell.exe', outerArgs, { windowsHide: true })
+    } catch {
+      resolve(false)
+      return
+    }
+    child.on('error', () => resolve(false))
+    child.on('exit', () => {
+      // 用户可能拒绝 UAC：以实际文件内容是否等于目标内容为准
+      try {
+        resolve(fs.readFileSync(HOSTS_FILE, 'utf8') === content)
+      } catch {
+        resolve(false)
+      }
+    })
+  })
+}
+
+/** 通用 hosts 写入：先直写，权限不足时走提权回退。返回 { ok, elevated } */
+async function writeHostsWithFallback(content) {
   try {
-    backupHosts()
+    fs.writeFileSync(HOSTS_FILE, content, 'utf8')
+    return { ok: true, elevated: false }
+  } catch (err) {
+    const code = err && err.code
+    if (code !== 'EACCES' && code !== 'EPERM') {
+      console.error('Failed to write hosts file:', err)
+      return { ok: false, elevated: false }
+    }
+    const ok = await writeHostsElevated(content)
+    if (!ok) console.error('Elevated hosts write failed or was declined by user')
+    return { ok, elevated: true }
+  }
+}
+
+/** 读回 hosts 文件，确认屏蔽块真的在。写入成功 ≠ 生效：UAC 被拒、杀软回滚、
+ *  文件被还原都会让实际内容与写入内容不一致，必须回读才算自检。 */
+function verifyHostsBlock() {
+  try {
+    const content = fs.readFileSync(HOSTS_FILE, 'utf8')
+    return (
+      content.includes(FOCUSFLOW_MARKER_START) &&
+      content.includes(FOCUSFLOW_MARKER_END)
+    )
+  } catch {
+    return false
+  }
+}
+
+/** 把写入结果翻译成渲染层可直接展示的原因码 */
+function describeWriteFailure(writeResult, verified) {
+  if (writeResult && writeResult.ok) return verified ? 'ok' : 'reverted'
+  if (writeResult && writeResult.elevated) return 'uac_declined'
+  return 'write_failed'
+}
+
+function recordShieldHealth(next) {
+  lastShieldHealth = { ...lastShieldHealth, ...next, at: Date.now() }
+}
+
+/** 实时自检状态：verified 每次重新回读 hosts，能反映中途被回滚的情况 */
+function getShieldHealth() {
+  return { ...lastShieldHealth, verified: verifyHostsBlock() }
+}
+
+// Apply website blocks to hosts file
+async function applyWebsiteBlocks(websites) {
+  try {
+    await backupHosts()
     let content = fs.readFileSync(HOSTS_FILE, 'utf8')
 
     // Remove existing FocusFlow block
@@ -216,11 +316,28 @@ function applyWebsiteBlocks(websites) {
     result.push('')
     result.push(...entries)
 
-    fs.writeFileSync(HOSTS_FILE, result.join('\n'), 'utf8')
-    flushDns()
-    return true
+    const writeResult = await writeHostsWithFallback(result.join('\n'))
+    if (writeResult.ok) flushDns()
+
+    // 回读自检：写入成功不等于真正生效，必须读回来确认屏蔽块确实在
+    const verified = writeResult.ok && verifyHostsBlock()
+    recordShieldHealth({
+      ok: !!verified,
+      reason: describeWriteFailure(writeResult, verified),
+      elevated: !!writeResult.elevated,
+      verified: !!verified,
+      blockedCount: websites.length,
+    })
+    return writeResult.ok
   } catch (err) {
     console.error('Failed to apply website blocks:', err)
+    recordShieldHealth({
+      ok: false,
+      reason: 'exception',
+      elevated: false,
+      verified: false,
+      blockedCount: websites.length,
+    })
     return false
   }
 }
@@ -263,21 +380,21 @@ function scanAndKillBlockedApps(apps) {
 }
 
 // Start system shield
-function startSystemShield(websites, apps, mode) {
+async function startSystemShield(websites, apps, mode) {
   const lists = computeBlockLists(websites, apps, mode)
   if (isShieldActive) {
     // Update existing shield
     blockedWebsitesCache = new Set(lists.websites)
     blockedAppsCache = new Set(lists.apps)
-    applyWebsiteBlocks(Array.from(blockedWebsitesCache))
-    return { success: true, mode: 'updated' }
+    const updatedOk = await applyWebsiteBlocks(Array.from(blockedWebsitesCache))
+    return { success: updatedOk, mode: 'updated', health: getShieldHealth() }
   }
 
   blockedWebsitesCache = new Set(lists.websites)
   blockedAppsCache = new Set(lists.apps)
 
   // Apply hosts file blocks
-  const hostsSuccess = applyWebsiteBlocks(Array.from(blockedWebsitesCache))
+  const hostsSuccess = await applyWebsiteBlocks(Array.from(blockedWebsitesCache))
 
   // Start periodic app killer
   if (blockedAppsCache.size > 0) {
@@ -290,11 +407,11 @@ function startSystemShield(websites, apps, mode) {
   }
 
   isShieldActive = true
-  return { success: hostsSuccess, mode: 'started' }
+  return { success: hostsSuccess, mode: 'started', health: getShieldHealth() }
 }
 
 // Stop system shield
-function stopSystemShield() {
+async function stopSystemShield() {
   if (!isShieldActive) return { success: true, mode: 'already_stopped' }
 
   // Clear interval
@@ -304,23 +421,30 @@ function stopSystemShield() {
   }
 
   // Restore hosts file
-  const hostsSuccess = restoreHosts()
+  const hostsSuccess = await restoreHosts()
 
   blockedWebsitesCache.clear()
   blockedAppsCache.clear()
   isShieldActive = false
+  recordShieldHealth({
+    ok: false,
+    reason: 'stopped',
+    elevated: false,
+    verified: false,
+    blockedCount: 0,
+  })
 
   return { success: hostsSuccess, mode: 'stopped' }
 }
 
 // Update shield rules while active
-function updateShieldRules(websites, apps, mode) {
+async function updateShieldRules(websites, apps, mode) {
   const lists = computeBlockLists(websites, apps, mode)
   blockedWebsitesCache = new Set(lists.websites)
   blockedAppsCache = new Set(lists.apps)
 
   if (isShieldActive) {
-    applyWebsiteBlocks(Array.from(blockedWebsitesCache))
+    await applyWebsiteBlocks(Array.from(blockedWebsitesCache))
 
     // Restart app killer if needed
     if (shieldInterval) {
@@ -343,27 +467,48 @@ function getShieldStatus() {
     active: isShieldActive,
     websitesBlocked: Array.from(blockedWebsitesCache),
     appsBlocked: Array.from(blockedAppsCache),
+    health: getShieldHealth(),
   }
 }
 
 // Register IPC handlers
 // 所有 handler 必须经过 isTrustedSender 校验，防止任意本地页面滥用系统级能力
-function registerSystemShieldIPC(isTrustedSender) {
+function registerSystemShieldIPC(isTrustedSender, hooks) {
   const trusted = typeof isTrustedSender === 'function' ? isTrustedSender : () => false
 
-  ipcMain.handle('shield-start', (event, { websites, apps, mode } = {}) => {
+  ipcMain.handle('shield-start', async (event, { websites, apps, mode } = {}) => {
     if (!trusted(event)) return { success: false, mode: 'denied' }
-    return startSystemShield(websites || [], apps || [], mode || 'blacklist')
+    const result = await startSystemShield(websites || [], apps || [], mode || 'blacklist')
+    if (result.success && hooks && typeof hooks.onSessionStart === 'function') {
+      try { await hooks.onSessionStart({ websites: websites || [], apps: apps || [], mode: mode || 'blacklist' }) } catch {}
+    }
+    return result
   })
 
-  ipcMain.handle('shield-stop', (event) => {
+  ipcMain.handle('shield-stop', async (event) => {
     if (!trusted(event)) return { success: false, mode: 'denied' }
-    return stopSystemShield()
+    const result = await stopSystemShield()
+    if (result.success && hooks && typeof hooks.onSessionStop === 'function') {
+      try { await hooks.onSessionStop() } catch {}
+    }
+    return result
   })
 
-  ipcMain.handle('shield-update', (event, { websites, apps, mode } = {}) => {
+  ipcMain.handle('shield-update', async (event, { websites, apps, mode } = {}) => {
     if (!trusted(event)) return { success: false, mode: 'denied' }
     return updateShieldRules(websites || [], apps || [], mode || 'blacklist')
+  })
+
+  // 自检 / 重试：屏蔽已激活时重放一次 hosts 写入（UAC 被拒或杀软回滚后的补救入口）；
+  // 未激活时只回读一次，不触碰 hosts。会写系统文件，必须校验来源。
+  ipcMain.handle('shield-verify', async (event) => {
+    if (!trusted(event)) return { ok: false, reason: 'denied' }
+    if (isShieldActive) {
+      await applyWebsiteBlocks(Array.from(blockedWebsitesCache))
+    } else {
+      recordShieldHealth({ verified: verifyHostsBlock() })
+    }
+    return getShieldHealth()
   })
 
   ipcMain.handle('shield-status', () => {
@@ -382,4 +527,5 @@ module.exports = {
   cleanupShield,
   startSystemShield,
   stopSystemShield,
+  getShieldStatus,
 }

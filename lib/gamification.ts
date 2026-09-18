@@ -1,6 +1,8 @@
 import { useMemo } from 'react'
 import { useAppStore } from '@/lib/store'
 import type { PomodoroSession, Habit, Task, HabitCheckIn, Achievement } from '@/lib/types'
+import { LEVEL_THRESHOLDS, LEVEL_TITLES, levelFromPoints } from '@/lib/level-config'
+import { calculateHabitStreak as calculateUnifiedHabitStreak } from '@/lib/habit-streak'
 
 export type { Achievement }
 
@@ -16,18 +18,6 @@ export interface GameProgress {
   completedTasks: number
   completedHabits: number
 }
-
-const LEVEL_THRESHOLDS = [
-  0, 100, 250, 500, 1000, 1750, 2750, 4000, 5500, 7500,
-  10000, 13000, 16500, 20500, 25000, 30000, 36000, 43000, 51000, 60000
-]
-
-const LEVEL_TITLES = [
-  '新手', '入门', '学徒', '熟练', '精通',
-  '专家', '大师', '宗师', '传奇', '神话',
-  '至尊', '圣者', '贤者', '智者', '王者',
-  '帝皇', '天尊', '神灵', '至尊神', '创世者'
-]
 
 function tierForValue(value: number): Achievement['tier'] {
   if (value >= 500) return 'platinum'
@@ -187,10 +177,7 @@ export function checkAchievementsNow(): { newlyUnlocked: Achievement[]; newPoint
 
   const workSessions = pomodoroSessions.filter((s) => s.type === 'work')
   const completedTasks = tasks.filter((t) => t.status === 'done')
-  const maxStreak = Math.max(
-    ...habits.map((h) => calculateHabitStreakStandalone(h.id, habitCheckIns)),
-    0
-  )
+  const maxStreak = maxHabitStreakAcross(habits, habitCheckIns)
   const focusStreak = calculateStreak(workSessions)
 
   const ctx = { workSessions, completedTasks, maxHabitStreak: maxStreak, focusStreak }
@@ -226,10 +213,13 @@ export function useGamification() {
 
     const totalFocusTime = workSessions.reduce((acc, s) => acc + s.duration, 0)
     const streak = calculateStreak(workSessions)
-    
-    const experience = calculateTotalExperience(workSessions, completedTasks, completedHabits, streak)
-    const level = calculateLevel(experience)
-    const experienceToNextLevel = LEVEL_THRESHOLDS[level] - experience
+
+    // 等级/经验统一取自积分账本（userLevel.totalPoints，与成就系统同一数据源），
+    // 不再从历史全量重算，避免双轨账本显示不同等级
+    const experience = userLevel.totalPoints
+    const level = levelFromPoints(experience)
+    const nextThreshold = LEVEL_THRESHOLDS[level]
+    const experienceToNextLevel = nextThreshold === undefined ? 0 : Math.max(0, nextThreshold - experience)
 
     return {
       level,
@@ -243,7 +233,7 @@ export function useGamification() {
       completedTasks: completedTasks.length,
       completedHabits: completedHabits.length,
     }
-  }, [pomodoroSessions, tasks, habits, habitCheckIns, achievements])
+  }, [pomodoroSessions, tasks, habitCheckIns, achievements, userLevel])
 
   const calculateExperienceForSession = (session: PomodoroSession): number => {
     let exp = session.duration / 60
@@ -268,10 +258,7 @@ export function useGamification() {
     const { pomodoroSessions, tasks, habits, habitCheckIns, achievements } = useAppStore.getState()
     const workSessions = pomodoroSessions.filter(s => s.type === 'work')
     const completedTasks = tasks.filter(t => t.status === 'done')
-    const maxStreak = Math.max(
-      ...habits.map(h => calculateHabitStreakStandalone(h.id, habitCheckIns)),
-      0
-    )
+    const maxStreak = maxHabitStreakAcross(habits, habitCheckIns)
     const streak = calculateStreak(workSessions)
     const unlockedMap = new Map(achievements.map(a => [a.id, a]))
 
@@ -302,7 +289,12 @@ export function useGamification() {
   }
 
   const calculateHabitStreak = (habitId: string): number => {
-    return calculateHabitStreakStandalone(habitId, habitCheckIns)
+    const habit = habits.find(h => h.id === habitId)
+    if (!habit) return 0
+    return calculateUnifiedHabitStreak(
+      habit,
+      habitCheckIns.filter(c => c.habitId === habitId)
+    ).current
   }
 
   return {
@@ -317,22 +309,18 @@ export function useGamification() {
   }
 }
 
-function calculateHabitStreakStandalone(habitId: string, checkIns: HabitCheckIn[]): number {
-  let streak = 0
-  const checkDate = new Date()
-  while (true) {
-    const dateStr = checkDate.toDateString()
-    const c = checkIns.find(
-      (x) => x.habitId === habitId && new Date(x.date).toDateString() === dateStr
-    )
-    if (c?.completed) {
-      streak++
-      checkDate.setDate(checkDate.getDate() - 1)
-    } else {
-      break
-    }
-  }
-  return streak
+/** 全部习惯中的最大当前连胜（统一走 lib/habit-streak.ts 调度感知引擎） */
+function maxHabitStreakAcross(
+  habits: Habit[],
+  checkIns: HabitCheckIn[]
+): number {
+  return habits.reduce((max, habit) => {
+    const streak = calculateUnifiedHabitStreak(
+      habit,
+      checkIns.filter(c => c.habitId === habit.id)
+    ).current
+    return streak > max ? streak : max
+  }, 0)
 }
 
 function calculateStreak(sessions: PomodoroSession[]): number {
@@ -356,33 +344,4 @@ function calculateStreak(sessions: PomodoroSession[]): number {
   }
   
   return count
-}
-
-function calculateTotalExperience(
-  sessions: PomodoroSession[],
-  tasks: Task[],
-  habits: HabitCheckIn[],
-  streak: number
-): number {
-  let exp = 0
-
-  exp += sessions.reduce((acc, s) => acc + s.duration / 60, 0)
-
-  exp += tasks.length * 20
-
-  exp += habits.filter(h => h.completed).length * 10
-
-  if (streak >= 7) exp += streak * 5
-  if (streak >= 30) exp += streak * 10
-
-  return Math.floor(exp)
-}
-
-function calculateLevel(experience: number): number {
-  for (let i = LEVEL_THRESHOLDS.length - 1; i >= 0; i--) {
-    if (experience >= LEVEL_THRESHOLDS[i]) {
-      return i + 1
-    }
-  }
-  return 1
 }

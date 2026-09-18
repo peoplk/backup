@@ -24,11 +24,40 @@ export const createProjectSlice = (
     return created
   },
   updateProject: (id: string, updates: Partial<Project>) =>
-    set((state) => ({
-      projects: state.projects.map((p) =>
-        p.id === id ? { ...p, ...updates } : p
-      ),
-    })),
+    set((state) => {
+      const old = state.projects.find((p) => p.id === id)
+      if (!old) return state
+      const newName = updates.name?.trim()
+      const renamed = !!newName && newName !== old.name
+      const projects = state.projects.map((p) =>
+        p.id === id ? { ...p, ...updates, name: renamed ? newName! : old.name } : p
+      )
+      if (!renamed) return { projects }
+
+      // 项目重命名全链路传播：任务/时间记录/已存筛选沿用项目名做关联，
+      // 不同步会导致任务仍挂旧项目名、侧边栏持久化选中项失效
+      const tasks = state.tasks.map((t) =>
+        t.project === old.name ? { ...t, project: newName! } : t
+      )
+      const timeEntries = state.timeEntries.map((e) =>
+        e.project === old.name ? { ...e, project: newName! } : e
+      )
+      const savedFilters = state.savedFilters.map((f) =>
+        f.criteria.project === old.name
+          ? { ...f, criteria: { ...f.criteria, project: newName! } }
+          : f
+      )
+      try {
+        if (typeof window !== 'undefined') {
+          if (window.localStorage.getItem('focusflow-active-project') === old.name) {
+            window.localStorage.setItem('focusflow-active-project', newName!)
+            // 广播给侧边栏与任务页的选中态
+            window.dispatchEvent(new CustomEvent('focusflow-project-select', { detail: newName! }))
+          }
+        }
+      } catch { /* ignore */ }
+      return { projects, tasks, timeEntries, savedFilters }
+    }),
   deleteProject: (id: string) =>
     set((state) => {
       const project = state.projects.find((p) => p.id === id)

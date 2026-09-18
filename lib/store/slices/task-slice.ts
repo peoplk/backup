@@ -1,4 +1,5 @@
-import type { Task, SubTask, TaskReminder, RepeatTaskCompletion, Notification } from '@/lib/types'
+import type { Task, SubTask, TaskReminder, RepeatTaskCompletion, RepeatRule, Notification } from '@/lib/types'
+import { advanceRepeatDueDate as advanceRepeatDueDateShared } from '@/lib/recurring'
 import type { AppState, AppStoreApi } from '../types'
 import { generateId, defaultTasks } from '../utils'
 import { clearNotifiedKeysWithPrefix } from '@/lib/notified-registry'
@@ -12,6 +13,14 @@ function removeTaskNotifications(notifications: Notification[], taskId: string):
   return notifications.filter(
     (n) => !(n.relatedType === 'task' && n.relatedId === taskId)
   )
+}
+
+/**
+ * 计算重复任务的下一个周期日期（completeTask / skipRepeatTask 共用）。
+ * 实现已上移跨端共享层 shared/core/recurring.ts（与 Android 同一套推进规则），此处仅做委托。
+ */
+function advanceRepeatDueDate(rule: RepeatRule, baseDate: Date): Date {
+  return advanceRepeatDueDateShared(rule, baseDate)
 }
 
 /** 完成任务后的联动：积分、成就、目标进度、项目时长（动态加载避免循环依赖，状态更新后再执行） */
@@ -169,22 +178,10 @@ export const createTaskSlice = (
       const originalDueDate = new Date(task.dueDate || new Date())
       originalDueDate.setHours(0, 0, 0, 0)
       const baseDate = new Date(Math.max(originalDueDate.getTime(), todayDate.getTime()))
-      const newDueDate = new Date(baseDate)
-      switch (task.repeatRule.type) {
-        case 'daily':
-          newDueDate.setDate(newDueDate.getDate() + task.repeatRule.interval)
-          break
-        case 'weekly':
-          newDueDate.setDate(newDueDate.getDate() + 7 * task.repeatRule.interval)
-          break
-        case 'monthly':
-          newDueDate.setMonth(newDueDate.getMonth() + task.repeatRule.interval)
-          break
-        case 'yearly':
-          newDueDate.setFullYear(newDueDate.getFullYear() + task.repeatRule.interval)
-          break
-      }
+      const newDueDate = advanceRepeatDueDate(task.repeatRule, baseDate)
 
+      // 周期滚动后重置提醒触发状态，并清理通知去重键，确保下一周期提醒可再次触发
+      clearNotifiedKeysWithPrefix(`task-reminder-${id}`)
       set((state) => ({
         tasks: state.tasks.map((t) =>
           t.id === id
@@ -194,6 +191,7 @@ export const createTaskSlice = (
                 dueDate: newDueDate,
                 completedAt: undefined,
                 completedPomodoros: 0,
+                reminders: t.reminders?.map((r) => ({ ...r, triggered: false })),
                 repeatRule: {
                   ...t.repeatRule!,
                   completedCount: currentCompletedCount,
@@ -306,22 +304,8 @@ export const createTaskSlice = (
       const originalDueDate = new Date(task.dueDate || new Date())
       originalDueDate.setHours(0, 0, 0, 0)
       const baseDate = new Date(Math.max(originalDueDate.getTime(), todayDate.getTime()))
-      const newDueDate = new Date(baseDate)
-      switch (task.repeatRule.type) {
-        case 'daily':
-          newDueDate.setDate(newDueDate.getDate() + task.repeatRule.interval)
-          break
-        case 'weekly':
-          newDueDate.setDate(newDueDate.getDate() + 7 * task.repeatRule.interval)
-          break
-        case 'monthly':
-          newDueDate.setMonth(newDueDate.getMonth() + task.repeatRule.interval)
-          break
-        case 'yearly':
-          newDueDate.setFullYear(newDueDate.getFullYear() + task.repeatRule.interval)
-          break
-      }
-      
+      const newDueDate = advanceRepeatDueDate(task.repeatRule, baseDate)
+
       const notification = {
         type: 'task-due' as const,
         title: '跳过重复任务',
@@ -405,7 +389,8 @@ export const createTaskSlice = (
     set((state) => {
       const today = new Date()
       today.setHours(0, 0, 0, 0)
-      
+
+      const rolledOverIds: string[] = []
       const updatedTasks = state.tasks.map((t) => {
         if (!t.repeatRule || t.repeatRule.paused) return t
         if (t.status !== 'done') return t
@@ -420,16 +405,23 @@ export const createTaskSlice = (
         if (hasReachedEndDate || hasReachedCount) return t
 
         if (dueDate <= today) {
+          rolledOverIds.push(t.id)
           return {
             ...t,
             status: 'todo' as const,
             completedAt: undefined,
+            reminders: t.reminders?.map((r) => ({ ...r, triggered: false })),
           }
         }
 
         return t
       })
-      
+
+      // 跨日补刷滚动周期后，清理通知去重键以便新周期提醒可触发
+      for (const id of rolledOverIds) {
+        clearNotifiedKeysWithPrefix(`task-reminder-${id}`)
+      }
+
       return { tasks: updatedTasks }
     }),
   batchCompleteTasks: (ids: string[]) => {

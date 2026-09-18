@@ -38,7 +38,8 @@ export type S3Preset = {
 
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error' | 'offline'
 
-import type { SyncConflict } from '@/lib/types'
+import type { SyncConflict, Tombstone } from '@/lib/types'
+import { applyTombstonesToData, mergeTombstoneLists, tombstoneStore, SYNCED_COLLECTION_KEYS } from '@/lib/sync/tombstones'
 
 export interface SyncState {
   status: SyncStatus
@@ -540,6 +541,19 @@ export async function mergeLocalAndS3(userId: string, localData: Record<string, 
     } else {
       merged[key] = cloudValue !== undefined ? cloudValue : localValue
     }
+  }
+
+  // 删除墓碑：合并远端墓碑并清理已被删除的实体（防止旧数据在合并时复活）
+  try {
+    const remoteTombstones = Array.isArray(cloud.tombstones) ? (cloud.tombstones as Tombstone[]) : []
+    const localTombstones = Array.isArray(localData.tombstones) ? (localData.tombstones as Tombstone[]) : []
+    const union = mergeTombstoneLists(localTombstones, remoteTombstones, Date.now())
+    merged.tombstones = union
+    tombstoneStore.merge(remoteTombstones, Date.now())
+    const cleaned = applyTombstonesToData(merged, union, SYNCED_COLLECTION_KEYS)
+    Object.assign(merged, cleaned)
+  } catch {
+    // 墓碑处理异常不阻断合并主流程
   }
 
   const mergedStr = JSON.stringify(merged, (k, v) => v instanceof Date ? v.toISOString() : v)

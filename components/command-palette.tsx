@@ -31,6 +31,7 @@ import {
   Command,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useIsMacOS } from '@/lib/platform'
 
 interface CommandItem {
   id: string
@@ -43,6 +44,7 @@ interface CommandItem {
 }
 
 export function CommandPalette() {
+  const isMac = useIsMacOS()
   const {
     tasks,
     activeView,
@@ -366,7 +368,7 @@ export function CommandPalette() {
           </div>
           <div className="flex items-center gap-1">
             <kbd className="h-4 rounded border bg-muted px-1 text-[10px]">
-              <Command className="h-3 w-3" />
+              {isMac ? <Command className="h-3 w-3" /> : 'Ctrl'}
             </kbd>
             <kbd className="h-4 rounded border bg-muted px-1 text-[10px]">⇧</kbd>
             <kbd className="h-4 rounded border bg-muted px-1 text-[10px]">P</kbd>

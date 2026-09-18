@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react'
 import { useAppStore } from '@/lib/store'
@@ -82,6 +82,7 @@ import {
   RotateCcw,
   Star,
   Archive,
+  Folder,
   Zap,
   MessageCircle,
 } from 'lucide-react'
@@ -94,7 +95,8 @@ import { BatchOperations, TaskSelectionWrapper } from '@/components/batch-operat
 import { TaskDependencyManager, TaskDependencyBadge } from '@/components/task-dependencies'
 import { QuickAddTask } from '@/components/quick-add-task'
 import { TaskQuickActions } from '@/components/task-quick-actions'
-import { parseSmartInput } from '@/lib/smart-input'
+import { TaskDetailDrawer } from '@/components/task-detail-drawer'
+import { parseEnhancedInput } from '@/lib/smart-input-enhanced'
 import { DndContext, DragOverlay, closestCorners, PointerSensor, useSensor, useSensors, DragStartEvent, DragEndEvent, DragOverEvent } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -326,8 +328,14 @@ export function TasksView() {
   const [filterTag, setFilterTag] = useState<string>('all')
   const [filterDate, setFilterDate] = useState<Date | null>(null)
   const [filterType, setFilterType] = useState<string>('all')
+  const [filterProject, setFilterProject] = useState<string>(() => {
+    if (typeof window === 'undefined') return 'all'
+    return window.localStorage.getItem('focusflow-active-project') || 'all'
+  })
+  const [showArchived, setShowArchived] = useState(false)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [detailTaskId, setDetailTaskId] = useState<string | null>(null)
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set())
   const [subTaskInputs, setSubTaskInputs] = useState<Record<string, string>>({})
   const [editingSubTask, setEditingSubTask] = useState<{ taskId: string; subTaskId: string; title: string } | null>(null)
@@ -386,6 +394,24 @@ export function TasksView() {
     return () => clearTimeout(timer)
   }, [tasks, viewMode, filterStatus, filterPriority, filterTag, activeSmartList])
 
+  // 项目过滤：侧边栏点击项目时通过事件同步（并持久化，刷新后保留）
+  const applyProjectFilter = useCallback((value: string) => {
+    setFilterProject(value)
+    try {
+      if (value === 'all') window.localStorage.removeItem('focusflow-active-project')
+      else window.localStorage.setItem('focusflow-active-project', value)
+    } catch { /* ignore */ }
+  }, [])
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail
+      setFilterProject(detail || 'all')
+    }
+    window.addEventListener('focusflow-project-select', handler)
+    return () => window.removeEventListener('focusflow-project-select', handler)
+  }, [])
+
 
   const allTags = useMemo(() => [...new Set(tasks.flatMap((t) => t.tags))], [tasks])
   const { smartLists, getSmartListTasks } = useSmartLists()
@@ -405,9 +431,11 @@ export function TasksView() {
       const matchesStatus = filterStatus === 'all' || task.status === filterStatus
       const matchesTag = filterTag === 'all' || task.tags.includes(filterTag)
       const matchesType = filterType === 'all' || task.type === filterType
+      const matchesProject = filterProject === 'all' || task.project === filterProject
+      const matchesArchived = showArchived ? !!task.archived : !task.archived
       const matchesDate = !filterDate || 
         (task.dueDate && new Date(task.dueDate).toDateString() === filterDate.toDateString())
-      return matchesSearch && matchesPriority && matchesStatus && matchesTag && matchesType && matchesDate
+      return matchesSearch && matchesPriority && matchesStatus && matchesTag && matchesType && matchesProject && matchesArchived && matchesDate
     })
     
     if (activeSmartList) {
@@ -421,7 +449,7 @@ export function TasksView() {
     }
     
     return filtered
-  }, [tasks, searchQuery, filterPriority, filterStatus, filterTag, filterType, filterDate, activeSmartList, getSmartListTasks])
+  }, [tasks, searchQuery, filterPriority, filterStatus, filterTag, filterType, filterDate, filterProject, showArchived, activeSmartList, getSmartListTasks])
 
   const hasAnyFilter = useMemo(() =>
     !!searchQuery ||
@@ -429,8 +457,9 @@ export function TasksView() {
     filterStatus !== 'all' ||
     filterTag !== 'all' ||
     filterType !== 'all' ||
+    filterProject !== 'all' ||
     !!filterDate
-  , [searchQuery, filterPriority, filterStatus, filterTag, filterType, filterDate])
+  , [searchQuery, filterPriority, filterStatus, filterTag, filterType, filterProject, filterDate])
 
   const isDoneVisibleToday = useCallback((t: Task) => {
     if (t.status !== 'done' || !!t.repeatRule) return false
@@ -1535,8 +1564,8 @@ export function TasksView() {
             )}
           </div>
           <p className="text-muted-foreground mt-0.5">
-            {activeSmartList 
-              ? `正在查看: ${activeSmartList === 'starred' ? '已收藏' : smartLists.find(l => l.id === activeSmartList)?.name}`
+            {activeSmartList
+              ? `共 ${filteredTasks.length} 项 · 点上方标签可退出该列表`
               : '任务管理与日程安排，高效规划每一天'
             }
           </p>
@@ -1602,8 +1631,8 @@ export function TasksView() {
                       const value = e.target.value
                       setNewTask({ ...newTask, title: value })
                       if (value && !editingTask) {
-                        const parsed = parseSmartInput(value)
-                        if (parsed.dueDate || parsed.priority || parsed.tags.length > 0 || parsed.project || parsed.startTime) {
+                        const parsed = parseEnhancedInput(value)
+                        if (parsed.dueDate || parsed.priority || (parsed.tags && parsed.tags.length > 0) || parsed.project || parsed.startTime) {
                           const updates: Partial<typeof newTask> = {}
                           if (parsed.dueDate) {
                             updates.dueDate = parsed.dueDate.toISOString().split('T')[0]
@@ -1614,11 +1643,10 @@ export function TasksView() {
                             }
                           }
                           if (parsed.priority) updates.priority = parsed.priority
-                          if (parsed.tags.length > 0) updates.tags = [...new Set([...newTask.tags, ...parsed.tags])]
+                          if (parsed.tags && parsed.tags.length > 0) updates.tags = [...new Set([...newTask.tags, ...parsed.tags])]
                           if (parsed.project) updates.project = parsed.project
                           if (parsed.startTime) updates.startTime = parsed.startTime
                           if (parsed.endTime) updates.endTime = parsed.endTime
-                          if (parsed.type) updates.type = parsed.type
                           if (Object.keys(updates).length > 0) {
                             setNewTask(prev => ({ ...prev, title: parsed.title || value, ...updates }))
                           }
@@ -1626,7 +1654,7 @@ export function TasksView() {
                       }
                     }}
                   />
-                  {newTask.title && !editingTask && parseSmartInput(newTask.title).dueDate && (
+                  {newTask.title && !editingTask && parseEnhancedInput(newTask.title).dueDate && (
                     <div className="absolute right-2 top-1/2 -translate-y-1/2">
                       <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5">
                         🤖 已解析
@@ -1980,6 +2008,22 @@ export function TasksView() {
                   ))}
                 </SelectContent>
               </Select>
+              {projects.length > 0 && (
+                <Select value={filterProject} onValueChange={applyProjectFilter}>
+                  <SelectTrigger className="w-full sm:w-[140px]">
+                    <Folder className="mr-2 h-4 w-4" />
+                    <SelectValue placeholder="项目" />
+                  </SelectTrigger>
+                  <SelectContent align="start">
+                    <SelectItem value="all">全部项目</SelectItem>
+                    {projects.map((p) => (
+                      <SelectItem key={p.id} value={p.name}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               {allTags.length > 0 && (
                 <Select value={filterTag} onValueChange={setFilterTag}>
                   <SelectTrigger className="w-full sm:w-[140px]">
@@ -2016,6 +2060,7 @@ export function TasksView() {
                       status: filterStatus !== 'all' ? filterStatus : undefined,
                       tag: filterTag !== 'all' ? filterTag : undefined,
                       type: filterType !== 'all' ? filterType : undefined,
+                      project: filterProject !== 'all' ? filterProject : undefined,
                       date: filterDate ? filterDate.toISOString().split('T')[0] : undefined,
                     }}
                     onApply={(c) => {
@@ -2024,11 +2069,22 @@ export function TasksView() {
                       setFilterStatus(c.status || 'all')
                       setFilterTag(c.tag || 'all')
                       setFilterType(c.type || 'all')
+                      applyProjectFilter(c.project || 'all')
                       setFilterDate(c.date ? new Date(c.date) : null)
                     }}
                   />
                 </div>
               ) : null}
+              <Button
+                variant={showArchived ? 'default' : 'ghost'}
+                size="sm"
+                className={cn('h-8 gap-1 px-2', showArchived ? '' : 'text-muted-foreground')}
+                onClick={() => setShowArchived((v) => !v)}
+                title="查看已归档任务"
+              >
+                <Archive className="h-4 w-4" />
+                <span className="hidden sm:inline">归档</span>
+              </Button>
               <div className="flex rounded-lg border p-1">
                 <Button
                   variant={viewMode === 'list' ? 'default' : 'ghost'}
@@ -2287,101 +2343,61 @@ export function TasksView() {
           ) : (
           <>
           <div className="grid gap-4 md:grid-cols-2">
-            <Card className="border-l-4 border-l-destructive overflow-hidden">
-            <CardHeader className="pb-3">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="h-5 w-5 text-destructive" />
-                  <CardTitle className="text-base font-semibold">紧急</CardTitle>
-                  <Badge variant="destructive" className="ml-auto">
-                    {groupedTasks.urgent.length}
-                  </Badge>
-                </div>
-                <p className="text-sm text-muted-foreground">立即处理</p>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {groupedTasks.urgent.map((task) => (
-                  <TaskItem key={task.id} task={task} />
-                ))}
-                {groupedTasks.urgent.length === 0 && (
-                  <p className="py-4 text-center text-sm text-muted-foreground">暂无紧急任务</p>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-chart-3 overflow-hidden">
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-2">
-                  <ArrowUp className="h-5 w-5 text-chart-3" />
-                  <CardTitle className="text-base font-semibold">高优先级</CardTitle>
-                  <Badge className="ml-auto bg-chart-3">
-                    {groupedTasks.high.length}
-                  </Badge>
-                </div>
-                <p className="text-sm text-muted-foreground">优先安排</p>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {groupedTasks.high.map((task) => (
-                  <TaskItem key={task.id} task={task} />
-                ))}
-                {groupedTasks.high.length === 0 && (
-                  <p className="py-4 text-center text-sm text-muted-foreground">暂无高优先级任务</p>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-chart-1 overflow-hidden">
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-2">
-                  <ArrowRight className="h-5 w-5 text-chart-1" />
-                  <CardTitle className="text-base font-semibold">中优先级</CardTitle>
-                  <Badge className="ml-auto bg-chart-1">
-                    {groupedTasks.medium.length}
-                  </Badge>
-                </div>
-                <p className="text-sm text-muted-foreground">正常安排</p>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {groupedTasks.medium.map((task) => (
-                  <TaskItem key={task.id} task={task} />
-                ))}
-                {groupedTasks.medium.length === 0 && (
-                  <p className="py-4 text-center text-sm text-muted-foreground">暂无中优先级任务</p>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="border-l-4 border-l-muted-foreground overflow-hidden">
-              <CardHeader className="pb-3">
-                <div className="flex items-center gap-2">
-                  <ArrowDown className="h-5 w-5 text-muted-foreground" />
-                  <CardTitle className="text-base font-semibold">低优先级</CardTitle>
-                  <Badge variant="secondary" className="ml-auto">
-                    {groupedTasks.low.length}
-                  </Badge>
-                </div>
-                <p className="text-sm text-muted-foreground">有空时处理</p>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {groupedTasks.low.map((task) => (
-                  <TaskItem key={task.id} task={task} />
-                ))}
-                {groupedTasks.low.length === 0 && (
-                  <p className="py-4 text-center text-sm text-muted-foreground">暂无低优先级任务</p>
-                )}
-              </CardContent>
-            </Card>
+            {([
+              { key: 'urgent' as const, title: '紧急', sub: '立即处理', Icon: AlertCircle, iconCls: 'text-destructive', borderCls: 'border-l-destructive', badgeCls: 'bg-destructive text-destructive-foreground' },
+              { key: 'high' as const, title: '高优先级', sub: '优先安排', Icon: ArrowUp, iconCls: 'text-chart-3', borderCls: 'border-l-chart-3', badgeCls: 'bg-chart-3 text-chart-3-foreground' },
+              { key: 'medium' as const, title: '中优先级', sub: '正常安排', Icon: ArrowRight, iconCls: 'text-chart-1', borderCls: 'border-l-chart-1', badgeCls: 'bg-chart-1 text-chart-1-foreground' },
+              { key: 'low' as const, title: '低优先级', sub: '有空时处理', Icon: ArrowDown, iconCls: 'text-muted-foreground', borderCls: 'border-l-muted-foreground', badgeCls: 'bg-secondary text-secondary-foreground' },
+            ] as Array<{
+              key: 'urgent' | 'high' | 'medium' | 'low'
+              title: string
+              sub: string
+              Icon: typeof AlertCircle
+              iconCls: string
+              borderCls: string
+              badgeCls: string
+            }>).map((g) => {
+              const items = groupedTasks[g.key]
+              return (
+                <Card key={g.key} className={cn('border-l-4 overflow-hidden', g.borderCls)}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center gap-2">
+                      <g.Icon className={cn('h-5 w-5', g.iconCls)} />
+                      <CardTitle className="text-base font-semibold">{g.title}</CardTitle>
+                      <Badge className={cn('ml-auto', g.badgeCls)}>
+                        {items.length}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground">{g.sub}</p>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {items.length === 0 ? (
+                      <div className="flex items-center justify-center gap-2 py-6 text-base text-muted-foreground">
+                        <g.Icon className="h-4 w-4" />
+                        暂无任务
+                      </div>
+                    ) : (
+                      items.map((task) => (
+                        <TaskItem key={task.id} task={task} />
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            })}
           </div>
 
           {groupedTasks.done.length > 0 && (
-            <Card>
+            <Card className="border-l-4 border-l-chart-2 overflow-hidden">
               <CardHeader className="pb-3">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-5 w-5 text-chart-2" />
-                  <CardTitle className="text-lg">已完成</CardTitle>
+                  <CardTitle className="text-base font-semibold">已完成</CardTitle>
                   <Badge className="ml-auto bg-chart-2 text-chart-2-foreground">
                     {groupedTasks.done.length}
                   </Badge>
                 </div>
+                <p className="text-sm text-muted-foreground">全部完成</p>
               </CardHeader>
               <CardContent className="space-y-2">
                 {groupedTasks.done.slice(0, 5).map((task) => (
@@ -2502,17 +2518,30 @@ export function TasksView() {
                 </button>
               ))}
               <div className="my-1 h-px bg-border" />
-              {ctxTask.status !== 'done' && (
+              {ctxTask.archived ? (
                 <button
                   className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-muted transition-colors"
                   onClick={() => {
-                    archiveTask(ctxTask.id)
+                    unarchiveTask(ctxTask.id)
                     setContextMenu(null)
                   }}
                 >
                   <Archive className="h-4 w-4" />
-                  归档任务
+                  取消归档
                 </button>
+              ) : (
+                ctxTask.status !== 'done' && (
+                  <button
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-muted transition-colors"
+                    onClick={() => {
+                      archiveTask(ctxTask.id)
+                      setContextMenu(null)
+                    }}
+                  >
+                    <Archive className="h-4 w-4" />
+                    归档任务
+                  </button>
+                )
               )}
               <button
                 className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
@@ -2533,6 +2562,18 @@ export function TasksView() {
           </>
         )
       })()}
+
+      <TaskDetailDrawer
+        taskId={detailTaskId}
+        open={detailTaskId !== null}
+        onOpenChange={(o) => {
+          if (!o) setDetailTaskId(null)
+        }}
+        onEdit={(task) => {
+          setDetailTaskId(null)
+          openEditDialog(task)
+        }}
+      />
     </div>
   )
 }

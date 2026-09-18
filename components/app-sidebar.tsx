@@ -56,7 +56,6 @@ const iconMap = {
   'time-block': CalendarClock,
   anniversaries: Heart,
   analytics: BarChart3,
-  journal: BookOpen,
 }
 
 const navItems = NAV_ITEMS.map(item => ({
@@ -78,6 +77,17 @@ export function AppSidebar() {
   const { smartLists } = useSmartLists()
   const [themeMode, setThemeMode] = useState<ThemeMode>('system')
   const [isElectron, setIsElectron] = useState(false)
+  const [activeProjectName, setActiveProjectName] = useState<string | null>(null)
+
+  // 选中项目：持久化 + 广播事件，任务页监听后按项目过滤
+  const selectProject = (project: Project | null) => {
+    try {
+      if (project) window.localStorage.setItem('focusflow-active-project', project.name)
+      else window.localStorage.removeItem('focusflow-active-project')
+    } catch { /* ignore */ }
+    setActiveProjectName(project?.name || null)
+    window.dispatchEvent(new CustomEvent('focusflow-project-select', { detail: project?.name || '' }))
+  }
 
   const starredCount = useMemo(() => tasks.filter(t => t.starred && t.status !== 'done').length, [tasks])
 
@@ -92,6 +102,15 @@ export function AppSidebar() {
   useEffect(() => {
     setThemeMode(getStoredTheme())
     setIsElectron(!!window.electronAPI)
+    try {
+      setActiveProjectName(window.localStorage.getItem('focusflow-active-project') || null)
+    } catch { /* ignore */ }
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail
+      setActiveProjectName(detail || null)
+    }
+    window.addEventListener('focusflow-project-select', handler)
+    return () => window.removeEventListener('focusflow-project-select', handler)
   }, [])
 
   const cycleTheme = () => {
@@ -107,7 +126,10 @@ export function AppSidebar() {
     const Icon = item.icon
     const button = (
       <button
-        onClick={() => setActiveView(item.id)}
+        onClick={() => {
+          selectProject(null)
+          setActiveView(item.id)
+        }}
         className={cn(
           'group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 relative',
           isActive
@@ -199,6 +221,7 @@ export function AppSidebar() {
 
               <button
                 onClick={() => {
+                  selectProject(null)
                   setActiveSmartList('starred')
                   setActiveView('tasks')
                 }}
@@ -236,6 +259,7 @@ export function AppSidebar() {
                   <button
                     key={list.id}
                     onClick={() => {
+                      selectProject(null)
                       setActiveSmartList(list.id)
                       setActiveView('tasks')
                     }}
@@ -272,7 +296,12 @@ export function AppSidebar() {
               <ProjectTree
                 projects={projects}
                 taskCounts={projectTaskCounts}
-                onSelect={() => setActiveView('tasks')}
+                activeProjectName={activeView === 'tasks' ? activeProjectName : null}
+                onSelect={(project) => {
+                  setActiveSmartList(null)
+                  selectProject(project)
+                  setActiveView('tasks')
+                }}
               />
             </>
           )}
@@ -366,10 +395,12 @@ function ProjectTree({
   projects,
   taskCounts,
   onSelect,
+  activeProjectName,
 }: {
   projects: Project[]
   taskCounts: Record<string, number>
-  onSelect: () => void
+  onSelect: (project: Project) => void
+  activeProjectName: string | null
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
 
@@ -401,8 +432,13 @@ function ProjectTree({
     return (
       <div key={project.id}>
         <button
-          onClick={onSelect}
-          className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm transition-all duration-200 text-sidebar-muted hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+          onClick={() => onSelect(project)}
+          className={cn(
+            'flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm transition-all duration-200',
+            activeProjectName === project.name
+              ? 'bg-sidebar-accent text-sidebar-foreground font-medium'
+              : 'text-sidebar-muted hover:bg-sidebar-accent/60 hover:text-sidebar-foreground'
+          )}
           style={{ paddingLeft: `${depth * 14 + 12}px` }}
         >
           {children.length > 0 ? (

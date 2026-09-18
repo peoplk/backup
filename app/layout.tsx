@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from 'next'
 import { Analytics } from '@vercel/analytics/next'
 import { TitleBar } from '@/components/title-bar'
 import { ErrorBoundary } from '@/components/error-boundary'
-import { WhiteNoiseProvider } from '@/lib/white-noise-context'
 import { Toaster } from '@/components/ui/sonner'
+import { PwaRegister } from '@/components/pwa-register'
 import './globals.css'
 
 const inter = {
@@ -17,6 +17,8 @@ export const metadata: Metadata = {
   title: 'FocusFlow - 生产力管理应用',
   description: '一款集时间追踪、任务管理、番茄钟于一体的专业生产力工具',
   generator: 'v0.app',
+  manifest: '/manifest.json',
+  applicationName: 'FocusFlow',
   icons: {
     icon: [
       {
@@ -64,13 +66,12 @@ export default function RootLayout({
         />
       </head>
       <body className="font-sans antialiased bg-background">
-        <WhiteNoiseProvider>
           <TitleBar />
           <ErrorBoundary>
             {children}
           </ErrorBoundary>
           <Toaster richColors position="bottom-right" />
-        </WhiteNoiseProvider>
+        <PwaRegister />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

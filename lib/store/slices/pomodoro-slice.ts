@@ -144,6 +144,12 @@ export const createPomodoroSlice = (
     skipBreaks: false,
     maxSessionsPerDay: 12,
     lockUntilSessionEnd: false,
+    // 全屏严格模式（桌面端 kiosk 锁定）：默认关闭，开启后由用户逐项确认系统级能力
+    fullscreenLock: false,
+    fullscreenGiveUpHoldSeconds: 3,
+    fullscreenShield: true,
+    fullscreenPreventSleep: true,
+    fullscreenMuteNotifications: true,
   } as PomodoroStrictMode,
   updatePomodoroStrictMode: (updates: Partial<PomodoroStrictMode>) =>
     set((state) => ({

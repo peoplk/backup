@@ -85,6 +85,7 @@ export function useSmartLists() {
         icon: '📅',
         color: '#4A90E2',
         filter: (tasks: Task[]) => tasks.filter(t => {
+          if (t.archived) return false
           if (t.status === 'done' && !t.repeatRule) return false
           if (t.repeatRule) {
             if (isRepeatTaskCompletedToday(t, repeatCompletions)) return true
@@ -103,6 +104,7 @@ export function useSmartLists() {
         icon: '📆',
         color: '#7ED321',
         filter: (tasks: Task[]) => tasks.filter(t => {
+          if (t.archived) return false
           if (t.status === 'done' && !t.repeatRule) return false
           if (t.repeatRule) return isRepeatTaskDueForDate(t, tomorrow, 'equal')
           if (!t.dueDate) return false
@@ -118,6 +120,7 @@ export function useSmartLists() {
         icon: '📊',
         color: '#F5A623',
         filter: (tasks: Task[]) => tasks.filter(t => {
+          if (t.archived) return false
           if (t.status === 'done' && !t.repeatRule) return false
           if (t.repeatRule) return isRepeatTaskDueForDate(t, today, 'range', next7Days)
           if (!t.dueDate) return false
@@ -133,6 +136,7 @@ export function useSmartLists() {
         icon: '⚠️',
         color: '#E91E63',
         filter: (tasks: Task[]) => tasks.filter(t => {
+          if (t.archived) return false
           if (t.status === 'done' && !t.repeatRule) return false
           if (t.repeatRule) {
             if (!t.dueDate) return false
@@ -153,6 +157,7 @@ export function useSmartLists() {
         icon: '📥',
         color: '#9B59B6',
         filter: (tasks: Task[]) => tasks.filter(t => {
+          if (t.archived) return false
           if (t.status === 'done' && !t.repeatRule) return false
           return !t.project && t.tags.length === 0
         }),
@@ -164,6 +169,7 @@ export function useSmartLists() {
         icon: '✅',
         color: '#00CED1',
         filter: (tasks: Task[]) => tasks.filter(t => {
+          if (t.archived) return false
           if (t.repeatRule) return false
           return t.status === 'done'
         }),
@@ -175,6 +181,7 @@ export function useSmartLists() {
         icon: '📋',
         color: '#607D8B',
         filter: (tasks: Task[]) => tasks.filter(t => {
+          if (t.archived) return false
           if (t.repeatRule) return true
           return t.status !== 'done'
         }),

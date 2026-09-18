@@ -65,9 +65,12 @@ import {
 import { APP_COLORS, CHART_TOOLTIP_STYLE, WEEK_DAYS_FULL } from '@/lib/config'
 import { subDays, startOfWeek, format, addDays } from 'date-fns'
 import { zhCN } from 'date-fns/locale'
-import { isHabitScheduledOn } from '@/lib/habit-frequency'
+import { isHabitScheduledOn, getHabitExpectedCount } from '@/lib/habit-frequency'
 
 // ============ 类型定义 ============
+
+/** 近 4 周热力图三档配色（单色系透明度递增，0 = 无专注空档） */
+const WEEK_HEAT_CELL_STYLES = ['bg-blue-500/30', 'bg-blue-500/60', 'bg-blue-500'] as const
 
 type TabKey = 'overview' | 'trends' | 'details' | 'report'
 type TrendPeriod = 7 | 14 | 28 | 90
@@ -320,6 +323,26 @@ export function AnalyticsView() {
     return grid
   }, [pomodoroSessions, now])
 
+  // 近 4 周专注热力图（28 天：行 = 周，列 = 周一..周日，以本周为最后一行）
+  const fourWeekHeatmap = useMemo(() => {
+    const today = new Date(now)
+    const rangeStart = subDays(startOfWeek(today, { weekStartsOn: 1 }), 21)
+    let maxMinutes = 0
+    const weeks = Array.from({ length: 4 }, (_, w) =>
+      Array.from({ length: 7 }, (_, d) => {
+        const date = addDays(rangeStart, w * 7 + d)
+        const minutes = Math.round(
+          pomodoroSessions
+            .filter(s => s.type === 'work' && new Date(s.completedAt).toDateString() === date.toDateString())
+            .reduce((acc, s) => acc + s.duration, 0) / 60
+        )
+        maxMinutes = Math.max(maxMinutes, minutes)
+        return { date, minutes }
+      })
+    )
+    return { weeks, maxMinutes }
+  }, [pomodoroSessions, now])
+
   const productivityInsight = useMemo(() => {
     const workSessions = pomodoroSessions.filter(s => s.type === 'work')
     const last30Days = workSessions.filter(s => new Date(s.completedAt) > subDays(new Date(now), 30))
@@ -357,12 +380,13 @@ export function AnalyticsView() {
     return result
   }, [pomodoroSessions, tasks, projects, now])
 
-  // 习惯趋势（周完成率）
+  // 习惯趋势（周完成率）——分母按各习惯的期望次数（弹性目标按目标数折算，非"每天应做"）
   const habitTrendData = useMemo(() => {
     const result: { week: string; rate: number }[] = []
     const today = new Date(now)
-    const activeHabits = habits.filter(h => !h.archived).length
-    if (activeHabits === 0) return result
+    const activeHabitList = habits.filter(h => !h.archived)
+    if (activeHabitList.length === 0) return result
+    const expectedPerWeek = activeHabitList.reduce((acc, h) => acc + getHabitExpectedCount(h, 7), 0)
     for (let w = 7; w >= 0; w--) {
       const weekEnd = subDays(today, w * 7)
       const weekStart = subDays(weekEnd, 6)
@@ -370,7 +394,9 @@ export function AnalyticsView() {
         const d = new Date(c.date)
         return d >= weekStart && d <= weekEnd && c.completed
       }).length
-      const rate = Math.min(100, Math.round((checkIns / (activeHabits * 7)) * 100))
+      const rate = expectedPerWeek > 0
+        ? Math.min(100, Math.round((checkIns / expectedPerWeek) * 100))
+        : 0
       result.push({ week: format(weekEnd, 'MM/dd'), rate })
     }
     return result
@@ -585,7 +611,6 @@ export function AnalyticsView() {
           />
           {/* 5. 效率评分 */}
           <Card className="relative overflow-hidden group hover:shadow-lg transition-all duration-300 border-purple-500/20">
-            <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-transparent" />
             <CardContent className="relative p-5">
               <div className="flex items-center justify-between mb-3">
                 <div className="rounded-xl bg-purple-500/10 p-2.5"><Activity className="h-5 w-5 text-purple-500" /></div>
@@ -749,6 +774,61 @@ export function AnalyticsView() {
             </CardContent>
           </Card>
         </div>
+
+        {/* 近 4 周专注热力图 */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base font-semibold flex items-center gap-2">
+                  <Calendar className="h-5 w-5" style={{ color: APP_COLORS.green }} />
+                  近 4 周专注热力图
+                </CardTitle>
+                <CardDescription>最近 28 天每日专注时长分布</CardDescription>
+              </div>
+              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground shrink-0">
+                <span>少</span>
+                <div className="flex gap-0.5">
+                  <div className="h-3 w-3 rounded-sm bg-muted/30" />
+                  {WEEK_HEAT_CELL_STYLES.map(cls => <div key={cls} className={cn('h-3 w-3 rounded-sm', cls)} />)}
+                </div>
+                <span>多</span>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="max-w-lg">
+              <div className="flex items-center gap-1 mb-1 pl-11">
+                {['一', '二', '三', '四', '五', '六', '日'].map(d => (
+                  <div key={d} className="flex-1 text-center text-[9px] text-muted-foreground/60">{d}</div>
+                ))}
+              </div>
+              {fourWeekHeatmap.weeks.map((week, w) => (
+                <div key={w} className="flex items-center gap-1 mb-1">
+                  <div className="w-10 text-right text-[10px] text-muted-foreground shrink-0 tabular-nums">
+                    {week[0].date.getMonth() + 1}/{week[0].date.getDate()}
+                  </div>
+                  <div className="flex-1 flex gap-0.5">
+                    {week.map(({ date, minutes }) => {
+                      const isFuture = date.getTime() > now.getTime() && date.toDateString() !== now.toDateString()
+                      const level = minutes === 0 ? -1 : minutes <= fourWeekHeatmap.maxMinutes / 3 ? 0 : minutes <= (fourWeekHeatmap.maxMinutes * 2) / 3 ? 1 : 2
+                      return (
+                        <div
+                          key={date.toISOString()}
+                          className={cn(
+                            'flex-1 aspect-square rounded-sm transition-all duration-200 cursor-default',
+                            isFuture || level === -1 ? 'bg-muted/30' : WEEK_HEAT_CELL_STYLES[level]
+                          )}
+                          title={`${date.getMonth() + 1}月${date.getDate()}日 · ${isFuture ? '未开始' : minutes > 0 ? `${minutes} 分钟` : '无专注'}`}
+                        />
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* 项目时间分布 */}
         <Card>
@@ -1394,11 +1474,11 @@ function DayMetricCard({ icon: Icon, label, value, unit, trend, subtext, color }
   color: 'blue' | 'emerald' | 'amber' | 'cyan' | 'rose'
 }) {
   const colorMap = {
-    blue: { border: 'border-blue-500/20', bg: 'bg-blue-500/10', text: 'text-blue-500', gradient: 'from-blue-500/5' },
-    emerald: { border: 'border-emerald-500/20', bg: 'bg-emerald-500/10', text: 'text-emerald-500', gradient: 'from-emerald-500/5' },
-    amber: { border: 'border-amber-500/20', bg: 'bg-amber-500/10', text: 'text-amber-500', gradient: 'from-amber-500/5' },
-    cyan: { border: 'border-cyan-500/20', bg: 'bg-cyan-500/10', text: 'text-cyan-500', gradient: 'from-cyan-500/5' },
-    rose: { border: 'border-rose-500/20', bg: 'bg-rose-500/10', text: 'text-rose-500', gradient: 'from-rose-500/5' },
+    blue: { border: 'border-blue-500/20', bg: '', text: 'text-blue-500', gradient: '' },
+    emerald: { border: 'border-emerald-500/20', bg: '', text: 'text-emerald-500', gradient: '' },
+    amber: { border: 'border-amber-500/20', bg: '', text: 'text-amber-500', gradient: '' },
+    cyan: { border: 'border-cyan-500/20', bg: '', text: 'text-cyan-500', gradient: '' },
+    rose: { border: 'border-rose-500/20', bg: '', text: 'text-rose-500', gradient: '' },
   }
   const c = colorMap[color]
 

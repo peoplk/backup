@@ -20,6 +20,7 @@ import { useSmartTaskRecommendation } from '@/lib/smart-recommendation'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useDataLink } from '@/lib/data-link-service'
 import { abandonPomodoroSession } from '@/lib/pomodoro-completion'
+import { useStrictFullscreen, resolveStrictFullscreen } from '@/lib/use-strict-fullscreen'
 import { subscribePomodoroCompletion, setPomodoroSessionNoteProvider } from '@/lib/pomodoro-engine'
 import { FocusSound } from '@/components/focus-sound'
 import { TimerMode, modeConfig } from './timer-config'
@@ -42,6 +43,7 @@ export function PomodoroTimer() {
     isFullscreen,
     setIsFullscreen,
     pomodoroStrictMode,
+    updatePomodoroStrictMode,
     focusPresets,
     applyFocusPreset,
     addFocusPreset,
@@ -62,6 +64,7 @@ export function PomodoroTimer() {
     isFullscreen: state.isFullscreen,
     setIsFullscreen: state.setIsFullscreen,
     pomodoroStrictMode: state.pomodoroStrictMode,
+    updatePomodoroStrictMode: state.updatePomodoroStrictMode,
     focusPresets: state.focusPresets,
     applyFocusPreset: state.applyFocusPreset,
     addFocusPreset: state.addFocusPreset,
@@ -89,6 +92,12 @@ export function PomodoroTimer() {
 
   // 自动屏蔽网站/应用：仅在专注时启用
   useAutoShield(isRunning, mode === 'work')
+
+  // 全屏严格模式：仅在「沉浸全屏 + 专注时段 + 已开启严格模式」时锁定窗口
+  const strictCfg = resolveStrictFullscreen(pomodoroStrictMode)
+  const strictFullscreenActive =
+    isFullscreen && mode === 'work' && pomodoroStrictMode.enabled && strictCfg.fullscreenLock
+  const strict = useStrictFullscreen(strictFullscreenActive)
   const autoStartBreak = pomodoroSettings.autoStartBreak ?? true
   const autoStartWork = pomodoroSettings.autoStartWork ?? false
   const soundEnabled = pomodoroSettings.soundEnabled ?? true
@@ -300,6 +309,16 @@ export function PomodoroTimer() {
     }
   }
 
+  const exitFullscreen = useCallback(() => {
+    // 先置状态，触发严格模式解锁（主进程 kiosk 退出），再退出全屏
+    setIsFullscreen(false)
+    if (typeof window !== 'undefined' && window.electronAPI?.setFullScreen) {
+      window.electronAPI.setFullScreen(false)
+    } else if (document.fullscreenElement) {
+      document.exitFullscreen()
+    }
+  }, [setIsFullscreen])
+
   const toggleFullscreen = () => {
     if (!isFullscreen) {
       setIsFullscreen(true)
@@ -311,12 +330,9 @@ export function PomodoroTimer() {
         })
       }
     } else {
-      setIsFullscreen(false)
-      if (typeof window !== 'undefined' && window.electronAPI?.setFullScreen) {
-        window.electronAPI.setFullScreen(false)
-      } else if (document.fullscreenElement) {
-        document.exitFullscreen()
-      }
+      // 严格模式锁定期间不提供一键退出，只能走全屏内的长按放弃流程
+      if (strictFullscreenActive) return
+      exitFullscreen()
     }
   }
 
@@ -342,6 +358,41 @@ export function PomodoroTimer() {
     }
     updatePomodoroTimerState({ isRunning: !isRunning })
   }, [isLocked, isRunning, mode, pomodoroStrictMode, todaySessions, updatePomodoroTimerState, showConfirm])
+
+  // 进入严格模式全屏即视为「入座」：自动开始计时（仍受每日上限约束）
+  useEffect(() => {
+    if (!strictFullscreenActive || isRunning) return
+    if (
+      pomodoroStrictMode.enabled &&
+      pomodoroStrictMode.maxSessionsPerDay > 0 &&
+      todaySessions >= pomodoroStrictMode.maxSessionsPerDay
+    ) {
+      window.dispatchEvent(
+        new CustomEvent('focusflow:strict-limit-blocked', {
+          detail: { todaySessions, max: pomodoroStrictMode.maxSessionsPerDay },
+        })
+      )
+      return
+    }
+    updatePomodoroTimerState({ isRunning: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [strictFullscreenActive])
+
+  // 严格模式下的唯一出口：长按放弃 → 记一次放弃会话 → 解锁并退出全屏
+  const handleGiveUp = useCallback(async () => {
+    const confirmed = await showConfirm({
+      title: '放弃本次专注？',
+      description: '放弃后本轮不计入番茄数，森林中的小树会枯萎。确定要结束吗？',
+      confirmText: '放弃本次',
+      cancelText: '继续专注',
+      variant: 'destructive',
+    })
+    if (!confirmed) return
+    abandonCurrentSession()
+    exitFullscreen()
+    // abandonCurrentSession 为渲染内函数，不入依赖避免每渲染重建
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showConfirm, exitFullscreen])
 
   // 外部控制（小组件/托盘/漂浮钟）触发的严格模式每日上限拦截提示
   useEffect(() => {
@@ -373,14 +424,13 @@ export function PomodoroTimer() {
         onToggle={handleToggle}
         onReset={handleReset}
         onSkip={handleSkip}
-        onExit={() => {
-          if (typeof window !== 'undefined' && window.electronAPI?.setFullScreen) {
-            window.electronAPI.setFullScreen(false)
-          } else if (document.fullscreenElement) {
-            document.exitFullscreen()
-          }
-          setIsFullscreen(false)
-        }}
+        onExit={exitFullscreen}
+        strictLocked={strictFullscreenActive}
+        strictSupported={strict.supported}
+        strictHoldSeconds={strict.holdSeconds}
+        strictViolationCount={strict.violationCount}
+        strictShieldActive={strict.shieldActive}
+        onRequestGiveUp={handleGiveUp}
       />
     )
   }
@@ -420,6 +470,8 @@ export function PomodoroTimer() {
           updatePomodoroSettings={updatePomodoroSettings}
           autoStartBreak={autoStartBreak}
           autoStartWork={autoStartWork}
+          strictMode={pomodoroStrictMode}
+          updateStrictMode={updatePomodoroStrictMode}
         />
       </div>
 

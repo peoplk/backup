@@ -6,22 +6,13 @@ import { Timer, Clock, Shield } from 'lucide-react'
 import { PomodoroTimer } from '@/components/focus/pomodoro-timer'
 import { TimeTracker } from '@/components/focus/time-tracker'
 import { FocusShield } from '@/components/focus/focus-shield'
-import { FocusSound } from '@/components/focus-sound'
 
 export function FocusView() {
   const [activeTab, setActiveTab] = useState<'pomodoro' | 'tracker' | 'shield'>('pomodoro')
 
   return (
     <div className="space-y-6 animate-fade-in-up">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">专注</h1>
-          <p className="text-muted-foreground mt-0.5">番茄工作法、时间追踪与专注屏蔽，提升你的效率</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <FocusSound />
-        </div>
-      </div>
+      <p className="text-muted-foreground">番茄工作法、时间追踪与专注屏蔽，提升你的效率</p>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="space-y-4">
         <TabsList className="grid w-full max-w-md grid-cols-3">

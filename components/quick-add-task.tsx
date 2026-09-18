@@ -2,7 +2,7 @@
 
 import { SmartQuickAddTask } from '@/components/smart-quick-add-task'
 import { useAppStore } from '@/lib/store'
-import type { ParsedTaskInput } from '@/lib/smart-input-enhanced'
+import { buildParsedTaskFields, type ParsedTaskInput } from '@/lib/smart-input-enhanced'
 
 interface QuickAddTaskProps {
   onClose?: () => void
@@ -22,14 +22,9 @@ export function QuickAddTask({ onClose, className }: QuickAddTaskProps) {
       title: parsed.title,
       description: undefined,
       type: 'task',
-      priority: parsed.priority || 'medium',
-      project: parsed.project || '',
-      tags: parsed.tags || [],
-      dueDate: parsed.dueDate,
-      startTime: parsed.startTime,
+      ...buildParsedTaskFields(parsed),
       status: 'todo',
       estimatedPomodoros: parsed.estimatedPomodoros || 1,
-      energy: parsed.energy,
     })
     onClose?.()
   }

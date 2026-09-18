@@ -56,7 +56,6 @@ interface LegacyState {
   activeSavedFilterId?: unknown
   [key: string]: unknown
 }
-import { setSyncDataCallback, setSyncDataProvider } from '@/lib/sync-store'
 import { setS3DataCallback, setS3DataProvider } from '@/lib/s3-store'
 import { createTaskSlice } from './slices/task-slice'
 import { createTimeEntrySlice } from './slices/time-entry-slice'
@@ -68,6 +67,7 @@ import { createNotificationSlice } from './slices/notification-slice'
 import { createUISlice } from './slices/ui-slice'
 import { createGoalSlice } from './slices/goal-slice'
 import { createAchievementSlice } from './slices/achievement-slice'
+import { createSyncSlice } from './slices/sync-slice'
 import { createTagSlice } from './slices/tag-slice'
 import { createReminderSlice } from './slices/reminder-slice'
 import { createTimeBlockSlice } from './slices/time-block-slice'
@@ -97,7 +97,7 @@ const PERSISTED_KEYS: ReadonlySet<string> = new Set([
   'dashboardWidgets', 'darkModeSchedule', 'workingHours',
   'focusSoundSettings', 'focusPresets', 'focusShield',
   'focusShieldSchedule', 'activitySettings', 'activityDays',
-  'subscribedCalendars', 'externalEvents',
+  'subscribedCalendars', 'externalEvents', 'tombstones',
   'dailyReviewSettings', 'savedFilters', 'activeSavedFilterId',
 ])
 
@@ -107,7 +107,7 @@ const ARRAY_KEYS: ReadonlySet<string> = new Set([
   'projects', 'habits', 'habitCheckIns', 'anniversaries', 'notifications',
   'goals', 'achievements', 'tags', 'reminders', 'repeatCompletions',
   'trashedItems', 'timeBlocks', 'distractions', 'journals', 'taskTemplates',
-  'dashboardWidgets', 'focusPresets', 'savedFilters',
+  'dashboardWidgets', 'focusPresets', 'savedFilters', 'tombstones',
   'activityDays', 'subscribedCalendars', 'externalEvents',
 ])
 
@@ -228,6 +228,7 @@ export const useAppStore = create<AppState>()(
       ...createUISlice(set, get, api),
       ...createGoalSlice(set, get, api),
       ...createAchievementSlice(set, get, api),
+      ...createSyncSlice(set, get),
       ...createTagSlice(set, get, api),
       ...createReminderSlice(set, get, api),
       ...createTimeBlockSlice(set, get, api),
@@ -241,7 +242,7 @@ export const useAppStore = create<AppState>()(
       ...createSubscriptionSlice(set, get, api),
     })),
 {
-  name: 'productivity-app-storage',  version: 8,
+  name: 'productivity-app-storage',  version: 10,
   storage: createJSONStorage(() => throttledStorage),
   migrate: (persistedState: unknown, version: number) => {
     if (version < 2) {
@@ -422,6 +423,28 @@ export const useAppStore = create<AppState>()(
       return state
     }
 
+    if (version < 10) {
+      const state = persistedState as LegacyState
+      // focusSoundSettings 升级为多轨混音：currentSound → soundLevels 初值，补睡眠定时字段
+      const legacySound = state.focusSoundSettings as Record<string, unknown> | undefined
+      if (legacySound) {
+        const levels = (legacySound.soundLevels as Record<string, number> | undefined) ?? {}
+        const oldSound = legacySound.currentSound as string | null | undefined
+        if (Object.keys(levels).length === 0 && oldSound) {
+          levels[oldSound] = 50
+        }
+        state.focusSoundSettings = {
+          ...legacySound,
+          soundLevels: levels,
+          currentMusic: (legacySound.currentMusic as string | null) ?? null,
+          autoPlay: Boolean(legacySound.autoPlay),
+          sleepTimerEndsAt: null,
+        }
+        delete (state.focusSoundSettings as Record<string, unknown>).currentSound
+      }
+      return state
+    }
+
     return persistedState
   },
   partialize: (state) => ({
@@ -470,6 +493,8 @@ export const useAppStore = create<AppState>()(
     dailyReviewSettings: state.dailyReviewSettings,
     savedFilters: state.savedFilters,
     activeSavedFilterId: state.activeSavedFilterId,
+    // 删除墓碑：随本地持久化与云快照同步（跨窗口白名单 PERSISTED_KEYS 已包含）
+    tombstones: state.tombstones,
   }),
   onRehydrateStorage: () => (state) => {
     if (state) {
@@ -486,49 +511,7 @@ export const useAppStore = create<AppState>()(
           }
         })
       }
-      setSyncDataCallback(applyCloudData)
       setS3DataCallback(applyCloudData)
-      setSyncDataProvider(() => {
-        const store = useAppStore.getState()
-        return {
-          tasks: store.tasks,
-          timeEntries: store.timeEntries,
-          pomodoroSessions: store.pomodoroSessions,
-          abandonedPomodoroSessions: store.abandonedPomodoroSessions,
-          pomodoroSettings: store.pomodoroSettings,
-          pomodoroTimerState: store.pomodoroTimerState,
-          projects: store.projects,
-          habits: store.habits,
-          habitCheckIns: store.habitCheckIns,
-          anniversaries: store.anniversaries,
-          notifications: store.notifications,
-          sidebarCollapsed: store.sidebarCollapsed,
-          activeSmartList: store.activeSmartList,
-          goals: store.goals,
-          achievements: store.achievements,
-          userLevel: store.userLevel,
-          tags: store.tags,
-          reminders: store.reminders,
-          focusGoals: store.focusGoals,
-          repeatCompletions: store.repeatCompletions,
-          trashedItems: store.trashedItems,
-          taskOrder: store.taskOrder,
-          timeBlocks: store.timeBlocks,
-          distractions: store.distractions,
-          journals: store.journals,
-          taskTemplates: store.taskTemplates,
-          pomodoroStrictMode: store.pomodoroStrictMode,
-          dashboardWidgets: store.dashboardWidgets,
-          darkModeSchedule: store.darkModeSchedule,
-          workingHours: store.workingHours,
-          focusSoundSettings: store.focusSoundSettings,
-          focusPresets: store.focusPresets,
-          focusShield: store.focusShield,
-          dailyReviewSettings: store.dailyReviewSettings,
-          savedFilters: store.savedFilters,
-          activeSavedFilterId: store.activeSavedFilterId,
-        }
-      })
       setS3DataProvider(() => {
         const store = useAppStore.getState()
         return {

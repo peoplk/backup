@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -10,9 +11,9 @@ import {
 } from '@/components/ui/dialog'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
-import { PomodoroSettings } from '@/lib/types'
-import { SOUND_PRESETS, playPresetSound, type SoundPresetId } from '@/lib/focus-sounds'
-import { Settings, Play } from 'lucide-react'
+import { PomodoroSettings, PomodoroStrictMode } from '@/lib/types'
+import { SOUND_PRESETS, playPresetSound, type SoundPresetId } from '@/lib/focus-sound-engine'
+import { Settings, Play, Lock, ShieldCheck, Moon, BellOff } from 'lucide-react'
 
 interface TimerSettingsDialogProps {
   open: boolean
@@ -21,6 +22,8 @@ interface TimerSettingsDialogProps {
   updatePomodoroSettings: (settings: Partial<PomodoroSettings>) => void
   autoStartBreak: boolean
   autoStartWork: boolean
+  strictMode: PomodoroStrictMode
+  updateStrictMode: (updates: Partial<PomodoroStrictMode>) => void
 }
 
 export function TimerSettingsDialog({
@@ -30,8 +33,22 @@ export function TimerSettingsDialog({
   updatePomodoroSettings,
   autoStartBreak,
   autoStartWork,
+  strictMode,
+  updateStrictMode,
 }: TimerSettingsDialogProps) {
   const currentSound = (pomodoroSettings.notificationSound || 'classic') as SoundPresetId
+  // 全屏严格模式的系统级锁定（kiosk / 防休眠）仅桌面端可用
+  const [isElectron] = useState(
+    () => typeof window !== 'undefined' && !!window.electronAPI?.setStrictLock
+  )
+
+  const strict = {
+    fullscreenLock: strictMode.fullscreenLock ?? false,
+    holdSeconds: strictMode.fullscreenGiveUpHoldSeconds ?? 3,
+    shield: strictMode.fullscreenShield ?? true,
+    preventSleep: strictMode.fullscreenPreventSleep ?? true,
+    muteNotifications: strictMode.fullscreenMuteNotifications ?? true,
+  }
 
   const previewSound = (id: SoundPresetId) => {
     try {
@@ -137,6 +154,152 @@ export function TimerSettingsDialog({
                 }
               />
             </div>
+          </div>
+          <div className="space-y-4 border-t pt-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">严格模式</p>
+                <p className="text-xs text-muted-foreground">限制每日专注次数，防止中途放弃</p>
+              </div>
+              <Switch
+                checked={strictMode.enabled}
+                onCheckedChange={(checked) => updateStrictMode({ enabled: checked })}
+              />
+            </div>
+
+            {strictMode.enabled && (
+              <div className="space-y-4 rounded-lg border bg-muted/30 p-3">
+                <div className="space-y-3">
+                  <label className="text-sm font-medium">
+                    每日番茄上限: {strictMode.maxSessionsPerDay} 个
+                  </label>
+                  <Slider
+                    value={[strictMode.maxSessionsPerDay]}
+                    min={1}
+                    max={20}
+                    step={1}
+                    onValueChange={([value]) =>
+                      updateStrictMode({ maxSessionsPerDay: value })
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    达到上限后无法开启新的专注时段
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">锁定到本轮结束</p>
+                    <p className="text-xs text-muted-foreground">
+                      专注开始后禁用重置与跳过（允许暂停）
+                    </p>
+                  </div>
+                  <Switch
+                    checked={strictMode.lockUntilSessionEnd}
+                    onCheckedChange={(checked) =>
+                      updateStrictMode({ lockUntilSessionEnd: checked })
+                    }
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Lock className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">全屏严格模式</p>
+                      <p className="text-xs text-muted-foreground">
+                        全屏后锁定窗口，只能长按放弃退出
+                      </p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={strict.fullscreenLock}
+                    onCheckedChange={(checked) =>
+                      updateStrictMode({ fullscreenLock: checked })
+                    }
+                  />
+                </div>
+
+                {strict.fullscreenLock && (
+                  <div className="space-y-4 border-t pt-3">
+                    {!isElectron && (
+                      <p className="text-xs text-amber-600 dark:text-amber-500">
+                        当前为浏览器环境：无法调用系统级窗口锁定，仅启用界面层面的锁定与放弃确认。
+                      </p>
+                    )}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <p className="text-sm font-medium">自动开启专注屏蔽</p>
+                          <p className="text-xs text-muted-foreground">
+                            按「专注屏蔽」中的网站与应用规则生效
+                          </p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={strict.shield}
+                        onCheckedChange={(checked) =>
+                          updateStrictMode({ fullscreenShield: checked })
+                        }
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Moon className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <p className="text-sm font-medium">阻止系统休眠</p>
+                          <p className="text-xs text-muted-foreground">
+                            专注期间保持屏幕常亮
+                          </p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={strict.preventSleep}
+                        onCheckedChange={(checked) =>
+                          updateStrictMode({ fullscreenPreventSleep: checked })
+                        }
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <BellOff className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <p className="text-sm font-medium">静默其他通知</p>
+                          <p className="text-xs text-muted-foreground">
+                            锁定期间暂停任务/习惯等提醒
+                          </p>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={strict.muteNotifications}
+                        onCheckedChange={(checked) =>
+                          updateStrictMode({ fullscreenMuteNotifications: checked })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-3">
+                      <label className="text-sm font-medium">
+                        放弃需长按:{' '}
+                        {strict.holdSeconds === 0 ? '不允许放弃' : `${strict.holdSeconds} 秒`}
+                      </label>
+                      <Slider
+                        value={[strict.holdSeconds]}
+                        min={0}
+                        max={10}
+                        step={1}
+                        onValueChange={([value]) =>
+                          updateStrictMode({ fullscreenGiveUpHoldSeconds: value })
+                        }
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        0 表示必须走完本轮，中途无法退出全屏
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <div className="space-y-3 border-t pt-4">
             <h4 className="font-medium">完成音效</h4>

@@ -45,3 +45,14 @@ nova-content.html
 nova-fetch.ps1
 extract_docx.ps1
 test-oss-sign.js
+# Packaged app outputs (timestamped)
+dist-app-*/
+
+# Scratch scripts / binaries under build
+build/_*
+build/icon-preview.png
+build/icon-zoom.png
+
+# Tool working dirs
+.workbuddy/
+.arts/

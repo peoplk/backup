@@ -284,7 +284,7 @@ export function TimeBlockView() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">时间块规划</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">拖拽式时间管理，高效规划每一天</p>
+          <p className="text-sm text-muted-foreground mt-0.5">把今天划成时间段，给每件事安排位置</p>
         </div>
         <div className="flex items-center gap-2">
           <Button

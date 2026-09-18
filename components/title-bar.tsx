@@ -104,7 +104,6 @@ const menuConfig: { label: string; icon?: React.ReactNode; items: MenuItem[] }[]
       { label: '倒数纪念日', icon: <Calendar className="h-3.5 w-3.5" />, accelerator: 'Ctrl+7', action: () => {} },
       { label: '日历', icon: <Calendar className="h-3.5 w-3.5" />, accelerator: 'Ctrl+9', action: () => {} },
       { label: '时间块', icon: <Calendar className="h-3.5 w-3.5" />, action: () => {} },
-      { label: '每日日记', icon: <FileText className="h-3.5 w-3.5" />, action: () => {} },
       { label: '设置', icon: <Settings className="h-3.5 w-3.5" />, accelerator: 'Ctrl+8', action: () => {} },
     ]
   },
@@ -145,7 +144,6 @@ function MenuDropdown({ items, onClose }: { items: MenuItem[]; onClose: () => vo
         '倒数纪念日': 'anniversaries',
         '日历': 'calendar',
         '时间块': 'time-block',
-        '每日日记': 'journal',
         '设置': 'settings',
       }
 

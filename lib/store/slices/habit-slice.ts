@@ -2,6 +2,7 @@ import type { Habit, HabitCheckIn } from '@/lib/types'
 import type { AppState, AppStoreApi } from '../types'
 import { generateId, defaultHabits } from '../utils'
 import { clearNotifiedKeysWithPrefix } from '@/lib/notified-registry'
+import { calculateHabitStreak } from '@/lib/habit-streak'
 
 type SetState = (
   fn: ((state: AppState) => Partial<AppState>) | Partial<AppState>
@@ -61,58 +62,55 @@ export const createHabitSlice = (
       )
 
       const habit = state.habits.find(h => h.id === habitId)
-      let streak = 0
-      if (completed && habit) {
-        const checkDate = new Date(date)
-        while (true) {
-          const dStr = checkDate.toDateString()
-          const checkIn = state.habitCheckIns.find(
-            (c) => c.habitId === habitId && new Date(c.date).toDateString() === dStr
-          )
-          if (checkIn?.completed || dStr === dateStr) {
-            streak++
-            checkDate.setDate(checkDate.getDate() - 1)
-          } else {
-            break
-          }
-        }
-      }
 
-      const achievements = [7, 14, 21, 30, 60, 100]
-      const achievement = completed && achievements.includes(streak)
-
-      const notification = achievement && habit ? {
-        type: 'achievement' as const,
-        title: '连续打卡成就',
-        message: `恭喜！"${habit.name}" 已连续打卡 ${streak} 天`,
-      } : null
-
+      // 先落打卡记录，再用统一连胜引擎重算（应做日感知 + 最佳纪录）
+      // value 语义 = 本次新增量（累加到当日总量）；不传则保持当日已有总量不变
+      let updatedCheckIns: HabitCheckIn[]
       if (existingIndex >= 0) {
-        const newCheckIns = [...state.habitCheckIns]
-        newCheckIns[existingIndex] = {
-          ...newCheckIns[existingIndex],
+        const prev = state.habitCheckIns[existingIndex]
+        updatedCheckIns = [...state.habitCheckIns]
+        updatedCheckIns[existingIndex] = {
+          ...prev,
           completed,
-          note,
-          value: value ?? newCheckIns[existingIndex].value,
+          note: note ?? prev.note,
+          value: value !== undefined ? (prev.value ?? 0) + value : prev.value,
         }
-        return {
-          habitCheckIns: newCheckIns,
-          notifications: notification ? [
-            {
-              ...notification,
-              id: generateId(),
-              timestamp: new Date(),
-              read: false,
-            },
-            ...state.notifications,
-          ].slice(0, 50) : state.notifications,
-        }
-      }
-      return {
-        habitCheckIns: [
+      } else {
+        updatedCheckIns = [
           ...state.habitCheckIns,
           { id: generateId(), habitId, date, completed, note, value },
-        ],
+        ]
+      }
+
+      let notification: { type: 'achievement'; title: string; message: string } | null = null
+      let newBestStreak: number | null = null
+
+      if (completed && habit) {
+        const habitCheckInsForHabit = updatedCheckIns.filter(c => c.habitId === habitId)
+        const result = calculateHabitStreak(habit, habitCheckInsForHabit, date)
+        if (result.unit === '天') {
+          // 按天计的成就里程碑
+          const milestones = [7, 14, 21, 30, 60, 100]
+          if (milestones.includes(result.current)) {
+            notification = {
+              type: 'achievement' as const,
+              title: '连续打卡成就',
+              message: `恭喜！"${habit.name}" 已连续打卡 ${result.current} 天`,
+            }
+          }
+        }
+        if (result.best > (habit.bestStreak || 0)) {
+          newBestStreak = result.best
+        }
+      }
+
+      const updatedHabits = newBestStreak !== null
+        ? state.habits.map(h => h.id === habitId ? { ...h, bestStreak: newBestStreak! } : h)
+        : state.habits
+
+      return {
+        habitCheckIns: updatedCheckIns,
+        habits: updatedHabits,
         notifications: notification ? [
           {
             ...notification,
@@ -125,8 +123,11 @@ export const createHabitSlice = (
       }
     })
     if (completed) {
-      import('@/lib/habit-goal-integration').then(({ HabitGoalIntegration }) => {
-        HabitGoalIntegration.updateGoalProgressFromHabit(habitId)
+      // 打卡即时评估成就（习惯类成就不再只在番茄钟完成时触发）
+      get().checkAchievements?.()
+      // 目标进度统一走 data-link-service 单一公式（含习惯调度完成率）
+      import('@/lib/data-link-service').then(({ dataLinkService }) => {
+        dataLinkService.handleHabitCheck(habitId, date, completed)
       })
     }
   },
@@ -198,13 +199,23 @@ export const createHabitSlice = (
       if (newCheckIns.length === 0) return state
       return {
         habitCheckIns: [...state.habitCheckIns, ...newCheckIns],
+        habits: state.habits.map(h => {
+          if (!habitIds.includes(h.id)) return h
+          const result = calculateHabitStreak(
+            h,
+            [...state.habitCheckIns, ...newCheckIns].filter(c => c.habitId === h.id),
+            new Date()
+          )
+          return result.best > (h.bestStreak || 0) ? { ...h, bestStreak: result.best } : h
+        }),
       }
     })
-    // 补卡后同步更新关联目标的进度
+    // 补卡后同步目标进度与成就评估（统一走 data-link-service 单一公式）
     habitIds.forEach((habitId) => {
-      import('@/lib/habit-goal-integration').then(({ HabitGoalIntegration }) => {
-        HabitGoalIntegration.updateGoalProgressFromHabit(habitId)
+      import('@/lib/data-link-service').then(({ dataLinkService }) => {
+        dataLinkService.handleHabitCheck(habitId, new Date(), true)
       })
     })
+    get().checkAchievements?.()
   },
 })

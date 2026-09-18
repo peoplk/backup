@@ -29,9 +29,10 @@ export const createDashboardSlice = (
   focusSoundSettings: {
     isPlaying: false,
     volume: 50,
-    currentSound: null,
+    soundLevels: {},
     currentMusic: null,
     autoPlay: false,
+    sleepTimerEndsAt: null,
   },
   updateFocusSoundSettings: (updates: Partial<AppState['focusSoundSettings']>) =>
     set((state) => ({
