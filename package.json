@@ -24,8 +24,9 @@
       "buildResources": "build"
     },
     "publish": {
-      "provider": "generic",
-      "url": "https://example.com/focusflow-releases/"
+      "provider": "github",
+      "owner": "peoplk",
+      "repo": "backup"
     },
     "files": [
       "electron/**/*",

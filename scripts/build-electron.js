@@ -5,17 +5,17 @@ const path = require('path')
 const pkgPath = path.join(__dirname, '..', 'package.json')
 const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'))
 
-const updateUrl = process.env.FOCUSFLOW_UPDATE_URL || 'https://example.com/focusflow-releases/'
+// 默认走 package.json 里的 github 发布配置；FOCUSFLOW_UPDATE_URL 仅用于切换到自建 generic 源
+const updateUrl = process.env.FOCUSFLOW_UPDATE_URL || ''
 
 const config = {
   ...(pkg.build || {}),
-  publish: {
-    provider: 'generic',
-    url: updateUrl,
-  },
+  publish: updateUrl
+    ? { provider: 'generic', url: updateUrl }
+    : (pkg.build && pkg.build.publish) || { provider: 'github', owner: 'peoplk', repo: 'backup' },
 }
 
-console.log(`[build-electron] publish url: ${updateUrl}`)
+console.log(`[build-electron] publish: ${updateUrl ? `generic ${updateUrl}` : JSON.stringify(config.publish)}`)
 
 const args = process.argv.slice(2)
 const buildOptions = {}

@@ -419,6 +419,17 @@ export function FocusShield() {
             </div>
           )}
 
+          {isElectronApp && isActive && (
+            <div className="rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 p-3 flex items-start gap-2.5">
+              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+              <p className="text-[10px] text-amber-700 dark:text-amber-400 leading-relaxed">
+                hosts 屏蔽可被浏览器「安全 DNS（DoH）」绕过：Chrome/Edge 在
+                设置 → 隐私与安全 → 安全 → 使用安全 DNS 中选择了「安全（经加密解析）」时，
+                域名解析不走 hosts 文件。屏蔽期间请将浏览器安全 DNS 设为「关」，或使用系统级 DNS 过滤。
+              </p>
+            </div>
+          )}
+
           {isActive ? (
             <div className="space-y-3">
               <div className="rounded-xl bg-chart-1/5 p-4 text-center">

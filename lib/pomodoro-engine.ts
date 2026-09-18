@@ -1,13 +1,15 @@
 import { useAppStore } from '@/lib/store'
+import { toast } from 'sonner'
 import {
   completePomodoroSession,
   abandonPomodoroSession,
   type PomodoroMode,
 } from '@/lib/pomodoro-completion'
 import { dataLinkService } from '@/lib/data-link-service'
-import { notifyPomodoroComplete, notifyBreakComplete } from '@/lib/browser-notifications'
+import { notifyPomodoroComplete, notifyBreakComplete, initElectronNotifyActions } from '@/lib/browser-notifications'
 import { playPresetSound, type SoundPresetId } from '@/lib/focus-sound-engine'
 import { getNextTreeState } from '@/lib/forest-tree'
+import { consumeStrictViolationCount } from '@/lib/use-strict-fullscreen'
 
 export interface PomodoroCompletionInfo {
   sessionId: string
@@ -61,6 +63,98 @@ function getCurrentNote(): { focusNote: string; sessionTags: string[] } {
   return sessionNoteProvider?.() ?? { focusNote: '', sessionTags: [] }
 }
 
+/**
+ * 心跳记录：每秒计时更新时写入 localStorage，崩溃/强杀后启动时可据此恢复或补记。
+ * 正常结束/放弃/暂停时清除。
+ */
+const HEARTBEAT_KEY = 'focusflow-pomodoro-heartbeat'
+
+interface HeartbeatRecord {
+  mode: PomodoroMode
+  total: number
+  timeLeft: number
+  startedAt: number
+  lastSeen: number
+}
+
+function writeHeartbeat(mode: PomodoroMode, total: number, timeLeft: number): void {
+  const now = Date.now()
+  const rec: HeartbeatRecord = {
+    mode,
+    total,
+    timeLeft,
+    startedAt: now - (total - timeLeft) * 1000,
+    lastSeen: now,
+  }
+  try {
+    localStorage.setItem(HEARTBEAT_KEY, JSON.stringify(rec))
+  } catch {
+    // 存储不可用时忽略，仅影响崩溃恢复
+  }
+}
+
+function clearHeartbeat(): void {
+  try {
+    if (localStorage.getItem(HEARTBEAT_KEY) !== null) {
+      localStorage.removeItem(HEARTBEAT_KEY)
+    }
+  } catch {
+    // 忽略
+  }
+}
+
+/** 启动时检查上次会话是否异常中断（心跳过期但未正常清理） */
+function recoverInterruptedSession(): void {
+  let raw: string | null = null
+  try {
+    raw = localStorage.getItem(HEARTBEAT_KEY)
+  } catch {
+    return
+  }
+  if (!raw) return
+  clearHeartbeat()
+
+  let hb: HeartbeatRecord
+  try {
+    hb = JSON.parse(raw) as HeartbeatRecord
+  } catch {
+    return
+  }
+  if (typeof hb?.lastSeen !== 'number' || typeof hb?.total !== 'number') return
+
+  const gapSec = Math.floor((Date.now() - hb.lastSeen) / 1000)
+  // 60 秒内的心跳视为正常运行（窗口刷新），12 小时以上视为过期数据
+  if (gapSec <= 60 || gapSec > 12 * 3600) return
+
+  const p = useAppStore.getState().pomodoroTimerState
+  if (p.isRunning) {
+    toast.info('检测到专注会话曾中断', {
+      description: '计时已从中断处继续',
+      duration: 6000,
+    })
+    return
+  }
+
+  if (hb.mode !== 'work') return
+  const elapsed = Math.max(0, hb.total - hb.timeLeft)
+  if (elapsed < 60) return
+
+  toast.warning('上次专注会话未完成', {
+    description: `中断前已专注 ${Math.round(elapsed / 60)} 分钟`,
+    duration: 15000,
+    action: {
+      label: '补记为放弃',
+      onClick: () => {
+        abandonPomodoroSession({
+          duration: elapsed,
+          selectedTaskId: p.selectedTaskId,
+          startTime: new Date(hb.startedAt),
+        })
+      },
+    },
+  })
+}
+
 function playNotificationSound(): void {
   const soundEnabled = useAppStore.getState().pomodoroSettings.soundEnabled ?? true
   if (!soundEnabled) return
@@ -85,12 +179,15 @@ function handleComplete(): void {
   const totalDuration = getTotalDuration(p, s)
   const { focusNote, sessionTags } = getCurrentNote()
 
+  clearHeartbeat()
+
   const result = completePomodoroSession({
     mode,
     duration: totalDuration,
     selectedTaskId: p.selectedTaskId,
     focusNote,
     sessionTags,
+    escapeAttempts: consumeStrictViolationCount(),
   })
 
   if (result.sessionId) {
@@ -158,6 +255,7 @@ function tick(): void {
 
   if (!p.isRunning) {
     timerStartRef = null
+    clearHeartbeat()
     return
   }
 
@@ -184,6 +282,7 @@ function tick(): void {
     reachedZero = false
     // 仅在秒级变化时更新，避免每 250ms 触发一次状态写入与持久化
     state.updatePomodoroTimerState({ timeLeft: newTimeLeft })
+    writeHeartbeat(p.mode, getTotalDuration(p, state.pomodoroSettings), newTimeLeft)
   } else {
     reachedZero = false
   }
@@ -299,8 +398,10 @@ function handleBeforeUnload(): void {
     selectedTaskId: p.selectedTaskId,
     focusNote,
     sessionTags,
+    escapeAttempts: consumeStrictViolationCount(),
   })
   state.updatePomodoroTimerState({ treeState: 'withered', isRunning: false })
+  clearHeartbeat()
 }
 
 /**
@@ -314,7 +415,23 @@ export function ensurePomodoroEngine(): void {
 
   useAppStore.getState().checkAndResetDailyPomodoro()
 
+  recoverInterruptedSession()
+
   window.addEventListener('beforeunload', handleBeforeUnload)
+
+  // 系统通知按钮（开始休息 / 开始专注）回传桥接
+  initElectronNotifyActions()
+  window.addEventListener('focusflow:notify-action', (event) => {
+    const detail = (event as CustomEvent<{ tag?: string; index?: number }>).detail
+    if (!detail?.tag) return
+    const p = useAppStore.getState().pomodoroTimerState
+    if (p.isRunning) return
+    if (detail.tag === 'pomodoro-complete' && detail.index === 0 && p.mode !== 'work') {
+      handleToggle()
+    } else if (detail.tag === 'break-complete' && detail.index === 0 && p.mode === 'work') {
+      handleToggle()
+    }
+  })
 
   window.electronAPI?.onSystemSuspend?.(() => {
     const p = useAppStore.getState().pomodoroTimerState

@@ -121,6 +121,8 @@ export interface PomodoroSession {
   taskId?: string
   note?: string
   tags?: string[]
+  /** 本会话期间绕过严格模式/全屏锁的尝试次数 */
+  escapeAttempts?: number
 }
 
 export type TreeState = 'seed' | 'sprout' | 'sapling' | 'growing' | 'mature' | 'withered'
@@ -142,6 +144,8 @@ export interface PomodoroSettings {
   soundEnabled?: boolean
   /** 完成音效预设 ID，默认 'classic' */
   notificationSound?: string
+  /** 专注计时运行时保持屏幕常亮（仅桌面端生效） */
+  keepScreenAwake?: boolean
 }
 
 export interface Project {
@@ -392,17 +396,6 @@ export interface PomodoroStrictMode {
 }
 
 /** @deprecated 未使用，将在未来版本中移除 */
-export interface ProductivityInsight {
-  peakHours: { hour: number; score: number }[]
-  mostProductiveDay: string
-  averageFocusDuration: number
-  totalDistractions: number
-  distractionRate: number
-  streakDays: number
-  weeklyTrend: number
-  suggestedFocusTime: string
-}
-
 export interface FocusPreset {
   id: string
   name: string

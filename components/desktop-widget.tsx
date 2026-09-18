@@ -185,7 +185,13 @@ export function DesktopWidget() {
 
   const [currentTime, setCurrentTime] = useState(new Date())
   const [isHovered, setIsHovered] = useState(false)
-  const [isPinned, setIsPinned] = useState(true)
+  const [isPinned, setIsPinned] = useState(() => {
+    try {
+      return localStorage.getItem('focusflow-widget-pinned') !== 'false'
+    } catch {
+      return true
+    }
+  })
   const [mounted, setMounted] = useState(false)
 
   const initialPomodoro = useAppStore.getState().pomodoroTimerState
@@ -367,7 +373,22 @@ export function DesktopWidget() {
   }, [])
 
   const handleTogglePin = useCallback(() => {
-    setIsPinned(prev => !prev)
+    setIsPinned((prev) => {
+      const next = !prev
+      window.electronAPI?.setWidgetPinned?.(next)
+      try {
+        localStorage.setItem('focusflow-widget-pinned', String(next))
+      } catch {
+        // 存储不可用时仅本次生效
+      }
+      return next
+    })
+  }, [])
+
+  // 挂载即同步一次：小组件窗口默认置顶，取消置顶需重启后仍生效
+  useEffect(() => {
+    window.electronAPI?.setWidgetPinned?.(isPinned)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   if (!mounted) return <WidgetSkeleton />

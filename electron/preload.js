@@ -66,11 +66,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Desktop enhancements
   notify: (options) => ipcRenderer.invoke('notify', options),
+  onNotifyAction: (callback) => {
+    const listener = (_event, payload) => callback(payload)
+    ipcRenderer.on('notify-action', listener)
+    return () => ipcRenderer.removeListener('notify-action', listener)
+  },
   setAutoLaunch: (enabled) => ipcRenderer.invoke('set-auto-launch', enabled),
   getAutoLaunch: () => ipcRenderer.invoke('get-auto-launch'),
   setAutoStart: (enabled) => ipcRenderer.invoke('set-auto-launch', enabled),
   getAutoStart: () => ipcRenderer.invoke('get-auto-launch'),
   reportTrayState: (state) => ipcRenderer.send('report-tray-state', state),
+  setWidgetPinned: (pinned) => ipcRenderer.send('widget-set-pinned', !!pinned),
+  setKeepAwake: (enabled) => ipcRenderer.send('set-keep-awake', !!enabled),
+  shortcutsGet: () => ipcRenderer.invoke('shortcuts-get'),
+  shortcutsSet: (map) => ipcRenderer.invoke('shortcuts-set', map),
+  updateCheck: () => ipcRenderer.invoke('update-check'),
+  updateDownload: () => ipcRenderer.invoke('update-download'),
+  updateInstall: () => ipcRenderer.invoke('update-install'),
+  updateState: () => ipcRenderer.invoke('update-state'),
+  onUpdateDownloaded: (callback) => {
+    const listener = (_event, payload) => callback(payload)
+    ipcRenderer.on('update-downloaded', listener)
+    return () => ipcRenderer.removeListener('update-downloaded', listener)
+  },
   toggleTimerFloat: () => ipcRenderer.send('toggle-timer-float'),
   closeTimerFloat: () => ipcRenderer.send('close-timer-float'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),

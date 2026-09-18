@@ -158,7 +158,7 @@ export function DesktopApp() {
     if (!api?.reportTrayState) return
     let last = ''
     const report = () => {
-      const { tasks, pomodoroTimerState } = useAppStore.getState()
+      const { tasks, pomodoroTimerState, pomodoroSessions } = useAppStore.getState()
       const today = new Date()
       today.setHours(0, 0, 0, 0)
       const tomorrow = new Date(today)
@@ -169,16 +169,23 @@ export function DesktopApp() {
         const due = new Date(t.dueDate)
         return due >= today && due < tomorrow
       }).length
+      const todayWork = pomodoroSessions.filter((s) => {
+        if (s.type !== 'work') return false
+        const at = new Date(s.completedAt)
+        return at >= today && at < tomorrow
+      })
+      const todaySessions = todayWork.length
+      const todayFocusMinutes = Math.round(todayWork.reduce((acc, s) => acc + (s.duration || 0), 0) / 60)
       const isRunning = pomodoroTimerState.isRunning
       const status = isRunning
         ? pomodoroTimerState.mode === 'work'
           ? '专注中'
           : '休息中'
         : '空闲'
-      const key = `${todayCount}|${status}`
+      const key = `${todayCount}|${status}|${todaySessions}|${todayFocusMinutes}`
       if (key !== last) {
         last = key
-        api.reportTrayState({ todayCount, pomodoroStatus: status })
+        api.reportTrayState({ todayCount, pomodoroStatus: status, todaySessions, todayFocusMinutes })
       }
     }
     report()
@@ -208,6 +215,27 @@ export function DesktopApp() {
       })
     }, 1000)
     return () => clearInterval(interval)
+  }, [])
+
+  // 专注时保持屏幕常亮（设置项开启 + work 计时运行中才持有 blocker）
+  useEffect(() => {
+    const api = window.electronAPI
+    if (!api?.setKeepAwake) return
+    let last = false
+    const sync = () => {
+      const { pomodoroTimerState, pomodoroSettings } = useAppStore.getState()
+      const should = !!pomodoroSettings.keepScreenAwake && pomodoroTimerState.isRunning && pomodoroTimerState.mode === 'work'
+      if (should !== last) {
+        last = should
+        api.setKeepAwake!(should)
+      }
+    }
+    sync()
+    const unsubscribe = useAppStore.subscribe(sync)
+    return () => {
+      unsubscribe()
+      if (last) api.setKeepAwake!(false)
+    }
   }, [])
 
   useEffect(() => {

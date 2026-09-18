@@ -154,6 +154,20 @@ export function TimerSettingsDialog({
                 }
               />
             </div>
+            {isElectron && (
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">专注时保持屏幕常亮</p>
+                  <p className="text-xs text-muted-foreground">专注计时期间阻止系统息屏（仅桌面端）</p>
+                </div>
+                <Switch
+                  checked={!!pomodoroSettings.keepScreenAwake}
+                  onCheckedChange={(checked) =>
+                    updatePomodoroSettings({ keepScreenAwake: checked })
+                  }
+                />
+              </div>
+            )}
           </div>
           <div className="space-y-4 border-t pt-4">
             <div className="flex items-center justify-between">

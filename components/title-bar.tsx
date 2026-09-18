@@ -11,6 +11,49 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/lib/store'
 import type { AppState } from '@/lib/store/types'
+import { toast } from 'sonner'
+
+// ─── 检查更新流程：桌面端专属，状态经主进程 update-* IPC 驱动 ───
+async function downloadUpdateFlow() {
+  const api = window.electronAPI
+  if (!api?.updateDownload) return
+  toast.loading('正在下载更新…', { id: 'update-download' })
+  const r = await api.updateDownload()
+  if (r.status === 'error') {
+    toast.error(r.message || '更新下载失败', { id: 'update-download' })
+  } else {
+    toast.info('更新下载完成后会提示重启', { id: 'update-download' })
+  }
+}
+
+export async function checkForUpdateFlow() {
+  const api = window.electronAPI
+  if (!api?.updateCheck) {
+    toast.info('检查更新仅在桌面端可用')
+    return
+  }
+  toast.loading('正在检查更新…', { id: 'update-check' })
+  let res
+  try {
+    res = await api.updateCheck()
+  } catch {
+    toast.error('检查更新失败', { id: 'update-check' })
+    return
+  }
+  if (res.status === 'available') {
+    toast.success(`发现新版本 ${res.version}`, {
+      id: 'update-check',
+      action: { label: '下载更新', onClick: () => void downloadUpdateFlow() },
+      duration: 10000,
+    })
+  } else if (res.status === 'not-available') {
+    toast.success('已是最新版本', { id: 'update-check' })
+  } else if (res.status === 'unavailable') {
+    toast.info(res.message || '当前环境不支持检查更新', { id: 'update-check' })
+  } else {
+    toast.error(res.message || '检查更新失败', { id: 'update-check' })
+  }
+}
 
 // 编辑类命令：优先使用标准剪贴板/选择 API，替代已废弃的 execCommand
 function execEditCommand(command: 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'selectAll'): void {
@@ -123,6 +166,7 @@ const menuConfig: { label: string; icon?: React.ReactNode; items: MenuItem[] }[]
     icon: <HelpCircle className="h-3.5 w-3.5" />,
     items: [
       { label: '关于 FocusFlow', action: () => {} },
+      { label: '检查更新', action: () => {} },
       { separator: true, label: '' },
       { label: '快捷键', accelerator: 'Ctrl+/', action: () => {} },
     ]
@@ -161,6 +205,8 @@ function MenuDropdown({ items, onClose }: { items: MenuItem[]; onClose: () => vo
         }
       } else if (item.label === '关于 FocusFlow') {
         setActiveView('settings')
+      } else if (item.label === '检查更新') {
+        void checkForUpdateFlow()
       } else {
         item.action()
       }
@@ -214,6 +260,17 @@ export function TitleBar() {
     setIsElectron(!!window.electronAPI)
     if (window.electronAPI) {
       window.electronAPI.isMaximized().then(setIsMaximized).catch(() => setIsMaximized(false))
+    }
+    const off = window.electronAPI?.onUpdateDownloaded?.(({ version }) => {
+      toast.success('更新已就绪', {
+        id: 'update-download',
+        description: version ? `FocusFlow ${version} 可安装` : undefined,
+        duration: Infinity,
+        action: { label: '重启安装', onClick: () => void window.electronAPI?.updateInstall?.() },
+      })
+    })
+    return () => {
+      if (typeof off === 'function') off()
     }
   }, [])
 

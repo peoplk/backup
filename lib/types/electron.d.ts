@@ -36,6 +36,24 @@ export interface ActivitySampleData {
   intervalSec: number
 }
 
+/** 主进程可配置全局快捷键的快照项 */
+export interface GlobalShortcutInfo {
+  id: string
+  label: string
+  /** 出厂默认组合 */
+  default: string
+  /** 当前生效组合 */
+  accelerator: string
+  /** 是否注册成功（false = 与其他应用冲突） */
+  registered: boolean
+}
+
+export interface UpdateCheckResult {
+  status: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error' | 'unavailable'
+  version?: string | null
+  message?: string
+}
+
 export interface ElectronAPI {
   minimizeWindow: () => void
   maximizeWindow: () => void
@@ -83,12 +101,40 @@ export interface ElectronAPI {
     callback: (payload: { type: string; reason?: string; active?: boolean }) => void
   ) => (() => void) | undefined
 
-  notify: (options: { title: string; body: string }) => Promise<void>
+  notify: (options: {
+    title: string
+    body: string
+    tag?: string | null
+    requireInteraction?: boolean
+    /** Windows 原生通知动作按钮文案，点击结果经 onNotifyAction 回传 */
+    actions?: string[]
+  }) => Promise<boolean>
+  onNotifyAction?: (
+    callback: (payload: { tag: string | null; index: number }) => void
+  ) => (() => void) | undefined
   setAutoLaunch: (enabled: boolean) => Promise<boolean>
   getAutoLaunch: () => Promise<boolean>
   setAutoStart: (enabled: boolean) => Promise<boolean>
   getAutoStart: () => Promise<boolean>
-  reportTrayState: (state: { todayCount?: number; pomodoroStatus?: string }) => void
+  reportTrayState: (state: {
+    todayCount?: number
+    pomodoroStatus?: string
+    todaySessions?: number
+    todayFocusMinutes?: number
+  }) => void
+  /** 桌面小组件置顶开关（窗口真实跟随，不再只是本地状态） */
+  setWidgetPinned?: (pinned: boolean) => void
+  /** 普通专注期间保持屏幕常亮（独立于严格模式的防休眠） */
+  setKeepAwake?: (enabled: boolean) => void
+  shortcutsGet?: () => Promise<GlobalShortcutInfo[]>
+  shortcutsSet?: (map: Record<string, string>) => Promise<{ success: boolean; message?: string; shortcuts?: GlobalShortcutInfo[] }>
+  updateCheck?: () => Promise<UpdateCheckResult>
+  updateDownload?: () => Promise<UpdateCheckResult>
+  updateInstall?: () => Promise<boolean>
+  updateState?: () => Promise<UpdateCheckResult>
+  onUpdateDownloaded?: (
+    callback: (payload: { version?: string | null }) => void
+  ) => (() => void) | undefined
   toggleTimerFloat: () => void
   closeTimerFloat: () => void
   getAppVersion: () => Promise<string>

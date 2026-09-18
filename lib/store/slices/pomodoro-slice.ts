@@ -35,6 +35,7 @@ export const createPomodoroSlice = (
     autoStartWork: false,
     soundEnabled: true,
     notificationSound: 'classic',
+    keepScreenAwake: false,
   } as PomodoroSettings,
   updatePomodoroSettings: (settings: Partial<PomodoroSettings>) =>
     set((state) => ({

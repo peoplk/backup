@@ -16,6 +16,8 @@ import { DataImport } from '@/components/data-import'
 import { DataBackup } from '@/components/data-backup'
 import { PrivacyLock } from '@/components/privacy-lock'
 import { SHORTCUT_LIST } from '@/lib/shortcuts'
+import { checkForUpdateFlow } from '@/components/title-bar'
+import type { GlobalShortcutInfo } from '@/lib/types/electron'
 import { generateICS, downloadICS } from '@/lib/ics-export'
 import { tasksToCSV, downloadCSV, importTasksFromCSV } from '@/lib/csv'
 import {
@@ -70,6 +72,111 @@ import {
 } from '@/components/ui/select'
 
 const PROJECT_COLORS = COLOR_PALETTE
+
+// ─── 桌面端全局快捷键：注册发生在主进程，冲突（注册失败）必须显式暴露给用户 ───
+function GlobalShortcutsCard() {
+  const [shortcuts, setShortcuts] = useState<GlobalShortcutInfo[] | null>(null)
+  const [capturingId, setCapturingId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!window.electronAPI?.shortcutsGet) return
+    window.electronAPI.shortcutsGet().then(setShortcuts).catch(() => setShortcuts(null))
+  }, [])
+
+  useEffect(() => {
+    if (!capturingId) return
+    const handler = (e: KeyboardEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (e.key === 'Escape') {
+        setCapturingId(null)
+        return
+      }
+      if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return
+      if (!e.ctrlKey && !e.metaKey) {
+        toast.error('请至少按住 Ctrl/⌘，推荐 Ctrl+Shift+字母')
+        return
+      }
+      const key = e.key.length === 1 ? e.key.toUpperCase() : e.key
+      if (!/^[A-Z0-9]$/.test(key)) {
+        toast.error('仅支持单个字母或数字')
+        return
+      }
+      const accelerator = `CommandOrControl+${e.shiftKey ? 'Shift+' : e.altKey ? 'Alt+' : ''}${key}`
+      window.electronAPI
+        ?.shortcutsSet?.({ [capturingId]: accelerator })
+        .then((res) => {
+          if (res?.shortcuts) setShortcuts(res.shortcuts)
+          const mine = res?.shortcuts?.find((s) => s.id === capturingId)
+          if (res?.success && mine?.registered) {
+            toast.success(`已设置为 ${mine.accelerator.replace('CommandOrControl', 'Ctrl/⌘')}`)
+          } else if (res?.success) {
+            toast.error('该组合已被其他应用占用，注册失败')
+          } else {
+            toast.error(res?.message || '保存失败')
+          }
+        })
+        .finally(() => setCapturingId(null))
+    }
+    window.addEventListener('keydown', handler, { capture: true })
+    return () => window.removeEventListener('keydown', handler, { capture: true })
+  }, [capturingId])
+
+  if (!shortcuts?.length) return null
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <HardDrive className="h-5 w-5" />
+          全局快捷键（桌面端）
+        </CardTitle>
+        <CardDescription>应用最小化或未聚焦时也可触发的系统级快捷键</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2">
+          {shortcuts.map((s) => (
+            <div key={s.id} className="flex items-center justify-between py-1">
+              <div>
+                <span className="text-sm">{s.label}</span>
+                {!s.registered && (
+                  <span className="ml-2 text-xs text-destructive">冲突：注册失败</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant={s.registered ? 'secondary' : 'destructive'} className="text-xs">
+                  {capturingId === s.id ? '按下新快捷键…（Esc 取消）' : s.accelerator.replace('CommandOrControl', 'Ctrl/⌘')}
+                </Badge>
+                {s.accelerator !== s.default && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={() =>
+                      window.electronAPI
+                        ?.shortcutsSet?.({ [s.id]: s.default })
+                        .then((res) => res?.shortcuts && setShortcuts(res.shortcuts))
+                    }
+                  >
+                    默认
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 px-2 text-xs"
+                  onClick={() => setCapturingId(capturingId === s.id ? null : s.id)}
+                >
+                  {capturingId === s.id ? '取消' : '修改'}
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
 
 const SYNC_DATA_KEYS = [
   'tasks', 'habits', 'habitCheckIns', 'timeEntries', 'pomodoroSessions',
@@ -358,6 +465,13 @@ export function SettingsView() {
   })))
   
   const s3SyncStore = useS3SyncStore()
+  const [isElectronApp, setIsElectronApp] = useState(false)
+  const [appVersion, setAppVersion] = useState('1.0.0')
+  useEffect(() => {
+    if (!window.electronAPI) return
+    setIsElectronApp(true)
+    window.electronAPI.getAppVersion?.().then((v) => v && setAppVersion(v)).catch(() => {})
+  }, [])
   const [llmConfig, setLLMConfigState] = useState(() => getLLMConfig())
   const [vaultStatus, setVaultStatus] = useState(() => getCredentialVaultStatus())
   // Electron 下 safeStorage 可能被系统禁用，异步刷新真实状态以显示准确警告
@@ -1218,6 +1332,8 @@ export function SettingsView() {
           </CardContent>
         </Card>
 
+        <GlobalShortcutsCard />
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -1839,9 +1955,17 @@ export function SettingsView() {
           <div className="flex items-center justify-between">
             <div>
               <p className="font-medium">FocusFlow</p>
-              <p className="text-sm text-muted-foreground">版本 1.0.0</p>
+              <p className="text-sm text-muted-foreground">版本 {appVersion}</p>
             </div>
-            <Badge variant="secondary">Next.js 16</Badge>
+            <div className="flex items-center gap-2">
+              {isElectronApp && (
+                <Button variant="outline" size="sm" onClick={() => void checkForUpdateFlow()}>
+                  <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                  检查更新
+                </Button>
+              )}
+              <Badge variant="secondary">Next.js 16</Badge>
+            </div>
           </div>
         </CardContent>
       </Card>

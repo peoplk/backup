@@ -9,6 +9,7 @@ export interface CompletePomodoroParams {
   focusNote?: string
   sessionTags?: string[]
   startTime?: Date
+  escapeAttempts?: number
 }
 
 export interface AbandonPomodoroParams {
@@ -17,6 +18,7 @@ export interface AbandonPomodoroParams {
   focusNote?: string
   sessionTags?: string[]
   startTime?: Date
+  escapeAttempts?: number
 }
 
 export interface CompletePomodoroResult {
@@ -43,6 +45,7 @@ export function completePomodoroSession(params: CompletePomodoroParams): Complet
     focusNote,
     sessionTags,
     startTime,
+    escapeAttempts,
   } = params
 
   const state = useAppStore.getState()
@@ -55,6 +58,7 @@ export function completePomodoroSession(params: CompletePomodoroParams): Complet
     duration,
     note: focusNote?.trim() || undefined,
     tags: sessionTags && sessionTags.length > 0 ? sessionTags : undefined,
+    escapeAttempts,
   }
   state.addPomodoroSession(sessionPayload)
 
@@ -167,6 +171,7 @@ export function abandonPomodoroSession(params: AbandonPomodoroParams): { session
     focusNote,
     sessionTags,
     startTime,
+    escapeAttempts,
   } = params
 
   const state = useAppStore.getState()
@@ -179,6 +184,7 @@ export function abandonPomodoroSession(params: AbandonPomodoroParams): { session
     duration,
     note: focusNote?.trim() || undefined,
     tags: sessionTags && sessionTags.length > 0 ? sessionTags : undefined,
+    escapeAttempts,
   })
 
   const latestState = useAppStore.getState()

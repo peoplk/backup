@@ -39,10 +39,20 @@ export function sendBrowserNotification(
     silent?: boolean
     data?: Record<string, unknown>
     onClick?: () => void
+    /** 桌面端原生通知动作按钮（Windows），点击结果经 focusflow:notify-action 事件回传 */
+    actions?: string[]
   }
 ): void {
   const electronAPI = (typeof window !== 'undefined' ? window.electronAPI : null) as
-    | { notify?: (opts: { title: string; body?: string; tag?: string }) => Promise<boolean> }
+    | {
+        notify?: (opts: {
+          title: string
+          body?: string
+          tag?: string
+          requireInteraction?: boolean
+          actions?: string[]
+        }) => Promise<boolean>
+      }
     | null
 
   if (electronAPI?.notify) {
@@ -51,6 +61,8 @@ export function sendBrowserNotification(
         title,
         body: options?.body,
         tag: options?.tag,
+        requireInteraction: options?.requireInteraction,
+        actions: options?.actions,
       })
       .catch(() => { /* notification may be blocked */ })
     return
@@ -111,7 +123,8 @@ export function notifyPomodoroComplete(durationMinutes: number, taskTitle?: stri
       ? `完成了「${taskTitle}」的 ${durationMinutes} 分钟专注\n${message}`
       : `${durationMinutes} 分钟专注完成！\n${message}`,
     tag: 'pomodoro-complete',
-    requireInteraction: false,
+    requireInteraction: true,
+    actions: ['开始休息'],
   })
 }
 
@@ -120,8 +133,26 @@ export function notifyBreakComplete(nextMode: 'work' | 'long-break'): void {
     sendBrowserNotification('☕ 休息结束，准备继续专注！', {
       body: '休息时间到，是时候开始下一个番茄钟了！',
       tag: 'break-complete',
-      requireInteraction: false,
+      requireInteraction: true,
+      actions: ['开始专注'],
     })
+  }
+}
+
+/**
+ * 桌面端通知动作桥：把主进程回传的按钮点击转成全局事件，
+ * 由番茄钟引擎等消费方决定后续动作。幂等，可重复调用。
+ */
+export function initElectronNotifyActions(): void {
+  if (typeof window === 'undefined') return
+  const w = window as unknown as { __notifyActionBridge?: boolean }
+  if (w.__notifyActionBridge) return
+  w.__notifyActionBridge = true
+  const off = window.electronAPI?.onNotifyAction?.(({ tag, index }) => {
+    window.dispatchEvent(new CustomEvent('focusflow:notify-action', { detail: { tag, index } }))
+  })
+  if (typeof off !== 'function') {
+    w.__notifyActionBridge = false
   }
 }
 

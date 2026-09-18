@@ -120,9 +120,10 @@ interface DayStatsType {
 // ============ 主组件 ============
 
 export function AnalyticsView() {
-  const { tasks, pomodoroSessions, timeEntries, projects, distractions, habits, habitCheckIns, focusGoals } = useAppStore(useShallow((state) => ({
+  const { tasks, pomodoroSessions, abandonedPomodoroSessions, timeEntries, projects, distractions, habits, habitCheckIns, focusGoals } = useAppStore(useShallow((state) => ({
     tasks: state.tasks,
     pomodoroSessions: state.pomodoroSessions,
+    abandonedPomodoroSessions: state.abandonedPomodoroSessions,
     timeEntries: state.timeEntries,
     projects: state.projects,
     distractions: state.distractions,
@@ -264,6 +265,13 @@ export function AnalyticsView() {
     const completedInRange = tasks.filter(t => t.status === 'done' && t.completedAt && new Date(t.completedAt) >= rangeStart).length
     const taskCompletionRate = totalTasksInRange > 0 ? Math.round((completedInRange / totalTasksInRange) * 100) : 0
 
+    // 专注放弃率：本周放弃的专注会话 / (完成 + 放弃)
+    const rangeAbandoned = abandonedPomodoroSessions.filter(s => new Date(s.completedAt) >= rangeStart)
+    const totalAttempts = rangePomodoros.length + rangeAbandoned.length
+    const abandonRate = totalAttempts > 0 ? Math.round((rangeAbandoned.length / totalAttempts) * 100) : 0
+    // 严格模式绕过尝试次数（含退出全屏/关闭窗口/失焦）
+    const escapeAttempts = rangePomodoros.reduce((acc, s) => acc + (s.escapeAttempts || 0), 0)
+
     return {
       totalFocusHours: totalFocusHours.toFixed(1),
       totalFocusMinutes: Math.round(totalFocusMinutes),
@@ -276,8 +284,10 @@ export function AnalyticsView() {
       deepWorkSessions,
       fragmentationIndex,
       taskCompletionRate,
+      abandonRate,
+      escapeAttempts,
     }
-  }, [pomodoroSessions, tasks, habits, habitCheckIns, now])
+  }, [pomodoroSessions, abandonedPomodoroSessions, tasks, habits, habitCheckIns, now])
 
   // 每日目标达成率（读取用户配置的 focusGoals，而非硬编码）
   const dailyGoalAchievement = useMemo(() => {
@@ -771,6 +781,10 @@ export function AnalyticsView() {
               <InsightItem icon={Calendar} color={APP_COLORS.green} label="最佳工作日" value={productivityInsight.mostProductiveDay} />
               <InsightItem icon={Zap} color={APP_COLORS.orange} label="碎片化指数" value={`${summaryStats.fragmentationIndex}%`} hint={summaryStats.fragmentationIndex <= 20 ? '专注质量优秀' : summaryStats.fragmentationIndex <= 40 ? '可以改善' : '建议增加长时专注'} />
               <InsightItem icon={CheckCircle2} color={APP_COLORS.purple} label="习惯完成率" value={`${summaryStats.habitCompletionRate}%`} />
+              <InsightItem icon={Hourglass} color={APP_COLORS.red} label="专注放弃率" value={`${summaryStats.abandonRate}%`} hint={summaryStats.abandonRate <= 10 ? '执行力优秀' : summaryStats.abandonRate <= 25 ? '偶有中断' : '建议缩短目标时长'} />
+              {summaryStats.escapeAttempts > 0 && (
+                <InsightItem icon={Activity} color={APP_COLORS.orange} label="严格模式绕过尝试" value={`${summaryStats.escapeAttempts} 次`} />
+              )}
             </CardContent>
           </Card>
         </div>

@@ -22,6 +22,16 @@ export function resolveStrictFullscreen(strict: PomodoroStrictMode | undefined) 
 
 export type StrictViolationReason = 'leave-fullscreen' | 'close' | 'blur'
 
+// 模块级违规计数：组件可能随视图切换卸载，会话记录时仍需拿到本次专注的完整绕过次数
+let globalViolationCount = 0
+
+/** 读取并清零严格模式绕过尝试次数（会话记录时调用） */
+export function consumeStrictViolationCount(): number {
+  const v = globalViolationCount
+  globalViolationCount = 0
+  return v
+}
+
 export interface StrictFullscreenState {
   /** 主进程是否提供了锁定能力（Electron 环境） */
   supported: boolean
@@ -75,6 +85,7 @@ export function useStrictFullscreen(active: boolean): StrictFullscreenState {
   useEffect(() => {
     if (!active) return
     setViolationCount(0)
+    globalViolationCount = 0
     setLastViolation(null)
     const api = window.electronAPI
     if (!api || !api.setStrictLock) return
@@ -133,6 +144,7 @@ export function useStrictFullscreen(active: boolean): StrictFullscreenState {
     if (!active) return
     const off = window.electronAPI?.onStrictLockViolation?.((payload) => {
       setViolationCount((c) => c + 1)
+      globalViolationCount += 1
       setLastViolation({ reason: payload?.reason ?? 'blur', at: Date.now() })
     })
     return () => {

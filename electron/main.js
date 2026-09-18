@@ -1,5 +1,7 @@
 const { app, BrowserWindow, shell, Menu, Tray, nativeImage, ipcMain, dialog, screen, globalShortcut, clipboard, Notification, powerMonitor, powerSaveBlocker, safeStorage } = require('electron')
 const path = require('path')
+const fs = require('fs')
+const net = require('net')
 const { spawn } = require('child_process')
 const { registerSystemShieldIPC, cleanupShield, startSystemShield, stopSystemShield, getShieldStatus } = require('./system-shield')
 const { createShieldScheduler } = require('./shield-scheduler')
@@ -12,7 +14,7 @@ let nextProcess = null
 let tray = null
 let clipboardTimer = null
 let lastClipboardText = ''
-let trayState = { todayCount: 0, pomodoroStatus: '空闲' }
+let trayState = { todayCount: 0, pomodoroStatus: '空闲', timerLabel: '', todaySessions: 0, todayFocusMinutes: 0 }
 let isQuitting = false
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 
@@ -94,10 +96,32 @@ function pullBackToStrictLock(reason) {
   }
 }
 
-const PORT = 3000
-const TRUSTED_ORIGINS = ['http://localhost:3000', 'http://127.0.0.1:3000']
+const DEFAULT_PORT = 3000
+let PORT = DEFAULT_PORT
+
+function portInUse(port) {
+  return new Promise((resolve) => {
+    const srv = net.createServer()
+    srv.once('error', () => resolve(true))
+    srv.once('listening', () => srv.close(() => resolve(false)))
+    srv.listen(port, '127.0.0.1')
+  })
+}
+
+// 生产模式下从 3000 起探测可用端口：端口被其他服务占用时会加载到陌生页面内容
+async function pickAvailablePort() {
+  for (let p = DEFAULT_PORT; p < DEFAULT_PORT + 20; p++) {
+    if (!(await portInUse(p))) return p
+  }
+  return DEFAULT_PORT
+}
+
+function isTrustedOrigin(origin) {
+  return origin === `http://localhost:${PORT}` || origin === `http://127.0.0.1:${PORT}`
+}
 
 let autoUpdater = null
+let updateFeedState = { status: 'idle' }
 try {
   autoUpdater = require('electron-updater').autoUpdater
 } catch {
@@ -152,7 +176,7 @@ function isTrustedSender(event) {
   try {
     const url = event?.senderFrame?.url
     if (!url) return false
-    return TRUSTED_ORIGINS.includes(new URL(url).origin)
+    return isTrustedOrigin(new URL(url).origin)
   } catch {
     return false
   }
@@ -201,10 +225,53 @@ function toggleMainWindow() {
   }
 }
 
+// ─── 窗口状态记忆：bounds + 最大化持久化到 userData，重启后恢复 ───
+function windowBoundsPath() {
+  return path.join(app.getPath('userData'), 'window-bounds.json')
+}
+
+function loadWindowBounds() {
+  try {
+    const b = JSON.parse(fs.readFileSync(windowBoundsPath(), 'utf8'))
+    if (typeof b.width !== 'number' || typeof b.height !== 'number') return null
+    if (b.maximized) return { maximized: true }
+    const x = typeof b.x === 'number' ? b.x : 0
+    const y = typeof b.y === 'number' ? b.y : 0
+    // 拔掉副屏后保存的坐标可能落在不可见区域，要求窗口标题栏至少一部分在某个显示器内
+    const visible = screen.getAllDisplays().some((d) => {
+      const area = d.workArea
+      return x + 200 > area.x && y + 40 > area.y && x < area.x + area.width - 200 && y < area.y + area.height - 40
+    })
+    if (!visible) return null
+    return { x, y, width: b.width, height: b.height, maximized: false }
+  } catch {
+    return null
+  }
+}
+
+let boundsSaveTimer = null
+function scheduleSaveWindowBounds() {
+  if (!mainWindow || mainWindow.isDestroyed() || strictLockActive) return
+  clearTimeout(boundsSaveTimer)
+  boundsSaveTimer = setTimeout(() => {
+    try {
+      if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isMinimized() || mainWindow.isFullScreen()) return
+      const b = mainWindow.getBounds()
+      fs.writeFileSync(windowBoundsPath(), JSON.stringify({ ...b, maximized: mainWindow.isMaximized() }))
+    } catch {
+      // 落盘失败不影响使用
+    }
+  }, 800)
+}
+
 function createWindow() {
+  const savedBounds = loadWindowBounds()
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
+    ...(savedBounds && !savedBounds.maximized
+      ? { x: savedBounds.x, y: savedBounds.y, width: savedBounds.width, height: savedBounds.height }
+      : {}),
     minWidth: 1000,
     minHeight: 700,
     title: 'FocusFlow',
@@ -230,7 +297,13 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show()
+    if (savedBounds?.maximized) mainWindow.maximize()
   })
+
+  mainWindow.on('move', scheduleSaveWindowBounds)
+  mainWindow.on('resize', scheduleSaveWindowBounds)
+  mainWindow.on('maximize', scheduleSaveWindowBounds)
+  mainWindow.on('unmaximize', scheduleSaveWindowBounds)
 
   if (isDev) {
     mainWindow.loadURL(`http://localhost:${PORT}`)
@@ -352,11 +425,26 @@ function createTimerFloatWindow() {
   })
 }
 
+function formatTrayTooltip() {
+  const base = `FocusFlow - 今日待办 ${trayState.todayCount} 项`
+  if (trayState.pomodoroStatus === '空闲') return `${base} | 番茄钟：空闲`
+  const remaining = trayState.timerLabel ? ` ${trayState.timerLabel}` : ''
+  return `${base} | 番茄钟：${trayState.pomodoroStatus}${remaining}`
+}
+
+function updateTrayTooltip() {
+  try {
+    tray?.setToolTip(formatTrayTooltip())
+  } catch {
+    // 托盘已销毁时忽略
+  }
+}
+
 function updateTray() {
   if (!tray) return
-  const pomodoroStatus = trayState.pomodoroStatus || '空闲'
-  tray.setToolTip(`FocusFlow - 今日待办 ${trayState.todayCount} 项 | 番茄钟：${pomodoroStatus}`)
+  updateTrayTooltip()
 
+  const pomodoroStatus = trayState.pomodoroStatus || '空闲'
   const isRunning = pomodoroStatus !== '空闲' && !pomodoroStatus.includes('暂停')
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -372,6 +460,10 @@ function updateTray() {
       click: () => createTimerFloatWindow()
     },
     { type: 'separator' },
+    {
+      label: `今日专注 ${trayState.todaySessions} 个 · ${trayState.todayFocusMinutes} 分钟`,
+      enabled: false,
+    },
     {
       label: isRunning ? '⏸ 暂停番茄钟' : '▶ 开始番茄钟',
       click: () => {
@@ -490,19 +582,29 @@ function stopNextServer() {
   }
 }
 
-function sendNativeNotification(title, body, tag, onClick) {
+function sendNativeNotification(title, body, tag, onClick, opts = {}) {
   if (!Notification.isSupported()) return false
   try {
+    const actions = Array.isArray(opts.actions)
+      ? opts.actions.map((label, i) => ({ type: 'button', index: i, label: String(label) }))
+      : undefined
     const n = new Notification({
       title,
       body,
       icon: path.join(__dirname, '../public/icon.png'),
       silent: false,
+      requireInteraction: !!opts.requireInteraction,
+      ...(actions && actions.length ? { actions } : {}),
     })
     n.on('click', () => {
       showMainWindow()
       if (onClick) onClick()
     })
+    if (typeof opts.onAction === 'function') {
+      n.on('action', (_event, index) => {
+        opts.onAction(index)
+      })
+    }
     n.show()
     return true
   } catch (err) {
@@ -604,21 +706,102 @@ ipcMain.on('activity-set-enabled', (event, enabled) => {
   else stopActivitySampling()
 })
 
-function registerGlobalShortcuts() {
-  globalShortcut.register('Ctrl+Shift+F', () => {
-    toggleMainWindow()
-  })
-
-  globalShortcut.register('Ctrl+Shift+N', () => {
+// ─── 可配置全局快捷键：注册结果必须校验，冲突时静默失败会让用户以为功能坏了 ───
+const GLOBAL_SHORTCUT_DEFAULTS = [
+  { id: 'toggle-window', accelerator: 'CommandOrControl+Shift+F', label: '显示/隐藏主窗口' },
+  { id: 'quick-add', accelerator: 'CommandOrControl+Shift+N', label: '快速添加任务' },
+  { id: 'toggle-pomodoro', accelerator: 'CommandOrControl+Shift+P', label: '开始/暂停番茄钟' },
+]
+const GLOBAL_SHORTCUT_HANDLERS = {
+  'toggle-window': () => toggleMainWindow(),
+  'quick-add': () => {
     showMainWindow()
     mainWindow?.webContents.send('menu-quick-add')
-  })
-
-  globalShortcut.register('Ctrl+Shift+P', () => {
+  },
+  'toggle-pomodoro': () => {
     showMainWindow()
     mainWindow?.webContents.send('tray-toggle-pomodoro')
+  },
+}
+
+function shortcutConfigPath() {
+  return path.join(app.getPath('userData'), 'shortcuts.json')
+}
+
+function loadShortcutOverrides() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(shortcutConfigPath(), 'utf8'))
+    return raw && typeof raw === 'object' ? raw : {}
+  } catch {
+    return {}
+  }
+}
+
+function getShortcutsSnapshot() {
+  const overrides = loadShortcutOverrides()
+  return GLOBAL_SHORTCUT_DEFAULTS.map((s) => {
+    const accelerator = typeof overrides[s.id] === 'string' && overrides[s.id] ? overrides[s.id] : s.accelerator
+    let registered = false
+    try {
+      registered = globalShortcut.isRegistered(accelerator)
+    } catch {
+      // app 未 ready 时查询失败按未注册处理
+    }
+    return { id: s.id, label: s.label, default: s.accelerator, accelerator, registered }
   })
 }
+
+function applyGlobalShortcuts() {
+  globalShortcut.unregisterAll()
+  const overrides = loadShortcutOverrides()
+  const failures = []
+  for (const s of GLOBAL_SHORTCUT_DEFAULTS) {
+    const accelerator = typeof overrides[s.id] === 'string' && overrides[s.id] ? overrides[s.id] : s.accelerator
+    let ok = false
+    try {
+      ok = globalShortcut.register(accelerator, GLOBAL_SHORTCUT_HANDLERS[s.id])
+    } catch {
+      ok = false
+    }
+    if (!ok) failures.push(`${s.label}（${accelerator}）`)
+  }
+  if (failures.length) {
+    console.error('[global-shortcut] registration failed:', failures.join('、'))
+    sendNativeNotification(
+      '⌨️ 全局快捷键冲突',
+      `${failures.join('、')} 注册失败，可能被其他应用占用，可在 设置-快捷键 中修改`,
+      'shortcut-conflict'
+    )
+  }
+}
+
+ipcMain.handle('shortcuts-get', (event) => {
+  if (!isTrustedSender(event)) return []
+  return getShortcutsSnapshot()
+})
+
+ipcMain.handle('shortcuts-set', (event, map) => {
+  if (!isTrustedSender(event)) return { success: false, message: '非法调用' }
+  if (!map || typeof map !== 'object') return { success: false, message: '参数无效' }
+  const validAcc = /^[Cm]ommandOrControl(\+[A-Za-z0-9]){2,4}$/
+  const overrides = loadShortcutOverrides()
+  for (const s of GLOBAL_SHORTCUT_DEFAULTS) {
+    const acc = map[s.id]
+    if (acc === undefined) continue
+    if (typeof acc !== 'string' || !validAcc.test(acc)) {
+      return { success: false, message: `快捷键格式无效：${s.label}` }
+    }
+    overrides[s.id] = acc
+  }
+  try {
+    fs.writeFileSync(shortcutConfigPath(), JSON.stringify(overrides))
+  } catch (err) {
+    console.error('[global-shortcut] save failed:', err)
+    return { success: false, message: '保存失败' }
+  }
+  applyGlobalShortcuts()
+  return { success: true, shortcuts: getShortcutsSnapshot() }
+})
 
 function registerPowerMonitor() {
   powerMonitor.on('suspend', () => {
@@ -641,16 +824,28 @@ function setupAutoUpdater() {
   if (!autoUpdater || isDev) return
   autoUpdater.autoDownload = false
   autoUpdater.on('update-available', (info) => {
+    updateFeedState = { status: 'available', version: info.version }
     sendNativeNotification('🔄 发现新版本', `FocusFlow ${info.version} 已发布，点击更新`, 'update-available', () => {
       autoUpdater.downloadUpdate()
     })
   })
+  autoUpdater.on('update-not-available', () => {
+    updateFeedState = { status: 'not-available' }
+  })
   autoUpdater.on('update-downloaded', () => {
+    updateFeedState = { status: 'downloaded', version: updateFeedState.version || null }
     sendNativeNotification('✅ 更新已就绪', '重启应用即可完成更新', 'update-downloaded', () => {
+      isQuitting = true
       autoUpdater.quitAndInstall()
     })
+    try {
+      mainWindow?.webContents.send('update-downloaded', { version: updateFeedState.version })
+    } catch {
+      // 窗口已销毁时忽略
+    }
   })
   autoUpdater.on('error', (err) => {
+    updateFeedState = { status: 'error', message: err?.message || String(err) }
     console.error('autoUpdater error:', err?.message || err)
   })
   setTimeout(() => {
@@ -661,6 +856,52 @@ function setupAutoUpdater() {
     }
   }, 15000)
 }
+
+ipcMain.handle('update-check', async (event) => {
+  if (!isTrustedSender(event)) return { status: 'error', message: '非法调用' }
+  if (!autoUpdater) return { status: 'unavailable', message: '未安装更新组件' }
+  if (isDev) return { status: 'unavailable', message: '开发模式不支持检查更新' }
+  updateFeedState = { status: 'checking' }
+  try {
+    const result = await autoUpdater.checkForUpdates()
+    const version = result?.updateInfo?.version
+    if (version && version !== app.getVersion()) {
+      updateFeedState = { status: 'available', version }
+      return { status: 'available', version }
+    }
+    updateFeedState = { status: 'not-available' }
+    return { status: 'not-available', version: app.getVersion() }
+  } catch (err) {
+    const message = err?.message || '检查更新失败'
+    updateFeedState = { status: 'error', message }
+    return { status: 'error', message }
+  }
+})
+
+ipcMain.handle('update-download', async (event) => {
+  if (!isTrustedSender(event)) return { status: 'error', message: '非法调用' }
+  if (!autoUpdater || isDev) return { status: 'unavailable' }
+  if (updateFeedState.status !== 'available') return { status: 'idle', message: '当前没有可用更新' }
+  try {
+    await autoUpdater.downloadUpdate()
+    return { status: 'downloading' }
+  } catch (err) {
+    return { status: 'error', message: err?.message || '下载失败' }
+  }
+})
+
+ipcMain.handle('update-install', (event) => {
+  if (!isTrustedSender(event)) return false
+  if (!autoUpdater || isDev) return false
+  isQuitting = true
+  autoUpdater.quitAndInstall()
+  return true
+})
+
+ipcMain.handle('update-state', (event) => {
+  if (!isTrustedSender(event)) return { status: 'idle' }
+  return updateFeedState
+})
 
 ipcMain.on('window-minimize', (event) => {
   if (!isTrustedSender(event)) return
@@ -738,15 +979,52 @@ ipcMain.on('close-widget', (event) => {
   widgetWindow?.close()
 })
 
+ipcMain.on('widget-set-pinned', (event, pinned) => {
+  if (!isTrustedSender(event)) return
+  try {
+    widgetWindow?.setAlwaysOnTop(!!pinned, 'screen-saver')
+  } catch {
+    // 窗口已销毁时忽略
+  }
+})
+
+// 普通专注期间的屏幕常亮（独立于严格模式的 powerSaveBlocker 句柄）
+let focusSleepBlockerId = null
+ipcMain.on('set-keep-awake', (event, enabled) => {
+  if (!isTrustedSender(event)) return
+  try {
+    if (enabled && focusSleepBlockerId === null) {
+      focusSleepBlockerId = powerSaveBlocker.start('prevent-display-sleep')
+    } else if (!enabled && focusSleepBlockerId !== null) {
+      powerSaveBlocker.stop(focusSleepBlockerId)
+      focusSleepBlockerId = null
+    }
+  } catch (err) {
+    console.error('[keep-awake] failed:', err)
+  }
+})
+
 ipcMain.on('app-quit', (event) => {
   if (!isTrustedSender(event)) return
   app.quit()
 })
 
-ipcMain.handle('notify', (event, { title, body, tag } = {}) => {
+ipcMain.handle('notify', (event, { title, body, tag, requireInteraction, actions } = {}) => {
   if (!isTrustedSender(event)) return false
   if (!title) return false
-  return sendNativeNotification(title, body || '', tag || null, null)
+  const sender = event.sender
+  return sendNativeNotification(title, body || '', tag || null, null, {
+    requireInteraction,
+    actions,
+    onAction: (index) => {
+      showMainWindow()
+      try {
+        sender.send('notify-action', { tag: tag || null, index })
+      } catch {
+        // 渲染层已销毁时忽略
+      }
+    },
+  })
 })
 
 ipcMain.handle('set-auto-launch', (event, enabled) => {
@@ -772,6 +1050,15 @@ ipcMain.on('pomodoro-state', (event, state) => {
   if (!isTrustedSender(event)) return
   if (state && typeof state === 'object') {
     latestPomodoroState = state
+    let label = ''
+    if (state.isRunning) {
+      const tl = Math.max(0, Math.round(Number(state.timeLeft) || 0))
+      label = `${String(Math.floor(tl / 60)).padStart(2, '0')}:${String(tl % 60).padStart(2, '0')}`
+    }
+    if (label !== trayState.timerLabel) {
+      trayState = { ...trayState, timerLabel: label }
+      updateTrayTooltip()
+    }
     timerFloatWindow?.webContents.send('pomodoro-sync', state)
     widgetWindow?.webContents.send('pomodoro-sync', state)
   } else if (latestPomodoroState) {
@@ -912,13 +1199,14 @@ function initShieldScheduler() {
 app.whenReady().then(async () => {
   try {
     Menu.setApplicationMenu(null)
+    if (!isDev) PORT = await pickAvailablePort()
     initShieldScheduler()
     registerSystemShieldIPC(isTrustedSender, {
       onSessionStart: (session) => shieldScheduler ? shieldScheduler.startSession(session) : Promise.resolve(),
       onSessionStop: () => shieldScheduler ? shieldScheduler.stopSession() : Promise.resolve(),
     })
     registerPowerMonitor()
-    registerGlobalShortcuts()
+    applyGlobalShortcuts()
     await startNextServer()
     createWindow()
     createTray()
