@@ -20,7 +20,6 @@ import {
   GraduationCap,
   Moon,
   Settings,
-  X,
   Volume2,
   VolumeX,
   Music,
@@ -48,6 +47,15 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 import { Slider } from '@/components/ui/slider'
+import {
+  KioskPanel,
+  KioskSliderRow,
+  KioskSection,
+  KioskChoice,
+  KioskPill,
+  KioskFooterButton,
+  KioskNote,
+} from '@/components/focus/kiosk-panel'
 import { useAppStore } from '@/lib/store'
 import type { PomodoroSettings } from '@/lib/types'
 import {
@@ -981,409 +989,181 @@ export function ImmersiveTimer({
 
       {/* 时间参数面板 */}
       {settingsOpen && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: 3,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(0,0,0,0.5)',
-            backdropFilter: 'blur(6px)',
-            WebkitBackdropFilter: 'blur(6px)',
-          }}
-          onClick={() => setSettingsOpen(false)}
+        <KioskPanel
+          onClose={() => setSettingsOpen(false)}
+          title="时间参数"
+          width={440}
+          styleMode={styleMode}
+          skin={skin}
         >
-          <div
-            style={{
-              width: 'min(92vw, 440px)',
-              maxHeight: '82vh',
-              overflowY: 'auto',
-              borderRadius: 20,
-              background: styleMode === 'oled' ? '#0a0a0a' : styleMode === 'chalk' ? 'rgba(255,255,255,0.07)' : 'rgba(13,16,28,0.94)',
-              border: skin.badgeBorder,
-              backdropFilter: 'blur(24px)',
-              WebkitBackdropFilter: 'blur(24px)',
-              padding: '24px 26px',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <span style={{ fontSize: 16, fontWeight: 600, color: skin.badgeColor, ...(styleMode === 'chalk' ? CHALK_FONT : {}) }}>
-                时间参数
-              </span>
-              <button
-                onClick={() => setSettingsOpen(false)}
-                aria-label="关闭时间设置"
-                style={{
-                  width: 30,
-                  height: 30,
-                  borderRadius: '50%',
-                  border: 'none',
-                  background: 'transparent',
-                  color: 'rgba(255,255,255,0.5)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <X style={{ width: 16, height: 16 }} />
-              </button>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
-              {DURATION_FIELDS.map((f) => (
-                <div key={f.key}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                    <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.85)', ...(styleMode === 'chalk' ? CHALK_FONT : {}) }}>
-                      {f.label}
-                    </span>
-                    <span style={{ fontSize: 14, fontWeight: 600, color: skin.secondary, fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>
-                      {pomodoroSettings[f.key] / 60} 分钟
-                    </span>
-                  </div>
-                  <Slider
-                    value={[pomodoroSettings[f.key] / 60]}
-                    min={f.min}
-                    max={f.max}
-                    step={f.step}
-                    onValueChange={([v]) => applySettingsChange({ [f.key]: v * 60 }, f.mode)}
-                  />
-                </div>
-              ))}
-
-              <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.85)', ...(styleMode === 'chalk' ? CHALK_FONT : {}) }}>
-                    长休息间隔
-                  </span>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: skin.secondary, fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>
-                    每 {pomodoroSettings.sessionsBeforeLongBreak} 个番茄
-                  </span>
-                </div>
-                <Slider
-                  value={[pomodoroSettings.sessionsBeforeLongBreak]}
-                  min={2}
-                  max={6}
-                  step={1}
-                  onValueChange={([v]) => applySettingsChange({ sessionsBeforeLongBreak: v })}
-                />
-              </div>
-            </div>
-
-            <p style={{ marginTop: 18, fontSize: 12, lineHeight: 1.6, color: 'rgba(255,255,255,0.45)', ...(styleMode === 'chalk' ? CHALK_FONT : {}) }}>
-              {isRunning
-                ? '运行中的时段不受影响，新时长从下一时段生效'
-                : '当前时段的剩余时间已按新时长即时更新'}
-            </p>
-
-            <button
-              onClick={() => setSettingsOpen(false)}
-              style={{
-                marginTop: 18,
-                width: '100%',
-                height: 42,
-                borderRadius: 12,
-                border: skin.ghostBorder,
-                background: skin.playBg,
-                color: skin.playColor,
-                fontSize: 14,
-                fontWeight: 500,
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
+          {DURATION_FIELDS.map((f) => (
+            <KioskSliderRow
+              key={f.key}
+              label={f.label}
+              value={`${pomodoroSettings[f.key] / 60} 分钟`}
             >
-              完成
-            </button>
-          </div>
-        </div>
+              <Slider
+                value={[pomodoroSettings[f.key] / 60]}
+                min={f.min}
+                max={f.max}
+                step={f.step}
+                onValueChange={([v]) => applySettingsChange({ [f.key]: v * 60 }, f.mode)}
+              />
+            </KioskSliderRow>
+          ))}
+
+          <KioskSliderRow
+            label="长休息间隔"
+            value={`每 ${pomodoroSettings.sessionsBeforeLongBreak} 个番茄`}
+          >
+            <Slider
+              value={[pomodoroSettings.sessionsBeforeLongBreak]}
+              min={2}
+              max={6}
+              step={1}
+              onValueChange={([v]) => applySettingsChange({ sessionsBeforeLongBreak: v })}
+            />
+          </KioskSliderRow>
+
+          <KioskNote>
+            {isRunning
+              ? '运行中的时段不受影响，新时长从下一时段生效'
+              : '当前时段的剩余时间已按新时长即时更新'}
+          </KioskNote>
+
+          <KioskFooterButton onClick={() => setSettingsOpen(false)}>完成</KioskFooterButton>
+        </KioskPanel>
       )}
 
       {/* 白噪声/专注音效面板 */}
       {soundOpen && (
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: 3,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'rgba(0,0,0,0.5)',
-            backdropFilter: 'blur(6px)',
-            WebkitBackdropFilter: 'blur(6px)',
-          }}
-          onClick={() => setSoundOpen(false)}
+        <KioskPanel
+          onClose={() => setSoundOpen(false)}
+          title="白噪声与专注音效"
+          icon={<Music style={{ width: 16, height: 16 }} />}
+          width={460}
+          styleMode={styleMode}
+          skin={skin}
         >
-          <div
-            style={{
-              width: 'min(92vw, 460px)',
-              maxHeight: '82vh',
-              overflowY: 'auto',
-              borderRadius: 20,
-              background: styleMode === 'oled' ? '#0a0a0a' : styleMode === 'chalk' ? 'rgba(255,255,255,0.07)' : 'rgba(13,16,28,0.94)',
-              border: skin.badgeBorder,
-              backdropFilter: 'blur(24px)',
-              WebkitBackdropFilter: 'blur(24px)',
-              padding: '24px 26px',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
-              <span style={{ fontSize: 16, fontWeight: 600, color: skin.badgeColor, display: 'flex', alignItems: 'center', gap: 8, ...(styleMode === 'chalk' ? CHALK_FONT : {}) }}>
-                <Music style={{ width: 16, height: 16 }} />
-                白噪声与专注音效
-              </span>
-              <button
-                onClick={() => setSoundOpen(false)}
-                aria-label="关闭声音面板"
-                style={{
-                  width: 30,
-                  height: 30,
-                  borderRadius: '50%',
-                  border: 'none',
-                  background: 'transparent',
-                  color: 'rgba(255,255,255,0.5)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <X style={{ width: 16, height: 16 }} />
-              </button>
-            </div>
+          <KioskSliderRow label="总音量" value={`${soundVolume}%`}>
+            <Slider
+              value={[soundVolume]}
+              min={0}
+              max={100}
+              step={1}
+              onValueChange={changeSoundVolume}
+            />
+          </KioskSliderRow>
 
-            {/* 总音量 */}
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.85)' }}>总音量</span>
-                <span style={{ fontSize: 14, fontWeight: 600, color: skin.secondary, fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>
-                  {soundVolume}%
-                </span>
-              </div>
-              <Slider
-                value={[soundVolume]}
-                min={0}
-                max={100}
-                step={1}
-                onValueChange={changeSoundVolume}
-              />
+          <KioskSection title="预设组合">
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {FOCUS_SOUND_PRESETS.map((preset) => (
+                <KioskPill key={preset.id} active={false} onClick={() => applyPreset(preset)}>
+                  {preset.name}
+                </KioskPill>
+              ))}
             </div>
+          </KioskSection>
 
-            {/* 预设组合 */}
-            <div style={{ marginBottom: 20 }}>
-              <p style={{ fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,0.5)', marginBottom: 10 }}>预设组合</p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {FOCUS_SOUND_PRESETS.map((preset) => (
-                  <button
-                    key={preset.id}
-                    onClick={() => applyPreset(preset)}
-                    style={{
-                      padding: '5px 12px',
-                      borderRadius: 999,
-                      fontSize: 11,
-                      cursor: 'pointer',
-                      border: '1px solid rgba(255,255,255,0.14)',
-                      background: 'rgba(255,255,255,0.05)',
-                      color: 'rgba(255,255,255,0.65)',
-                      transition: 'all 0.2s',
-                    }}
-                  >
-                    {preset.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* 白噪音风格：点选加入混音，再点移出 */}
-            <p style={{ fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,0.5)', marginBottom: 10 }}>白噪音风格</p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 20 }}>
+          <KioskSection title="白噪音风格">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
               {NOISE_STYLES.map((sound) => {
                 const Icon = SOUND_ICONS[sound.id] ?? Music
                 const active = sound.id in soundLevels
                 const desc = sound.id === 'white' ? '均匀遮蔽人声' : sound.id === 'pink' ? '柔和近似雨声' : '低沉近似瀑布'
                 return (
-                  <button
-                    key={sound.id}
-                    onClick={() => toggleTrack(sound.id)}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 3,
-                      padding: '12px 6px',
-                      borderRadius: 14,
-                      cursor: 'pointer',
-                      border: active ? '1px solid rgba(255,255,255,0.55)' : '1px solid rgba(255,255,255,0.12)',
-                      background: active ? 'rgba(255,255,255,0.16)' : 'rgba(255,255,255,0.04)',
-                      color: active ? '#ffffff' : 'rgba(255,255,255,0.65)',
-                      transition: 'all 0.2s',
-                    }}
-                  >
+                  <KioskChoice key={sound.id} active={active} onClick={() => toggleTrack(sound.id)}>
                     <Icon style={{ width: 18, height: 18 }} />
                     <span style={{ fontSize: 12, fontWeight: 600 }}>{sound.name}</span>
                     <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>{desc}</span>
-                  </button>
+                  </KioskChoice>
                 )
               })}
             </div>
+          </KioskSection>
 
-            {/* 环境音效（可多选叠加） */}
-            <p style={{ fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,0.5)', marginBottom: 10 }}>环境音效（可多选叠加）</p>
+          <KioskSection title="环境音效（可多选叠加）">
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
               {AMBIENT_ONLY.map((sound) => {
                 const Icon = SOUND_ICONS[sound.id] ?? Music
                 const active = sound.id in soundLevels
                 return (
-                  <button
-                    key={sound.id}
-                    onClick={() => toggleTrack(sound.id)}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 4,
-                      padding: '10px 4px',
-                      borderRadius: 12,
-                      cursor: 'pointer',
-                      border: active ? '1px solid rgba(255,255,255,0.5)' : '1px solid rgba(255,255,255,0.12)',
-                      background: active ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.04)',
-                      color: active ? '#ffffff' : 'rgba(255,255,255,0.6)',
-                      transition: 'all 0.2s',
-                    }}
-                  >
+                  <KioskChoice key={sound.id} active={active} onClick={() => toggleTrack(sound.id)} compact>
                     <Icon style={{ width: 16, height: 16 }} />
                     <span style={{ fontSize: 10, whiteSpace: 'nowrap' }}>{sound.name}</span>
-                  </button>
+                  </KioskChoice>
                 )
               })}
             </div>
+          </KioskSection>
 
-            {/* 已启用音源：每轨独立音量 */}
-            {Object.keys(soundLevels).length > 0 && (
-              <div style={{ marginTop: 18 }}>
-                <p style={{ fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,0.5)', marginBottom: 10 }}>
-                  已启用音源（{Object.keys(soundLevels).length} 轨）
-                </p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {Object.entries(soundLevels).map(([id, level]) => {
-                    const sound = AMBIENT_SOUNDS.find(s => s.id === id)
-                    if (!sound) return null
-                    const Icon = SOUND_ICONS[id] ?? Music
-                    return (
-                      <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <Icon style={{ width: 14, height: 14, color: 'rgba(255,255,255,0.6)', flexShrink: 0 }} />
-                        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', width: 44, flexShrink: 0 }}>{sound.name}</span>
-                        <div style={{ flex: 1 }}>
-                          <Slider
-                            value={[level]}
-                            min={5}
-                            max={100}
-                            step={1}
-                            onValueChange={(v) => changeTrackLevel(id, v[0])}
-                          />
-                        </div>
-                        <span style={{ fontSize: 11, color: skin.secondary, fontFamily: 'ui-monospace, Menlo, Consolas, monospace', width: 34, textAlign: 'right', flexShrink: 0 }}>
-                          {level}%
-                        </span>
+          {Object.keys(soundLevels).length > 0 && (
+            <KioskSection title={`已启用音源（${Object.keys(soundLevels).length} 轨）`}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {Object.entries(soundLevels).map(([id, level]) => {
+                  const sound = AMBIENT_SOUNDS.find(s => s.id === id)
+                  if (!sound) return null
+                  const Icon = SOUND_ICONS[id] ?? Music
+                  return (
+                    <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <Icon style={{ width: 14, height: 14, color: 'rgba(255,255,255,0.6)', flexShrink: 0 }} />
+                      <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', width: 44, flexShrink: 0 }}>{sound.name}</span>
+                      <div style={{ flex: 1 }}>
+                        <Slider
+                          value={[level]}
+                          min={5}
+                          max={100}
+                          step={1}
+                          onValueChange={(v) => changeTrackLevel(id, v[0])}
+                        />
                       </div>
-                    )
-                  })}
-                </div>
+                      <span style={{ fontSize: 11, color: 'var(--kiosk-accent)', fontFamily: 'ui-monospace, Menlo, Consolas, monospace', width: 34, textAlign: 'right', flexShrink: 0 }}>
+                        {level}%
+                      </span>
+                    </div>
+                  )
+                })}
               </div>
-            )}
+            </KioskSection>
+          )}
 
-            {/* 双耳节拍 */}
-            <p style={{ fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,0.5)', margin: '18px 0 10px' }}>双耳节拍</p>
+          <KioskSection title="双耳节拍">
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
               {FOCUS_MUSIC.map((music) => {
                 const active = focusSoundSettings.currentMusic === music.id
                 return (
-                  <button
-                    key={music.id}
-                    onClick={() => selectBinaural(music.id)}
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      gap: 2,
-                      padding: '10px 6px',
-                      borderRadius: 12,
-                      cursor: 'pointer',
-                      border: active ? '1px solid rgba(255,255,255,0.5)' : '1px solid rgba(255,255,255,0.12)',
-                      background: active ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.04)',
-                      color: active ? '#ffffff' : 'rgba(255,255,255,0.6)',
-                      transition: 'all 0.2s',
-                    }}
-                  >
+                  <KioskChoice key={music.id} active={active} onClick={() => selectBinaural(music.id)} compact>
                     <span style={{ fontSize: 12, fontWeight: 500 }}>{music.name}</span>
                     <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>{music.frequency} · {music.description}</span>
-                  </button>
+                  </KioskChoice>
                 )
               })}
             </div>
+          </KioskSection>
 
-            {/* 定时停止 */}
-            <div style={{ marginTop: 18 }}>
-              <p style={{ fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,0.5)', marginBottom: 10 }}>
-                定时停止{remainingMin !== null && <span style={{ color: skin.secondary }}> · 剩 {remainingMin} 分钟</span>}
-              </p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
-                {[null, 15, 30, 60].map((minutes) => {
-                  const active = minutes === null
-                    ? focusSoundSettings.sleepTimerEndsAt === null
-                    : remainingMin !== null && Math.abs(remainingMin - minutes) < 1
-                  return (
-                    <button
-                      key={String(minutes)}
-                      onClick={() => setSleepTimer(minutes)}
-                      style={{
-                        padding: '7px 0',
-                        borderRadius: 10,
-                        fontSize: 11,
-                        cursor: 'pointer',
-                        border: active ? '1px solid rgba(255,255,255,0.5)' : '1px solid rgba(255,255,255,0.12)',
-                        background: active ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.04)',
-                        color: active ? '#ffffff' : 'rgba(255,255,255,0.55)',
-                        transition: 'all 0.2s',
-                      }}
-                    >
-                      {minutes === null ? '关闭' : `${minutes} 分钟`}
-                    </button>
-                  )
-                })}
-              </div>
+          <KioskSection title={<>定时停止{remainingMin !== null && <span style={{ color: 'var(--kiosk-accent)' }}> · 剩 {remainingMin} 分钟</span>}</>}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+              {[null, 15, 30, 60].map((minutes) => {
+                const active = minutes === null
+                  ? focusSoundSettings.sleepTimerEndsAt === null
+                  : remainingMin !== null && Math.abs(remainingMin - minutes) < 1
+                return (
+                  <KioskChoice key={String(minutes)} active={active} onClick={() => setSleepTimer(minutes)} compact>
+                    <span style={{ fontSize: 11 }}>{minutes === null ? '关闭' : `${minutes} 分钟`}</span>
+                  </KioskChoice>
+                )
+              })}
             </div>
+          </KioskSection>
 
-            {/* 停止：清空混音并暂停 */}
-            <button
-              onClick={stopAllSound}
-              disabled={!soundIsPlaying}
-              style={{
-                marginTop: 18,
-                width: '100%',
-                height: 42,
-                borderRadius: 12,
-                border: skin.ghostBorder,
-                background: soundIsPlaying ? 'rgba(255,255,255,0.08)' : 'transparent',
-                color: soundIsPlaying ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.3)',
-                fontSize: 14,
-                fontWeight: 500,
-                cursor: soundIsPlaying ? 'pointer' : 'default',
-                transition: 'all 0.2s',
-              }}
-            >
-              {soundIsPlaying ? '清空并停止' : '未在播放'}
-            </button>
+          <KioskFooterButton onClick={stopAllSound} disabled={!soundIsPlaying} muted={soundIsPlaying}>
+            {soundIsPlaying ? '清空并停止' : '未在播放'}
+          </KioskFooterButton>
 
-            <p style={{ marginTop: 14, fontSize: 12, lineHeight: 1.6, color: 'rgba(255,255,255,0.45)' }}>
-              多种音源可同时叠加，每轨独立调节音量；专注页与全屏保持同步，开启"开始专注时自动播放"后入座即有声音。
-            </p>
-          </div>
-        </div>
+          <KioskNote>
+            多种音源可同时叠加，每轨独立调节音量；专注页与全屏保持同步，开启"开始专注时自动播放"后入座即有声音。
+          </KioskNote>
+        </KioskPanel>
       )}
 
       {/* 主内容区 */}
