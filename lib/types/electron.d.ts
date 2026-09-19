@@ -168,6 +168,8 @@ export interface ElectronAPI {
     canceled?: boolean
     message?: string
   }>
+  /** 任务附件：主进程落临时文件后用系统默认程序打开 */
+  openAttachment?: (name: string, data: ArrayBuffer) => Promise<{ ok: boolean; path?: string; error?: string }>
 
   // 凭据安全存储（safeStorage）
   credentialVaultAvailable: () => Promise<boolean>

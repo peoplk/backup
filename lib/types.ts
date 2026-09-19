@@ -64,6 +64,15 @@ export interface SavedFilter {
   createdAt: Date
 }
 
+/** 任务附件元数据；文件二进制内容存 IndexedDB（lib/attachments.ts），key 为附件 id */
+export interface AttachmentMeta {
+  id: string
+  name: string
+  type: string
+  size: number
+  createdAt: string
+}
+
 export interface Task {
   id: string
   /** 最近修改时间戳（ms），由同步层中间件统一盖章 */
@@ -98,6 +107,7 @@ export interface Task {
   archived?: boolean
   energy?: 'low' | 'medium' | 'high'
   estimatedMinutes?: number
+  attachments?: AttachmentMeta[]
 }
 
 export interface TimeEntry {

@@ -1,6 +1,7 @@
 import type { Task, Habit, Goal, Anniversary } from '@/lib/types'
 import type { AppState, AppStoreApi } from '../types'
 import { clearNotifiedKeysWithPrefix } from '@/lib/notified-registry'
+import { deleteTaskAttachments } from '@/lib/attachments'
 
 type SetState = (
   fn: ((state: AppState) => Partial<AppState>) | Partial<AppState>
@@ -56,6 +57,7 @@ export const createTrashSlice = (
     set((state) => {
       for (const item of state.trashedItems) {
         clearNotifiedKeysWithPrefix(`${item.type}-${item.id}`)
+        if (item.type === 'task') deleteTaskAttachments((item.data as Task | null)?.attachments)
       }
       return {
         trashedItems: [],
@@ -90,6 +92,11 @@ export const createTrashSlice = (
     set((state) => {
       const thirtyDaysAgo = new Date()
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+      for (const t of state.trashedItems) {
+        if (t.type === 'task' && !(new Date(t.deletedAt) > thirtyDaysAgo)) {
+          deleteTaskAttachments((t.data as Task | null)?.attachments)
+        }
+      }
       return {
         trashedItems: state.trashedItems.filter(
           (t) => new Date(t.deletedAt) > thirtyDaysAgo
@@ -162,6 +169,12 @@ export const createTrashSlice = (
       sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
       const oneYearAgo = new Date()
       oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+
+      for (const t of state.trashedItems) {
+        if (t.type === 'task' && !(new Date(t.deletedAt) > thirtyDaysAgo)) {
+          deleteTaskAttachments((t.data as Task | null)?.attachments)
+        }
+      }
 
       return {
         pomodoroSessions: state.pomodoroSessions.filter(

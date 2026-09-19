@@ -1202,6 +1202,27 @@ ipcMain.handle('save-text-file', async (event, payload) => {
   }
 })
 
+// 任务附件：渲染进程把 IndexedDB 里的二进制传进来，落临时文件后用系统默认程序打开
+ipcMain.handle('attachment-open', async (event, payload) => {
+  const { name, data } = payload && typeof payload === 'object' ? payload : {}
+  if (!isTrustedSender(event)) return { ok: false, error: '非法调用' }
+  if (typeof name !== 'string' || !name) return { ok: false, error: '缺少文件名' }
+  if (!(data instanceof ArrayBuffer) || data.byteLength === 0) return { ok: false, error: '附件内容为空' }
+  if (data.byteLength > 20 * 1024 * 1024) return { ok: false, error: '附件过大' }
+  try {
+    const fs = require('fs')
+    const safeName = name.replace(/[\\/:*?"<>|]/g, '_')
+    const filePath = path.join(app.getPath('temp'), 'focusflow-attachments', `${Date.now()}-${safeName}`)
+    await fs.promises.mkdir(path.dirname(filePath), { recursive: true })
+    await fs.promises.writeFile(filePath, Buffer.from(data))
+    const error = await shell.openPath(filePath)
+    return error ? { ok: false, error } : { ok: true, path: filePath }
+  } catch (err) {
+    console.error('attachment-open failed', err)
+    return { ok: false, error: err instanceof Error ? err.message : '打开失败' }
+  }
+})
+
 // 凭据安全存储：使用操作系统级加密（Windows DPAPI / macOS Keychain）
 ipcMain.handle('credential-vault-available', () => {
   try {

@@ -94,6 +94,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   printToPDF: (options) => ipcRenderer.invoke('print-to-pdf', options),
   saveTextFile: (options) => ipcRenderer.invoke('save-text-file', options),
+  openAttachment: (name, data) => ipcRenderer.invoke('attachment-open', { name, data }),
   onTrayTogglePomodoro: (callback) => {
     const listener = () => callback()
     ipcRenderer.on('tray-toggle-pomodoro', listener)

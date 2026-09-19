@@ -1,9 +1,19 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useAppStore } from '@/lib/store'
 import { formatDuration } from '@/lib/format'
-import type { Task } from '@/lib/types'
+import type { AttachmentMeta, Task } from '@/lib/types'
+import {
+  MAX_ATTACHMENT_SIZE,
+  deleteAttachmentBlob,
+  downloadAttachment,
+  getAttachmentBlob,
+  makeAttachmentMeta,
+  openAttachment,
+  saveAttachmentBlob,
+} from '@/lib/attachments'
+import { toast } from 'sonner'
 import {
   Sheet,
   SheetContent,
@@ -29,6 +39,13 @@ import {
   Timer,
   Clock,
   Star,
+  Paperclip,
+  Upload,
+  Download,
+  Trash2,
+  FileText,
+  Image as ImageIcon,
+  File as FileIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -81,6 +98,18 @@ function formatDate(date?: Date | string): string {
   return d.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })
 }
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function attachmentIcon(type: string) {
+  if (type.startsWith('image/')) return ImageIcon
+  if (type.startsWith('text/') || type === 'application/pdf') return FileText
+  return FileIcon
+}
+
 interface TaskDetailDrawerProps {
   taskId: string | null
   open: boolean
@@ -94,6 +123,9 @@ export function TaskDetailDrawer({ taskId, open, onOpenChange, onEdit }: TaskDet
   const toggleSubTask = useAppStore((s) => s.toggleSubTask)
   const completeTask = useAppStore((s) => s.completeTask)
   const uncompleteTask = useAppStore((s) => s.uncompleteTask)
+  const updateTask = useAppStore((s) => s.updateTask)
+  const [attBusy, setAttBusy] = useState(false)
+  const attachmentInputRef = useRef<HTMLInputElement>(null)
 
   const relatedTasks = useMemo(() => {
     if (!task) return { blockedBy: [] as Task[], dependsOn: [] as Task[] }
@@ -118,6 +150,61 @@ export function TaskDetailDrawer({ taskId, open, onOpenChange, onEdit }: TaskDet
     ? 100
     : 0
   const enabledReminders = (task.reminders || []).filter((r) => r.enabled)
+  const attachments = task.attachments || []
+
+  const handleAttachFiles = async (files: FileList | null) => {
+    if (!files?.length) return
+    const list = Array.from(files)
+    const skipped = list.filter((f) => f.size > MAX_ATTACHMENT_SIZE)
+    if (skipped.length > 0) {
+      toast.error(`${skipped.map((f) => f.name).join('、')} 超过 ${MAX_ATTACHMENT_SIZE / 1024 / 1024}MB，已跳过`)
+    }
+    const picked = list.filter((f) => f.size <= MAX_ATTACHMENT_SIZE)
+    if (picked.length === 0) return
+    setAttBusy(true)
+    try {
+      const added: AttachmentMeta[] = []
+      for (const file of picked) {
+        const meta = makeAttachmentMeta(file)
+        await saveAttachmentBlob(meta.id, file)
+        added.push(meta)
+      }
+      updateTask(task.id, { attachments: [...(task.attachments || []), ...added] })
+      toast.success(`已添加 ${added.length} 个附件`)
+    } catch {
+      toast.error('附件保存失败')
+    } finally {
+      setAttBusy(false)
+      if (attachmentInputRef.current) attachmentInputRef.current.value = ''
+    }
+  }
+
+  const handleOpenAttachment = async (att: AttachmentMeta) => {
+    const blob = await getAttachmentBlob(att.id)
+    if (!blob) {
+      toast.error('附件数据缺失（文件本体仅存本机，可能来自其他设备的备份）')
+      return
+    }
+    try {
+      await openAttachment(att, blob)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : '打开附件失败')
+    }
+  }
+
+  const handleDownloadAttachment = async (att: AttachmentMeta) => {
+    const blob = await getAttachmentBlob(att.id)
+    if (!blob) {
+      toast.error('附件数据缺失（文件本体仅存本机，可能来自其他设备的备份）')
+      return
+    }
+    downloadAttachment(att, blob)
+  }
+
+  const handleRemoveAttachment = (att: AttachmentMeta) => {
+    updateTask(task.id, { attachments: (task.attachments || []).filter((a) => a.id !== att.id) })
+    deleteAttachmentBlob(att.id).catch(() => undefined)
+  }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -215,6 +302,82 @@ export function TaskDetailDrawer({ taskId, open, onOpenChange, onEdit }: TaskDet
               </div>
               <Progress value={pomodoroProgress} className="h-1.5" />
             </div>
+          </section>
+
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                <Paperclip className="h-3.5 w-3.5" />
+                附件{attachments.length > 0 ? `（${attachments.length}）` : ''}
+              </h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1 text-xs px-2"
+                disabled={attBusy}
+                onClick={() => attachmentInputRef.current?.click()}
+              >
+                <Upload className="h-3.5 w-3.5" />
+                {attBusy ? '保存中…' : '添加'}
+              </Button>
+              <input
+                ref={attachmentInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => handleAttachFiles(e.target.files)}
+              />
+            </div>
+            {attachments.length > 0 ? (
+              <div className="space-y-1.5">
+                {attachments.map((att) => {
+                  const Icon = attachmentIcon(att.type)
+                  return (
+                    <div
+                      key={att.id}
+                      className="flex items-center gap-2.5 rounded-lg border border-border/50 bg-muted/20 px-2.5 py-1.5"
+                    >
+                      <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <button
+                        type="button"
+                        className="min-w-0 flex-1 text-left cursor-pointer"
+                        onClick={() => handleOpenAttachment(att)}
+                        title="用系统默认程序打开"
+                      >
+                        <span className="block text-sm truncate">{att.name}</span>
+                        <span className="block text-2xs text-muted-foreground">
+                          {formatFileSize(att.size)} · {formatDate(att.createdAt)}
+                        </span>
+                      </button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0"
+                        onClick={() => handleDownloadAttachment(att)}
+                        title="下载"
+                        aria-label={`下载 ${att.name}`}
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                        onClick={() => handleRemoveAttachment(att)}
+                        title="删除"
+                        aria-label={`删除 ${att.name}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                暂无附件。支持任意类型文件（单个 ≤ {MAX_ATTACHMENT_SIZE / 1024 / 1024}MB），文件本体仅保存在本机。
+              </p>
+            )}
           </section>
 
           {subTasks.length > 0 && (

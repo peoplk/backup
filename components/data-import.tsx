@@ -1,6 +1,7 @@
 'use client'
 
-import { restoreDataToStore } from '@/lib/data-restore'
+import { importDataToStore } from '@/lib/data-restore'
+import { importTasksFromCSV } from '@/lib/csv'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import {
@@ -23,61 +24,18 @@ export function DataImport() {
   const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const parseCSV = (content: string): Record<string, string>[] => {
-    const lines = content.split(/\r?\n/).filter(line => line.trim())
-    if (lines.length < 2) return []
-    const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''))
-    return lines.slice(1).map(line => {
-      const values: string[] = []
-      let current = ''
-      let inQuotes = false
-      for (const char of line) {
-        if (char === '"') {
-          inQuotes = !inQuotes
-        } else if (char === ',' && !inQuotes) {
-          values.push(current.trim())
-          current = ''
-        } else {
-          current += char
-        }
-      }
-      values.push(current.trim())
-      const row: Record<string, string> = {}
-      headers.forEach((h, i) => { row[h] = values[i] || '' })
-      return row
-    })
-  }
-
   const importCSV = (content: string) => {
-    const rows = parseCSV(content)
-    const addTask = useAppStore.getState().addTask
-    let taskCount = 0
-    rows.forEach(row => {
-      try {
-        addTask({
-          title: row.title || '未命名任务',
-          description: row.description || undefined,
-          type: 'task',
-          priority: (['urgent', 'high', 'medium', 'low'].includes(row.priority) ? row.priority : 'medium') as 'urgent' | 'high' | 'medium' | 'low',
-          status: 'todo',
-          project: row.project || undefined,
-          tags: row.tags ? row.tags.split(';').map(t => t.trim()).filter(Boolean) : [],
-          dueDate: row.dueDate ? new Date(row.dueDate) : undefined,
-        })
-        taskCount++
-      } catch { /* skip invalid rows */ }
-    })
-    const total = taskCount
+    const taskCount = importTasksFromCSV(content, (task) => useAppStore.getState().addTask(task))
     setImportResult({
       success: true,
-      message: total > 0 ? `成功导入 ${total} 条任务` : '未找到可导入的数据',
+      message: taskCount > 0 ? `成功导入 ${taskCount} 条任务` : '未找到可导入的数据',
       counts: { tasks: taskCount },
     })
   }
 
   const importJSON = (content: string) => {
     const data = JSON.parse(content)
-    const counts = restoreDataToStore(data)
+    const counts = importDataToStore(data)
 
     const totalImported = Object.values(counts).reduce((a, b) => a + b, 0)
     setImportResult({
@@ -197,7 +155,7 @@ export function DataImport() {
 
           <div className="rounded-xl bg-muted/50 p-3">
             <p className="text-xs text-muted-foreground">
-              支持 JSON 和 CSV 格式导入。CSV 文件以第一行为表头，支持列：title、description、priority、status、dueDate、project、tags（分号分隔）。导入的数据将追加到现有数据中，不会覆盖。
+              支持 JSON 和 CSV 格式导入。CSV 文件以第一行为表头，支持 title、priority、status、dueDate、project、tags（分号或竖线分隔）、notes 等列，兼容 Todoist / TickTick 导出格式。导入的数据将追加到现有数据中（按 id 去重），不会覆盖。
             </p>
           </div>
         </div>

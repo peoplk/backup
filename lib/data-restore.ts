@@ -77,7 +77,27 @@ const EXTRA_KEYS = [
   'abandonedPomodoroSessions',
 ]
 
-export function restoreDataToStore(data: Record<string, unknown>): RestoreCounts {
+function appendMerge<T>(current: T[], incoming: T[]): { merged: T[]; added: number } {
+  const keyOf = (item: T): string => {
+    if (item && typeof item === 'object' && 'id' in item) {
+      const id = (item as { id?: unknown }).id
+      if (id !== undefined && id !== null) return `i:${String(id)}`
+    }
+    return `v:${JSON.stringify(item)}`
+  }
+  const seen = new Set<string>()
+  for (const item of current) seen.add(keyOf(item))
+  const addedItems: T[] = []
+  for (const item of incoming) {
+    const k = keyOf(item)
+    if (seen.has(k)) continue
+    seen.add(k)
+    addedItems.push(item)
+  }
+  return { merged: addedItems.length > 0 ? [...current, ...addedItems] : current, added: addedItems.length }
+}
+
+function normalizeEntities(data: Record<string, unknown>): { patch: Record<string, any>; counts: RestoreCounts } {
   const counts: RestoreCounts = {
     tasks: 0,
     habits: 0,
@@ -91,7 +111,7 @@ export function restoreDataToStore(data: Record<string, unknown>): RestoreCounts
     pomodoroSessions: 0,
   }
 
-  // 整体替换数组（保留原始 id，避免 habitCheckIns/goals/reminders 关联断裂）
+  // 逐实体字段级缺省回填与日期还原，保留原始 id
   const patch: Record<string, any> = {}
 
   const tasks = asArray(data, 'tasks')
@@ -257,6 +277,13 @@ export function restoreDataToStore(data: Record<string, unknown>): RestoreCounts
     counts.pomodoroSessions = patch.pomodoroSessions.length
   }
 
+  return { patch, counts }
+}
+
+export function restoreDataToStore(data: Record<string, unknown>): RestoreCounts {
+  // 恢复备份：整体替换（保留原始 id，避免 habitCheckIns/goals/reminders 关联断裂）
+  const { patch, counts } = normalizeEntities(data)
+
   if (data.pomodoroSettings && typeof data.pomodoroSettings === 'object') {
     patch.pomodoroSettings = data.pomodoroSettings
   }
@@ -273,6 +300,49 @@ export function restoreDataToStore(data: Record<string, unknown>): RestoreCounts
 
   if (Object.keys(patch).length > 0) {
     ;(useAppStore.setState as (partial: unknown) => void)(patch)
+  }
+
+  return counts
+}
+
+export function importDataToStore(data: Record<string, unknown>): RestoreCounts {
+  // 导入数据：真追加合并，按 id（无 id 则按值）去重，已存在条目保持不变，不覆盖现有数据
+  const { patch, counts } = normalizeEntities(data)
+  const state = useAppStore.getState() as unknown as Record<string, unknown>
+  const mergePatch: Record<string, any> = {}
+
+  for (const [key, incoming] of Object.entries(patch)) {
+    const current = state[key]
+    if (Array.isArray(incoming) && Array.isArray(current)) {
+      const { merged, added } = appendMerge(current, incoming)
+      counts[key] = added
+      if (added > 0) mergePatch[key] = merged
+    } else {
+      mergePatch[key] = incoming
+    }
+  }
+
+  for (const key of EXTRA_KEYS) {
+    if (data[key] === undefined) continue
+    const incoming = deepRestoreDates(data[key])
+    const current = state[key]
+    if (Array.isArray(incoming) && Array.isArray(current)) {
+      const { merged, added } = appendMerge(current as unknown[], incoming as unknown[])
+      if (added > 0) mergePatch[key] = merged
+    } else {
+      mergePatch[key] = incoming
+    }
+  }
+
+  if (data.pomodoroSettings && typeof data.pomodoroSettings === 'object') {
+    mergePatch.pomodoroSettings = data.pomodoroSettings
+  }
+  if (data.pomodoroTimerState && typeof data.pomodoroTimerState === 'object') {
+    mergePatch.pomodoroTimerState = { ...(deepRestoreDates(data.pomodoroTimerState) as object), isRunning: false }
+  }
+
+  if (Object.keys(mergePatch).length > 0) {
+    ;(useAppStore.setState as (partial: unknown) => void)(mergePatch)
   }
 
   return counts
