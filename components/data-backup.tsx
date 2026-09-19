@@ -1,8 +1,17 @@
 'use client'
 
-import { useAppStore } from '@/lib/store'
+import { useState, useEffect } from 'react'
 import { restoreDataToStore } from '@/lib/data-restore'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Switch } from '@/components/ui/switch'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -10,104 +19,49 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { Save, RotateCcw, Clock, Trash2 } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { Save, RotateCcw, Clock, Trash2, Zap } from 'lucide-react'
 import { toast } from 'sonner'
 import { ScrollArea } from '@/components/ui/scroll-area'
-
-interface BackupData {
-  id: string
-  name: string
-  timestamp: number
-  data: string
-}
-
-const BACKUP_STORAGE_KEY = 'focusflow-backups'
-const MAX_BACKUPS = 10
+import {
+  loadBackups,
+  saveBackups,
+  createBackupEntry,
+  getAutoBackupSettings,
+  saveAutoBackupSettings,
+  runAutoBackupIfDue,
+  type BackupEntry,
+  type AutoBackupSettings,
+} from '@/lib/auto-backup'
 
 export function DataBackup() {
-  const [backups, setBackups] = useState<BackupData[]>([])
   const [open, setOpen] = useState(false)
+  const [backups, setBackups] = useState<BackupEntry[]>([])
+  const [autoSettings, setAutoSettings] = useState<AutoBackupSettings>(getAutoBackupSettings)
 
   useEffect(() => {
-    loadBackups()
-  }, [])
+    if (open) setBackups(loadBackups())
+  }, [open])
 
-  const loadBackups = () => {
-    try {
-      const stored = localStorage.getItem(BACKUP_STORAGE_KEY)
-      if (stored) {
-        setBackups(JSON.parse(stored))
-      }
-    } catch {
-      setBackups([])
+  const updateAutoSettings = (patch: Partial<AutoBackupSettings>) => {
+    const next = { ...autoSettings, ...patch }
+    setAutoSettings(next)
+    saveAutoBackupSettings(next)
+    if (patch.enabled) {
+      runAutoBackupIfDue()
+      setBackups(loadBackups())
+      toast.success('自动备份已开启，已创建首份自动备份')
     }
-  }
-
-  const saveBackups = (newBackups: BackupData[]) => {
-    localStorage.setItem(BACKUP_STORAGE_KEY, JSON.stringify(newBackups))
-    setBackups(newBackups)
   }
 
   const createBackup = () => {
-    const store = useAppStore.getState()
-    const data = JSON.stringify({
-      tasks: store.tasks,
-      habits: store.habits,
-      habitCheckIns: store.habitCheckIns,
-      timeEntries: store.timeEntries,
-      pomodoroSessions: store.pomodoroSessions,
-      abandonedPomodoroSessions: store.abandonedPomodoroSessions,
-      pomodoroSettings: store.pomodoroSettings,
-      pomodoroTimerState: { ...store.pomodoroTimerState, isRunning: false },
-      projects: store.projects,
-      anniversaries: store.anniversaries,
-      goals: store.goals,
-      tags: store.tags,
-      reminders: store.reminders,
-      notifications: store.notifications,
-      sidebarCollapsed: store.sidebarCollapsed,
-      activeSmartList: store.activeSmartList,
-      achievements: store.achievements,
-      userLevel: store.userLevel,
-      focusGoals: store.focusGoals,
-      repeatCompletions: store.repeatCompletions,
-      trashedItems: store.trashedItems,
-      taskOrder: store.taskOrder,
-      timeBlocks: store.timeBlocks,
-      distractions: store.distractions,
-      journals: store.journals,
-      taskTemplates: store.taskTemplates,
-      pomodoroStrictMode: store.pomodoroStrictMode,
-      dashboardWidgets: store.dashboardWidgets,
-      darkModeSchedule: store.darkModeSchedule,
-      workingHours: store.workingHours,
-      focusSoundSettings: store.focusSoundSettings,
-      focusPresets: store.focusPresets,
-      focusShield: store.focusShield,
-      dailyReviewSettings: store.dailyReviewSettings,
-      savedFilters: store.savedFilters,
-      activeSavedFilterId: store.activeSavedFilterId,
-    })
-
-    const backup: BackupData = {
-      id: `backup-${Date.now()}`,
-      name: `备份 ${new Date().toLocaleString('zh-CN')}`,
-      timestamp: Date.now(),
-      data,
-    }
-
-    const newBackups = [backup, ...backups].slice(0, MAX_BACKUPS)
-    saveBackups(newBackups)
+    setBackups(createBackupEntry(false))
     toast.success('备份创建成功')
   }
 
-  const restoreBackup = (backup: BackupData) => {
+  const restoreBackup = (backup: BackupEntry) => {
     try {
       const data = JSON.parse(backup.data)
-
       restoreDataToStore(data)
-
       toast.success('备份恢复成功')
       setOpen(false)
     } catch {
@@ -116,8 +70,9 @@ export function DataBackup() {
   }
 
   const deleteBackup = (id: string) => {
-    const newBackups = backups.filter(b => b.id !== id)
-    saveBackups(newBackups)
+    const next = loadBackups().filter((b) => b.id !== id)
+    saveBackups(next)
+    setBackups(next)
     toast.success('备份已删除')
   }
 
@@ -136,18 +91,68 @@ export function DataBackup() {
           备份管理
         </Button>
       </DialogTrigger>
-      <DialogContent aria-describedby={undefined} className="sm:max-w-[500px]">
+      <DialogContent aria-describedby={undefined} className="sm:max-w-[520px]">
         <DialogHeader>
           <DialogTitle>数据备份与恢复</DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-2">
+          <div className="rounded-xl border p-3 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Zap className="h-4 w-4 text-primary" />
+                <div>
+                  <p className="text-sm font-medium">自动备份</p>
+                  <p className="text-xs text-muted-foreground">应用运行期间按间隔自动创建本地快照</p>
+                </div>
+              </div>
+              <Switch
+                checked={autoSettings.enabled}
+                onCheckedChange={(checked) => updateAutoSettings({ enabled: checked })}
+                aria-label="自动备份"
+              />
+            </div>
+            {autoSettings.enabled && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs text-muted-foreground">备份间隔</label>
+                  <Select
+                    value={String(autoSettings.intervalHours)}
+                    onValueChange={(v) => updateAutoSettings({ intervalHours: Number(v) || 24 })}
+                  >
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent align="center">
+                      <SelectItem value="6">每 6 小时</SelectItem>
+                      <SelectItem value="12">每 12 小时</SelectItem>
+                      <SelectItem value="24">每天</SelectItem>
+                      <SelectItem value="72">每 3 天</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs text-muted-foreground">自动备份保留</label>
+                  <Select
+                    value={String(autoSettings.keep)}
+                    onValueChange={(v) => updateAutoSettings({ keep: Number(v) || 10 })}
+                  >
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent align="center">
+                      <SelectItem value="5">5 份</SelectItem>
+                      <SelectItem value="10">10 份</SelectItem>
+                      <SelectItem value="20">20 份</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+          </div>
+
           <Button onClick={createBackup} className="w-full gap-2">
             <Save className="h-4 w-4" />
             创建新备份
           </Button>
 
           <div className="text-sm text-muted-foreground">
-            最多保留 {MAX_BACKUPS} 个备份，旧备份会自动删除
+            手动备份始终保留，自动备份按上方设置滚动覆盖
           </div>
 
           <ScrollArea className="h-[300px] rounded-lg border">
@@ -161,7 +166,10 @@ export function DataBackup() {
                 {backups.map((backup) => (
                   <div key={backup.id} className="flex items-center justify-between p-3 hover:bg-muted/50">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{backup.name}</p>
+                      <p className="text-sm font-medium truncate flex items-center gap-2">
+                        {backup.name}
+                        {backup.auto && <Badge variant="secondary" className="text-2xs shrink-0">自动</Badge>}
+                      </p>
                       <p className="text-xs text-muted-foreground">
                         {formatBackupSize(backup.data)}
                       </p>
@@ -181,8 +189,9 @@ export function DataBackup() {
                         variant="ghost"
                         onClick={() => deleteBackup(backup.id)}
                         className="text-destructive hover:text-destructive"
+                        aria-label="删除备份"
                       >
-                        <Trash2 className="h-3 w-3" />
+                        <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   </div>

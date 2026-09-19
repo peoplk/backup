@@ -2,7 +2,7 @@
 
 import { useAppStore } from '@/lib/store'
 import { useS3SyncStore, pullDataFromS3, resolveS3Conflict } from '@/lib/s3-store'
-import { getIsS3Configured, getS3Config, saveS3Config, S3_PRESET_SERVICES, type S3ConfigInput } from '@/lib/s3-sync'
+import { getIsS3Configured, getS3Config, saveS3Config, hasSyncPassphrase, S3_PRESET_SERVICES, type S3ConfigInput } from '@/lib/s3-sync'
 import { getCredentialVaultStatus, getCredentialVaultStatusAsync } from '@/lib/credential-vault'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { useShallow } from 'zustand/react/shallow'
@@ -519,9 +519,13 @@ export function SettingsView() {
     forcePathStyle: true,
     remoteKey: 'focusflow-sync.json',
     syncInterval: 30,
+    compress: false,
+    encrypt: false,
+    syncPassphrase: '',
   })
   const [showS3Config, setShowS3Config] = useState(false)
   const [showS3Secret, setShowS3Secret] = useState(false)
+  const [showS3Passphrase, setShowS3Passphrase] = useState(false)
   const [s3TestResult, setS3TestResult] = useState<{ success: boolean; message: string } | null>(null)
 
   useEffect(() => {
@@ -540,6 +544,9 @@ export function SettingsView() {
         forcePathStyle: s3.forcePathStyle ?? true,
         remoteKey: s3.remoteKey || 'focusflow-sync.json',
         syncInterval: s3.syncInterval || 30,
+        compress: s3.compress ?? false,
+        encrypt: s3.encrypt ?? false,
+        syncPassphrase: '',
       })
     }
   }, [])
@@ -1706,6 +1713,48 @@ export function SettingsView() {
                         checked={s3ConfigForm.forcePathStyle ?? true}
                         onCheckedChange={(checked) => setS3ConfigForm((p) => ({ ...p, forcePathStyle: checked }))}
                       />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <label className="text-xs font-medium">传输压缩（gzip）</label>
+                        <p className="text-2xs text-muted-foreground">减小同步体积，旧版本客户端可能无法读取</p>
+                      </div>
+                      <Switch
+                        checked={s3ConfigForm.compress ?? false}
+                        onCheckedChange={(checked) => setS3ConfigForm((p) => ({ ...p, compress: checked }))}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <label className="text-xs font-medium">端到端加密（AES-256-GCM）</label>
+                          <p className="text-2xs text-muted-foreground">口令仅存本机，云服务商无法读取内容；丢失口令无法恢复云端数据</p>
+                        </div>
+                        <Switch
+                          checked={s3ConfigForm.encrypt ?? false}
+                          onCheckedChange={(checked) => setS3ConfigForm((p) => ({ ...p, encrypt: checked }))}
+                        />
+                      </div>
+                      {s3ConfigForm.encrypt && (
+                        <div className="relative">
+                          <Input
+                            type={showS3Passphrase ? 'text' : 'password'}
+                            placeholder={hasSyncPassphrase() ? '已保存口令（留空保持不变，输入则覆盖）' : '设置同步口令'}
+                            value={s3ConfigForm.syncPassphrase || ''}
+                            onChange={(e) => setS3ConfigForm((p) => ({ ...p, syncPassphrase: e.target.value }))}
+                            className="h-8 text-xs pr-9"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowS3Passphrase(!showS3Passphrase)}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          >
+                            {showS3Passphrase ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex gap-2">

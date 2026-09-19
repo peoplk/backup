@@ -29,6 +29,7 @@ import { useAppStore } from '@/lib/store'
 import { useShallow } from 'zustand/react/shallow'
 import { useAutoNotifications } from '@/lib/use-auto-notifications'
 import { useMainReminderSync } from '@/lib/main-reminder-sync'
+import { useAutoBackup } from '@/lib/auto-backup'
 import { ensurePomodoroEngine } from '@/lib/pomodoro-engine'
 import { useAutoCleanup } from '@/lib/hooks'
 import { useDarkModeSchedule } from '@/lib/use-dark-mode-schedule'
@@ -70,6 +71,7 @@ export function DesktopApp() {
   useKeyboardShortcuts()
   useAutoNotifications()
   useMainReminderSync()
+  useAutoBackup()
   useAutoCleanup()
   useDarkModeSchedule()
   useIdleDetector()

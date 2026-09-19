@@ -1,8 +1,10 @@
 // S3 compatible sync layer using AWS Signature V4
 import { sealSecret, unsealSecret } from '@/lib/credential-vault'
+import { packSyncPayload, unpackSyncPayload } from '@/lib/sync/envelope'
 
 const S3_CONFIG_KEY = 'focusflow-s3-config'
 const S3_SECRET_KEY = 'focusflow-s3-secret' // 密封后的 AccessKey Secret，安全存储
+const S3_PASSPHRASE_KEY = 'focusflow-s3-sync-passphrase' // 密封后的端到端加密口令
 const DEFAULT_REMOTE_KEY = 'focusflow-sync.json'
 const DEFAULT_POLL_INTERVAL = 30
 
@@ -15,6 +17,10 @@ export interface S3ConfigInput {
   forcePathStyle?: boolean
   remoteKey?: string
   syncInterval?: number
+  compress?: boolean
+  encrypt?: boolean
+  /** 仅写入：端到端加密口令，读取接口永不返回 */
+  syncPassphrase?: string
 }
 
 interface StoredConfig {
@@ -26,6 +32,8 @@ interface StoredConfig {
   forcePathStyle: boolean
   remoteKey: string
   syncInterval: number
+  compress: boolean
+  encrypt: boolean
 }
 
 export type S3Preset = {
@@ -84,6 +92,8 @@ let currentConfig: StoredConfig | null = (() => {
       forcePathStyle: parsed.forcePathStyle ?? true,
       remoteKey: parsed.remoteKey || DEFAULT_REMOTE_KEY,
       syncInterval: parsed.syncInterval || DEFAULT_POLL_INTERVAL,
+      compress: parsed.compress === true,
+      encrypt: parsed.encrypt === true,
     }
   } catch {
     return null
@@ -120,6 +130,44 @@ async function resolveActiveSecret(): Promise<string> {
   return secretResolvePromise
 }
 
+// 端到端加密口令：密封存储 + 惰性解析
+let resolvedPassphrase: string | null = null
+let passphraseResolvePromise: Promise<string> | null = null
+
+export function hasSyncPassphrase(): boolean {
+  if (resolvedPassphrase) return true
+  if (typeof window === 'undefined') return false
+  return !!localStorage.getItem(S3_PASSPHRASE_KEY)
+}
+
+async function resolveSyncPassphrase(): Promise<string> {
+  if (resolvedPassphrase !== null) return resolvedPassphrase
+  if (passphraseResolvePromise) return passphraseResolvePromise
+  passphraseResolvePromise = (async () => {
+    try {
+      const sealed = typeof window !== 'undefined' ? localStorage.getItem(S3_PASSPHRASE_KEY) : null
+      resolvedPassphrase = sealed ? await unsealSecret(sealed) : ''
+    } catch {
+      resolvedPassphrase = ''
+    }
+    return resolvedPassphrase
+  })()
+  return passphraseResolvePromise
+}
+
+function storeSyncPassphrase(plain: string): void {
+  resolvedPassphrase = plain
+  passphraseResolvePromise = null
+  if (typeof window === 'undefined') return
+  if (!plain) {
+    localStorage.removeItem(S3_PASSPHRASE_KEY)
+    return
+  }
+  void (async () => {
+    localStorage.setItem(S3_PASSPHRASE_KEY, await sealSecret(plain))
+  })()
+}
+
 function initS3(config: S3ConfigInput): boolean {
   if (!config.endpoint?.trim() || !config.bucket?.trim() || !config.accessKeyId?.trim() || !config.secretAccessKey?.trim()) {
     return false
@@ -133,9 +181,14 @@ function initS3(config: S3ConfigInput): boolean {
     forcePathStyle: config.forcePathStyle ?? true,
     remoteKey: config.remoteKey?.trim() || DEFAULT_REMOTE_KEY,
     syncInterval: config.syncInterval || DEFAULT_POLL_INTERVAL,
+    compress: config.compress === true,
+    encrypt: config.encrypt === true,
   }
   resolvedSecret = config.secretAccessKey
   secretResolvePromise = null
+  if (config.syncPassphrase !== undefined) {
+    storeSyncPassphrase(config.syncPassphrase.trim())
+  }
   return true
 }
 
@@ -155,6 +208,10 @@ export function saveS3Config(config: S3ConfigInput): boolean {
   if (!config.secretAccessKey?.trim() && currentConfig) {
     config = { ...config, secretAccessKey: resolvedSecret || currentConfig.secretAccessKey || '' }
   }
+  // 同理：未填写口令时保持已密封的口令不变
+  if (!config.syncPassphrase?.trim()) {
+    config = { ...config, syncPassphrase: undefined }
+  }
   if (!initS3(config)) return false
   if (typeof window !== 'undefined') {
     const { secretAccessKey, ...rest } = currentConfig as StoredConfig
@@ -171,9 +228,12 @@ export function clearS3Config(): void {
   currentConfig = null
   resolvedSecret = null
   secretResolvePromise = null
+  resolvedPassphrase = null
+  passphraseResolvePromise = null
   if (typeof window !== 'undefined') {
     localStorage.removeItem(S3_CONFIG_KEY)
     localStorage.removeItem(S3_SECRET_KEY)
+    localStorage.removeItem(S3_PASSPHRASE_KEY)
   }
 }
 
@@ -193,11 +253,15 @@ export function reinitializeS3(): boolean {
       forcePathStyle: parsed.forcePathStyle ?? true,
       remoteKey: parsed.remoteKey || DEFAULT_REMOTE_KEY,
       syncInterval: parsed.syncInterval || DEFAULT_POLL_INTERVAL,
+      compress: parsed.compress === true,
+      encrypt: parsed.encrypt === true,
     }
     // 触发懒解析，从密封存储中恢复明文 Secret
     resolvedSecret = null
     secretResolvePromise = null
     void resolveActiveSecret()
+    resolvedPassphrase = null
+    passphraseResolvePromise = null
     return true
   } catch {
     return false
@@ -403,6 +467,8 @@ export async function testS3Connection(config: S3ConfigInput): Promise<{ success
     forcePathStyle: config.forcePathStyle ?? true,
     remoteKey: config.remoteKey?.trim() || DEFAULT_REMOTE_KEY,
     syncInterval: config.syncInterval || DEFAULT_POLL_INTERVAL,
+    compress: config.compress === true,
+    encrypt: config.encrypt === true,
   }
 
   try {
@@ -441,7 +507,11 @@ export async function syncToS3(_userId: string, data: Record<string, unknown>): 
   }
   emitStatus({ status: 'syncing', error: null })
   try {
-    const body = JSON.stringify({ data, updatedAt: new Date().toISOString() })
+    const body = await packSyncPayload(data, {
+      compress: currentConfig.compress,
+      encrypt: currentConfig.encrypt,
+      passphrase: currentConfig.encrypt ? await resolveSyncPassphrase() : undefined,
+    })
     const res = await s3Request('PUT', currentConfig, currentConfig.remoteKey, { body, contentType: 'application/json' })
     if (!res.ok && res.status !== 200 && res.status !== 201) {
       const errText = await res.text().catch(() => '')
@@ -466,8 +536,8 @@ export async function syncFromS3(_userId: string): Promise<Record<string, unknow
     const code = errText.match(/<Code>([^<]+)<\/Code>/)?.[1]
     throw new Error(`下载失败：${res.status}${code ? ' · ' + code : ''}`)
   }
-  const json = (await res.json()) as { data?: Record<string, unknown> } | null
-  return json?.data ?? null
+  const json = await res.json()
+  return await unpackSyncPayload(json, await resolveSyncPassphrase())
 }
 
 export function subscribeToS3(userId: string, callback: (data: Record<string, unknown>) => void): () => void {
