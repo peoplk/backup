@@ -48,12 +48,28 @@ export const createTaskSlice = (
       tasks: [...state.tasks, newTask],
     }))
   },
-  updateTask: (id: string, updates: Partial<Task>) =>
+  updateTask: (id: string, updates: Partial<Task>) => {
+    const task = get().tasks.find((t) => t.id === id)
+    if (!task) return
+    // 状态改为 done 必须走 completeTask 门禁（依赖检查、重复周期滚动、完成副作用）
+    if (updates.status === 'done' && task.status !== 'done') {
+      const rest = { ...updates }
+      delete rest.status
+      delete rest.completedAt
+      if (Object.keys(rest).length > 0) {
+        set((state) => ({
+          tasks: state.tasks.map((t) => (t.id === id ? { ...t, ...rest } : t)),
+        }))
+      }
+      get().completeTask(id)
+      return
+    }
     set((state) => ({
       tasks: state.tasks.map((t) =>
         t.id === id ? { ...t, ...updates } : t
       ),
-    })),
+    }))
+  },
   deleteTask: (id: string) =>
     set((state) => {
       const task = state.tasks.find((t) => t.id === id)
@@ -425,14 +441,8 @@ export const createTaskSlice = (
       return { tasks: updatedTasks }
     }),
   batchCompleteTasks: (ids: string[]) => {
-    set((state) => ({
-      tasks: state.tasks.map((t) =>
-        ids.includes(t.id)
-          ? { ...t, status: 'done' as const, completedAt: new Date() }
-          : t
-      ),
-    }))
-    ids.forEach((id) => triggerTaskCompletionEffects(id))
+    // 逐个走 completeTask：保留依赖门禁、重复任务滚动与完成副作用
+    for (const id of ids) get().completeTask(id)
   },
   batchDeleteTasks: (ids: string[]) =>
     set((state) => {
@@ -600,6 +610,25 @@ export const createTaskSlice = (
       const dependsOnTask = state.tasks.find(t => t.id === dependsOnTaskId)
       
       if (!task || !dependsOnTask) return state
+      if (taskId === dependsOnTaskId) return state
+      if (task.dependsOn?.includes(dependsOnTaskId)) return state
+
+      // 环检测：若 dependsOnTaskId 已（间接）依赖 taskId，则新增边会构成循环依赖
+      let hasCycle = false
+      const visited = new Set<string>([taskId])
+      const stack = [dependsOnTaskId]
+      while (stack.length > 0) {
+        const current = stack.pop()!
+        if (current === taskId) {
+          hasCycle = true
+          break
+        }
+        if (visited.has(current)) continue
+        visited.add(current)
+        const node = state.tasks.find(t => t.id === current)
+        for (const depId of node?.dependsOn || []) stack.push(depId)
+      }
+      if (hasCycle) return state
       
       const newDependsOn = [...(task.dependsOn || []), dependsOnTaskId]
       const newBlockedBy = [...(dependsOnTask.blockedBy || []), taskId]

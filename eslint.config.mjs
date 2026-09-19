@@ -1,4 +1,6 @@
 import nextConfig from 'eslint-config-next'
+import react from 'eslint-plugin-react'
+import reactHooks from 'eslint-plugin-react-hooks'
 
 /** @type {import('eslint').Linter.Config[]} */
 const eslintConfig = [
@@ -16,6 +18,8 @@ const eslintConfig = [
     ],
   },
   {
+    // flat config 的插件按对象解析：此处引用 react-hooks 规则需在本对象内注册插件
+    plugins: { 'react-hooks': reactHooks, react },
     rules: {
       // react-hooks 实验性严格规则：仓库中存在大量历史代码不符合，先降级为警告便于逐步重构
       'react-hooks/rules-of-hooks': 'warn',

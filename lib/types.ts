@@ -90,8 +90,6 @@ export interface Task {
   repeatTemplateId?: string
   isRepeatInstance?: boolean
   reminders?: TaskReminder[]
-  color?: string
-  location?: string
   notes?: string
   dependsOn?: string[]
   blockedBy?: string[]

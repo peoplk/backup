@@ -11,7 +11,7 @@ interface SavedFiltersBarProps {
 }
 
 function isCriteriaEmpty(c: FilterCriteria): boolean {
-  return !c.search && !c.priority && !c.status && !c.tag && !c.type && !c.date && !c.project
+  return !c.search && !c.priority && !c.status && !c.tag && !c.type && !c.date && !c.project && !c.viewMode
 }
 
 function isEqualCriteria(a: FilterCriteria, b: FilterCriteria): boolean {
@@ -22,7 +22,8 @@ function isEqualCriteria(a: FilterCriteria, b: FilterCriteria): boolean {
     (a.tag || '') === (b.tag || '') &&
     (a.type || '') === (b.type || '') &&
     (a.date || '') === (b.date || '') &&
-    (a.project || '') === (b.project || '')
+    (a.project || '') === (b.project || '') &&
+    (a.viewMode || '') === (b.viewMode || '')
   )
 }
 
@@ -35,6 +36,7 @@ function describeCriteria(c: FilterCriteria): string {
   if (c.type) parts.push(`类型=${c.type}`)
   if (c.date) parts.push(`日期=${c.date}`)
   if (c.project) parts.push(`项目=${c.project}`)
+  if (c.viewMode) parts.push(`视图=${c.viewMode === 'list' ? '列表' : c.viewMode === 'kanban' ? '看板' : '四象限'}`)
   return parts.join(' · ')
 }
 

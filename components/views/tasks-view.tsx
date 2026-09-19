@@ -374,7 +374,6 @@ export function TasksView() {
     repeatEndDate: '',
     repeatEndCount: 10,
     reminders: [] as TaskReminder[],
-    color: APP_COLORS.blue as string,
     energy: 'medium' as Task['energy'],
   })
   const [newTag, setNewTag] = useState('')
@@ -684,7 +683,6 @@ export function TasksView() {
       isAllDay: newTask.isAllDay,
       repeatRule,
       reminders: newTask.reminders,
-      color: newTask.color,
       energy: newTask.energy,
       status: 'todo',
     })
@@ -732,7 +730,6 @@ export function TasksView() {
       isAllDay: newTask.isAllDay,
       repeatRule,
       reminders: newTask.reminders,
-      color: newTask.color,
       energy: newTask.energy,
     })
     resetNewTask()
@@ -762,7 +759,6 @@ export function TasksView() {
       repeatEndDate: '',
       repeatEndCount: 10,
       reminders: [],
-      color: APP_COLORS.blue,
       energy: 'medium',
     })
     setNewTag('')
@@ -791,7 +787,6 @@ export function TasksView() {
       repeatEndDate: task.repeatRule?.endDate ? new Date(task.repeatRule.endDate).toISOString().split('T')[0] : '',
       repeatEndCount: task.repeatRule?.endAfterCount || 10,
       reminders: task.reminders ? [...task.reminders] : [],
-      color: task.color || APP_COLORS.blue,
       energy: task.energy || 'medium',
     })
     setIsAddDialogOpen(true)
@@ -899,7 +894,6 @@ export function TasksView() {
       repeatEndDate: '',
       repeatEndCount: 10,
       reminders: [],
-      color: APP_COLORS.blue,
       energy: 'medium',
     })
     setIsAddDialogOpen(true)
@@ -2065,6 +2059,7 @@ export function TasksView() {
                       type: filterType !== 'all' ? filterType : undefined,
                       project: filterProject !== 'all' ? filterProject : undefined,
                       date: filterDate ? filterDate.toISOString().split('T')[0] : undefined,
+                      viewMode,
                     }}
                     onApply={(c) => {
                       setSearchQuery(c.search || '')
@@ -2074,6 +2069,7 @@ export function TasksView() {
                       setFilterType(c.type || 'all')
                       applyProjectFilter(c.project || 'all')
                       setFilterDate(c.date ? new Date(c.date) : null)
+                      if (c.viewMode) setViewMode(c.viewMode)
                     }}
                   />
                 </div>
@@ -2478,7 +2474,6 @@ export function TasksView() {
                     repeatEndDate: ctxTask.repeatRule?.endDate ? new Date(ctxTask.repeatRule.endDate).toISOString().split('T')[0] : '',
                     repeatEndCount: ctxTask.repeatRule?.endAfterCount || 10,
                     reminders: ctxTask.reminders ? [...ctxTask.reminders] : [],
-                    color: ctxTask.color || APP_COLORS.blue,
                     energy: ctxTask.energy || 'medium',
                   })
                   setIsAddDialogOpen(true)
