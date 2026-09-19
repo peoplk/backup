@@ -157,8 +157,14 @@ const timeBlocks = useAppStore((s) => s.timeBlocks)
   }, [pomodoroSessions, todayStr])
 
   const todayFocusSeconds = useMemo(() => {
-    return todayPomodoros.reduce((acc, s) => acc + s.duration, 0)
-  }, [todayPomodoros])
+    return pomodoroSessions
+      .filter(
+        (s) =>
+          new Date(s.completedAt).toDateString() === todayStr &&
+          (s.type === 'work' || s.type === 'stopwatch')
+      )
+      .reduce((acc, s) => acc + s.duration, 0)
+  }, [pomodoroSessions, todayStr])
 
   const completedToday = useMemo(() => {
     return tasks.filter(
@@ -228,7 +234,11 @@ export function useWeekStats() {
     ).length
 
     const weekFocusSeconds = pomodoroSessions
-      .filter((s) => new Date(s.completedAt) >= startOfWeek && s.type === 'work')
+      .filter(
+        (s) =>
+          new Date(s.completedAt) >= startOfWeek &&
+          (s.type === 'work' || s.type === 'stopwatch')
+      )
       .reduce((acc, s) => acc + s.duration, 0)
     const weekHours = weekFocusSeconds / 3600
 
@@ -251,7 +261,7 @@ export function useStreak() {
   const pomodoroSessions = useAppStore((s) => s.pomodoroSessions)
 
   const streak = useMemo(() => {
-    const allWorkSessions = pomodoroSessions.filter((s) => s.type === 'work')
+    const allWorkSessions = pomodoroSessions.filter((s) => s.type === 'work' || s.type === 'stopwatch')
     const dates = [...new Set(allWorkSessions.map((s) => new Date(s.completedAt).toDateString()))]
     dates.sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
     const dateSet = new Set(dates)

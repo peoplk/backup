@@ -115,7 +115,7 @@ export interface TimeEntry {
 
 export interface PomodoroSession {
   id: string
-  type: 'work' | 'short-break' | 'long-break'
+  type: 'work' | 'short-break' | 'long-break' | 'stopwatch'
   duration: number
   completedAt: Date
   taskId?: string

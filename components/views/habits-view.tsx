@@ -47,6 +47,8 @@ import {
   Award,
   Zap,
   MoreVertical,
+  Archive,
+  ArchiveRestore,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -179,6 +181,37 @@ export function HabitsView() {
   const filteredHabits = selectedCategory === 'all' 
     ? habitStats.activeHabits 
     : habitStats.activeHabits.filter(h => h.category === selectedCategory)
+
+  const archivedHabits = useMemo(() => habits.filter((h) => h.archived), [habits])
+
+  const handleArchive = (id: string, name: string) => {
+    updateHabit(id, { archived: true })
+    toast.success('习惯已归档', {
+      description: name,
+      action: {
+        label: '恢复',
+        onClick: () => updateHabit(id, { archived: false }),
+      },
+      duration: 6000,
+    })
+  }
+
+  const handleRestore = (id: string, name: string) => {
+    updateHabit(id, { archived: false })
+    toast.success('习惯已恢复', { description: name })
+  }
+
+  const onDeleteHabitPermanently = (id: string, name: string) => {
+    deleteHabit(id)
+    toast.success('习惯已删除', {
+      description: name,
+      action: {
+        label: '撤销',
+        onClick: () => undoLastDelete(),
+      },
+      duration: 5000,
+    })
+  }
 
   const weeklyChartData = useMemo(() => {
     const data = []
@@ -660,22 +693,64 @@ export function HabitsView() {
                     })
                     setIsAddDialogOpen(true)
                   }}
-                  onDelete={(id, name) => {
-                    deleteHabit(id)
-                    toast.success('习惯已删除', {
-                      description: name,
-                      action: {
-                        label: '撤销',
-                        onClick: () => undoLastDelete(),
-                      },
-                      duration: 5000,
-                    })
-                  }}
+                  onDelete={onDeleteHabitPermanently}
                   onCheckIn={handleCheckIn}
                   onStreakFreeze={useStreakFreeze}
+                  onArchive={handleArchive}
                 />
               ))}
             </div>
+          )}
+
+          {archivedHabits.length > 0 && (
+            <Card className="border-dashed">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2 text-muted-foreground">
+                  <Archive className="h-4 w-4" />
+                  已归档（{archivedHabits.length}）
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <p className="text-xs text-muted-foreground mb-2">归档的习惯不参与打卡、提醒与统计</p>
+                {archivedHabits.map((habit) => (
+                  <div
+                    key={habit.id}
+                    className="flex items-center gap-3 rounded-lg border border-border/50 px-3 py-2"
+                  >
+                    <div
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-lg opacity-60"
+                      style={{ backgroundColor: `${habit.color}20` }}
+                    >
+                      {habit.icon}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{habit.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        连胜纪录 {habit.bestStreak || habitStats.getHabitStreak(habit.id)} 天
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 gap-1 text-xs"
+                      onClick={() => handleRestore(habit.id, habit.name)}
+                    >
+                      <ArchiveRestore className="h-3.5 w-3.5" />
+                      恢复
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1 text-xs text-destructive hover:text-destructive"
+                      onClick={() => onDeleteHabitPermanently(habit.id, habit.name)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      删除
+                    </Button>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
           )}
         </ViewTabsContent>
 
@@ -904,6 +979,7 @@ interface HabitCardProps {
   onDelete: (id: string, name: string) => void
   onCheckIn: (habitId: string, completed: boolean, value?: number) => void
   onStreakFreeze: (habitId: string) => void
+  onArchive: (id: string, name: string) => void
 }
 
 function HabitCard({
@@ -916,6 +992,7 @@ function HabitCard({
   onDelete,
   onCheckIn,
   onStreakFreeze,
+  onArchive,
 }: HabitCardProps) {
   const [inputValue, setInputValue] = useState('')
   const streak = habitStats.getHabitStreak(habit.id)
@@ -993,6 +1070,10 @@ function HabitCard({
                 <DropdownMenuItem onClick={() => onEdit(habit)}>
                   <Edit className="mr-2 h-4 w-4" />
                   编辑
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onArchive(habit.id, habit.name)}>
+                  <Archive className="mr-2 h-4 w-4" />
+                  归档
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="text-destructive focus:text-destructive"

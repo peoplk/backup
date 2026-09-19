@@ -180,9 +180,9 @@ export function TimerSidebar({
                         </span>
                         <span className={cn(
                           'shrink-0 text-xs px-1.5 py-0.5 rounded',
-                          session.type === 'work' ? 'bg-chart-1/20 text-chart-1' : 'bg-chart-2/20 text-chart-2'
+                          session.type === 'work' ? 'bg-chart-1/20 text-chart-1' : session.type === 'stopwatch' ? 'bg-chart-4/20 text-chart-4' : 'bg-chart-2/20 text-chart-2'
                         )}>
-                          {session.type === 'work' ? '专注' : '休息'}
+                          {session.type === 'work' ? '专注' : session.type === 'stopwatch' ? '秒表' : '休息'}
                         </span>
                       </div>
                       <span className="font-medium">{Math.round(session.duration / 60)} 分钟</span>

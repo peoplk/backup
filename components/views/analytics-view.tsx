@@ -95,7 +95,7 @@ interface DayStatsType {
   sessionList: Array<{
     id: string
     startTime: Date
-    type: 'work' | 'short-break' | 'long-break'
+    type: 'work' | 'short-break' | 'long-break' | 'stopwatch'
     duration: number
     taskTitle?: string
     projectName?: string
@@ -438,9 +438,10 @@ export function AnalyticsView() {
     const dayEnd = dayRange.end
     const dayAllSessions = pomodoroSessions.filter(s => { const d = new Date(s.completedAt); return d >= dayStart && d <= dayEnd })
     const dayWork = dayAllSessions.filter(s => s.type === 'work')
+    const dayFocusSessions = dayAllSessions.filter(s => s.type === 'work' || s.type === 'stopwatch')
     const dayShortBreak = dayAllSessions.filter(s => s.type === 'short-break')
     const dayLongBreak = dayAllSessions.filter(s => s.type === 'long-break')
-    const focusMinutes = dayWork.reduce((acc, s) => acc + s.duration, 0) / 60
+    const focusMinutes = dayFocusSessions.reduce((acc, s) => acc + s.duration, 0) / 60
     const breakMinutes = dayShortBreak.length * 5 + dayLongBreak.length * 15
     const dayDistractions = distractions.filter(d => { const dt = new Date(d.timestamp); return dt >= dayStart && dt <= dayEnd }).length
     const dayTasksCompleted = tasks.filter(t => { if (!t.completedAt) return false; const c = new Date(t.completedAt); return c >= dayStart && c <= dayEnd })
@@ -1305,9 +1306,10 @@ function DayAnalyticsSection({ selectedDate, isSelectedToday, isSelectedFuture, 
                   {dailyStats.sessionList.length === 0 && <p className="text-sm text-muted-foreground text-center py-8">暂无会话</p>}
                   {dailyStats.sessionList.map(s => {
                     const isWork = s.type === 'work'
+                    const isStopwatch = s.type === 'stopwatch'
                     const isLong = s.type === 'long-break'
-                    const Icon = isWork ? Play : Coffee
-                    const colorClass = isWork ? 'bg-blue-500/10 text-blue-600 border-blue-500/20' : isLong ? 'bg-purple-500/10 text-purple-600 border-purple-500/20' : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                    const Icon = isWork || isStopwatch ? Play : Coffee
+                    const colorClass = isStopwatch ? 'bg-amber-500/10 text-amber-600 border-amber-500/20' : isWork ? 'bg-blue-500/10 text-blue-600 border-blue-500/20' : isLong ? 'bg-purple-500/10 text-purple-600 border-purple-500/20' : 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
                     return (
                       <div key={s.id} className="flex items-start gap-3 rounded-lg border p-2.5 hover:border-primary/30 transition-colors">
                         <div className={cn('rounded-md p-1.5 border', colorClass)}><Icon className="h-3.5 w-3.5" /></div>

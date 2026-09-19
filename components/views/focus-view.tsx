@@ -2,23 +2,28 @@
 
 import { useState } from 'react'
 import { ViewTabs, ViewTabsContent, ViewTabsList, ViewTabsTrigger } from '@/components/ui/view-tabs'
-import { Timer, Clock, Shield } from 'lucide-react'
+import { Timer, Clock, Shield, Gauge } from 'lucide-react'
 import { PomodoroTimer } from '@/components/focus/pomodoro-timer'
+import { StopwatchTimer } from '@/components/focus/stopwatch-timer'
 import { TimeTracker } from '@/components/focus/time-tracker'
 import { FocusShield } from '@/components/focus/focus-shield'
 
 export function FocusView() {
-  const [activeTab, setActiveTab] = useState<'pomodoro' | 'tracker' | 'shield'>('pomodoro')
+  const [activeTab, setActiveTab] = useState<'pomodoro' | 'stopwatch' | 'tracker' | 'shield'>('pomodoro')
 
   return (
     <div className="space-y-6 view-enter">
-      <p className="text-muted-foreground">番茄工作法、时间追踪与专注屏蔽，提升你的效率</p>
+      <p className="text-muted-foreground">番茄工作法、正计时秒表、时间追踪与专注屏蔽，提升你的效率</p>
 
       <ViewTabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
         <ViewTabsList>
           <ViewTabsTrigger value="pomodoro">
             <Timer className="h-4 w-4" />
             番茄钟
+          </ViewTabsTrigger>
+          <ViewTabsTrigger value="stopwatch">
+            <Gauge className="h-4 w-4" />
+            秒表
           </ViewTabsTrigger>
           <ViewTabsTrigger value="tracker">
             <Clock className="h-4 w-4" />
@@ -32,6 +37,10 @@ export function FocusView() {
 
         <ViewTabsContent value="pomodoro">
           <PomodoroTimer />
+        </ViewTabsContent>
+
+        <ViewTabsContent value="stopwatch">
+          <StopwatchTimer />
         </ViewTabsContent>
 
         <ViewTabsContent value="tracker">
