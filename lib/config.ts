@@ -10,7 +10,7 @@ export const APP_CONFIG = {
 export const USER_CONFIG = {
   name: '用户',
   plan: '专业版',
-  avatar: '/avatar.jpg',
+  avatar: '',
 }
 
 export const NAV_ITEMS = [

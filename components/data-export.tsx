@@ -328,7 +328,7 @@ export function DataExport() {
                 <FileJson className="h-5 w-5 text-chart-1" />
                 <div className="text-left">
                   <p className="text-sm font-medium">JSON</p>
-                  <p className="text-[10px] text-muted-foreground">完整数据结构</p>
+                  <p className="text-2xs text-muted-foreground">完整数据结构</p>
                 </div>
               </button>
               <button
@@ -343,7 +343,7 @@ export function DataExport() {
                 <FileSpreadsheet className="h-5 w-5 text-chart-2" />
                 <div className="text-left">
                   <p className="text-sm font-medium">CSV</p>
-                  <p className="text-[10px] text-muted-foreground">表格格式</p>
+                  <p className="text-2xs text-muted-foreground">表格格式</p>
                 </div>
               </button>
             </div>
@@ -386,7 +386,7 @@ export function DataExport() {
                   >
                     <Icon className={cn('h-4 w-4', type.color)} />
                     <span className="text-sm">{type.label}</span>
-                    <Badge variant="secondary" className="ml-auto text-[10px]">
+                    <Badge variant="secondary" className="ml-auto text-2xs">
                       {stats[type.id as keyof typeof stats]}
                     </Badge>
                   </button>

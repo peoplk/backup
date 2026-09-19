@@ -90,7 +90,7 @@ function CardHeader({ icon: Icon, label, right }: { icon: typeof Flame; label: s
   return (
     <div className="flex items-center gap-1.5 mb-2">
       <Icon className="w-3.5 h-3.5 text-foreground/60" />
-      <span className="text-[10px] text-foreground/80 font-medium tracking-wide">{label}</span>
+      <span className="text-2xs text-foreground/80 font-medium tracking-wide">{label}</span>
       <div className="ml-auto">{right}</div>
     </div>
   )
@@ -406,7 +406,7 @@ export function DesktopWidget() {
         style={{ WebkitAppRegion: 'drag' }}
       >
         <div>
-          <div className="text-[10px] text-foreground/50 font-medium tracking-wide leading-tight">
+          <div className="text-2xs text-foreground/50 font-medium tracking-wide leading-tight">
             {currentTime.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric' })}
             <span className="ml-1.5 text-foreground/80 font-semibold">
               {currentTime.toLocaleDateString('zh-CN', { weekday: 'long' })}
@@ -456,7 +456,7 @@ export function DesktopWidget() {
           <div className="flex items-center justify-between w-full mb-1">
             <div className="flex items-center gap-1.5">
               <ModeIcon className={cn('w-3.5 h-3.5', config.text)} />
-              <span className={cn('text-[10px] font-medium', config.text)}>{config.label}</span>
+              <span className={cn('text-2xs font-medium', config.text)}>{config.label}</span>
             </div>
             <div className="flex items-center gap-1.5">
               {Array.from({ length: pomodoroSettings.sessionsBeforeLongBreak }).map((_, i) => (
@@ -496,7 +496,7 @@ export function DesktopWidget() {
               >
                 {formatClock(timeLeft)}
               </div>
-              <div className={cn('text-[9px] mt-1 flex items-center gap-1', config.text)}>
+              <div className={cn('text-3xs mt-1 flex items-center gap-1', config.text)}>
                 {isRunning ? <Pause className="w-2 h-2" /> : <Play className="w-2 h-2" />}
                 {isRunning ? '进行中' : '点击开始'}
               </div>
@@ -506,10 +506,10 @@ export function DesktopWidget() {
           {selectedTask && (
             <div className="w-full mt-2 px-3 py-1.5 rounded-xl bg-white/[0.06] border border-white/10 flex items-center gap-2">
               <Flame className={cn('w-3 h-3 shrink-0', config.text)} />
-              <span className="text-[10px] text-foreground/80 truncate flex-1">{selectedTask.title}</span>
+              <span className="text-2xs text-foreground/80 truncate flex-1">{selectedTask.title}</span>
               <button
                 onClick={() => handleSelectTask(null)}
-                className="text-[9px] text-foreground/40 hover:text-foreground/80 shrink-0"
+                className="text-3xs text-foreground/40 hover:text-foreground/80 shrink-0"
                 style={{ WebkitAppRegion: 'no-drag' }}
               >
                 取消
@@ -554,7 +554,7 @@ export function DesktopWidget() {
             icon={ListTodo}
             label="今日待办"
             right={
-              <span className="text-[9px] text-foreground/40">
+              <span className="text-3xs text-foreground/40">
                 {dueTasks.length > 0 ? `${dueTasks.filter(t => !t.completedToday).length} 项待处理` : '已清空'}
               </span>
             }
@@ -591,19 +591,19 @@ export function DesktopWidget() {
                     style={{ WebkitAppRegion: 'no-drag' }}
                   >
                     <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', task.completedToday ? 'bg-green-500' : (priorityColors[task.priority] || priorityColors.low))} />
-                    <span className={cn('text-[11px] truncate', task.completedToday ? 'text-foreground/40 line-through' : 'text-foreground/90')}>
+                    <span className={cn('text-2xs truncate', task.completedToday ? 'text-foreground/40 line-through' : 'text-foreground/90')}>
                       {task.title}
                     </span>
                   </button>
                   {task.estimatedPomodoros && task.estimatedPomodoros > 0 && !task.completedToday && (
-                    <span className="text-[9px] text-foreground/40 bg-white/[0.06] px-1.5 py-0.5 rounded-md shrink-0">
+                    <span className="text-3xs text-foreground/40 bg-white/[0.06] px-1.5 py-0.5 rounded-md shrink-0">
                       {task.completedPomodoros}/{task.estimatedPomodoros}
                     </span>
                   )}
                 </div>
               ))}
               {hiddenTaskCount > 0 && (
-                <div className="px-2.5 py-1 text-[9px] text-foreground/35">
+                <div className="px-2.5 py-1 text-3xs text-foreground/35">
                   还有 {hiddenTaskCount} 项待办，去主窗口查看
                 </div>
               )}
@@ -611,7 +611,7 @@ export function DesktopWidget() {
           ) : (
             <div className="flex-1 flex items-center justify-center gap-1.5 text-foreground/30">
               <CheckCircle2 className="w-4 h-4" />
-              <span className="text-[10px]">今日任务已全部完成</span>
+              <span className="text-2xs">今日任务已全部完成</span>
             </div>
           )}
         </GlassCard>
@@ -622,7 +622,7 @@ export function DesktopWidget() {
             icon={Target}
             label="今日习惯"
             right={
-              <span className="text-[9px] text-foreground/40">
+              <span className="text-3xs text-foreground/40">
                 {completedHabits}/{activeHabits.length} · {habitRate}%
               </span>
             }
@@ -651,7 +651,7 @@ export function DesktopWidget() {
                       style={{ WebkitAppRegion: 'no-drag' }}
                     >
                       <span className={cn('text-sm shrink-0', isCompleted && 'opacity-60')}>{habit.icon}</span>
-                      <span className={cn('text-[11px] flex-1 truncate', isCompleted && 'line-through text-foreground/40')}>
+                      <span className={cn('text-2xs flex-1 truncate', isCompleted && 'line-through text-foreground/40')}>
                         {habit.name}
                       </span>
                       {isCompleted ? (
@@ -663,14 +663,14 @@ export function DesktopWidget() {
                   )
                 })}
                 {hiddenHabitCount > 0 && (
-                  <div className="px-2.5 text-[9px] text-foreground/35">还有 {hiddenHabitCount} 项习惯</div>
+                  <div className="px-2.5 text-3xs text-foreground/35">还有 {hiddenHabitCount} 项习惯</div>
                 )}
               </div>
             </>
           ) : (
             <div className="flex items-center justify-center gap-1.5 text-foreground/30 py-1">
               <Target className="w-3.5 h-3.5" />
-              <span className="text-[10px]">暂无习惯，去主窗口添加</span>
+              <span className="text-2xs">暂无习惯，去主窗口添加</span>
             </div>
           )}
         </GlassCard>
@@ -688,8 +688,8 @@ export function DesktopWidget() {
             >
               <Icon className={cn('w-3.5 h-3.5 shrink-0', tint)} />
               <div className="min-w-0">
-                <div className="text-[11px] font-semibold text-foreground leading-tight truncate">{value}</div>
-                <div className="text-[8px] text-foreground/40 leading-tight">{label}</div>
+                <div className="text-2xs font-semibold text-foreground leading-tight truncate">{value}</div>
+                <div className="text-3xs text-foreground/40 leading-tight">{label}</div>
               </div>
             </div>
           ))}

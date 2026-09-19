@@ -42,7 +42,7 @@ export function LevelUpModal() {
         className={cnCard(show)}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-orange-500 shadow-lg shadow-orange-500/30 animate-in zoom-in-95 duration-300">
+        <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-amber-400 to-orange-500 shadow-lg shadow-orange-500/30 animate-in zoom-in-95 duration-200">
           <Trophy className="h-10 w-10 text-white" />
         </div>
         <p className="text-sm text-muted-foreground">恭喜升级</p>

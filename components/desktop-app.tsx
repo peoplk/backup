@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { AppSidebar } from '@/components/app-sidebar'
 import { DashboardView } from '@/components/views/dashboard-view'
 import { TasksView } from '@/components/views/tasks-view'
@@ -43,6 +43,7 @@ import { toast } from 'sonner'
 import { Search, Menu, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ErrorBoundary } from '@/components/error-boundary'
+import { Spinner } from '@/components/ui/spinner'
 
 export function DesktopApp() {
   const { sidebarCollapsed, activeView, toggleSidebar } = useAppStore(
@@ -55,10 +56,15 @@ export function DesktopApp() {
   const onboardingDone = useOnboardingComplete()
   const [isElectron, setIsElectron] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const scrollAreaRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  useEffect(() => {
+    scrollAreaRef.current?.scrollTo({ top: 0 })
+  }, [activeView])
 
   useKeyboardShortcuts()
   useAutoNotifications()
@@ -335,7 +341,7 @@ export function DesktopApp() {
   if (!mounted) {
     return (
       <div className="h-screen bg-background flex items-center justify-center">
-        <div className="w-8 h-8 rounded-full border-2 border-primary/20 border-t-primary animate-spin" />
+        <Spinner className="h-8 w-8" />
       </div>
     )
   }
@@ -383,7 +389,7 @@ export function DesktopApp() {
             </Button>
 
             <div className="hidden sm:block">
-              <h2 className="text-base font-semibold tracking-tight">{VIEW_TITLES[activeView]}</h2>
+              <h2 key={activeView} className="text-base font-semibold tracking-tight animate-fade-in-up">{VIEW_TITLES[activeView]}</h2>
             </div>
           </div>
 
@@ -401,7 +407,7 @@ export function DesktopApp() {
             >
               <Zap className="h-4 w-4" />
               <span className="text-sm">快速添加</span>
-              <kbd className="pointer-events-none ml-0.5 hidden lg:inline-flex h-5 select-none items-center gap-0.5 rounded-md border bg-muted/50 px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+              <kbd className="pointer-events-none ml-0.5 hidden lg:inline-flex h-5 select-none items-center gap-0.5 rounded-md border bg-muted/50 px-1.5 font-mono text-2xs font-medium text-muted-foreground">
                 {modKeys.mod}
                 {modKeys.shift}A
               </kbd>
@@ -429,7 +435,7 @@ export function DesktopApp() {
             >
               <Search className="h-4 w-4" />
               <span className="text-sm">搜索...</span>
-              <kbd className="pointer-events-none ml-1 inline-flex h-5 select-none items-center gap-1 rounded-md border bg-muted/50 px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+              <kbd className="pointer-events-none ml-1 inline-flex h-5 select-none items-center gap-1 rounded-md border bg-muted/50 px-1.5 font-mono text-2xs font-medium text-muted-foreground">
                 {modKeys.mod}K
               </kbd>
             </Button>
@@ -451,7 +457,7 @@ export function DesktopApp() {
           </div>
         </header>
 
-        <div className={cn(
+        <div ref={scrollAreaRef} className={cn(
           'flex-1 overflow-y-auto overflow-x-hidden pb-24',
           activeView === 'dashboard' ? 'p-3 lg:p-4' : 'p-5 lg:p-8'
         )}>

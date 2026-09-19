@@ -93,13 +93,13 @@ export function SavedFiltersBar({ criteria, onApply }: SavedFiltersBarProps) {
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <div className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+      <div className="flex items-center gap-1 text-xs text-muted-foreground">
         <Filter className="w-3.5 h-3.5" />
         <span>已保存筛选:</span>
       </div>
 
       {savedFilters.length === 0 && (
-        <span className="text-xs text-slate-400 dark:text-slate-500 italic">暂无</span>
+        <span className="text-xs text-muted-foreground italic">暂无</span>
       )}
 
       {savedFilters.map(f => {
@@ -110,8 +110,8 @@ export function SavedFiltersBar({ criteria, onApply }: SavedFiltersBarProps) {
             key={f.id}
             className={`group flex items-center gap-1 rounded-full px-2.5 py-1 text-xs transition-colors ${
               isActive || isMatched
-                ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700'
-                : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 border border-transparent hover:border-slate-300 dark:hover:border-slate-500'
+                ? 'bg-primary/10 text-primary border border-primary/30'
+                : 'bg-secondary text-secondary-foreground border border-transparent hover:border-border'
             }`}
             title={describeCriteria(f.criteria)}
           >
@@ -127,7 +127,7 @@ export function SavedFiltersBar({ criteria, onApply }: SavedFiltersBarProps) {
                       setEditingName('')
                     }
                   }}
-                  className="bg-white dark:bg-slate-800 px-1 py-0.5 rounded text-xs w-24 outline-none border border-blue-400"
+                  className="bg-background px-1 py-0.5 rounded text-xs w-24 outline-none focus-visible:ring-2 focus-visible:ring-ring/40 border border-ring"
                   autoFocus
                 />
                 <button
@@ -144,7 +144,7 @@ export function SavedFiltersBar({ criteria, onApply }: SavedFiltersBarProps) {
                     setEditingId(null)
                     setEditingName('')
                   }}
-                  className="text-slate-400 hover:text-slate-600"
+                  className="text-muted-foreground hover:text-foreground"
                   aria-label="取消"
                 >
                   <X className="w-3 h-3" />
@@ -162,7 +162,7 @@ export function SavedFiltersBar({ criteria, onApply }: SavedFiltersBarProps) {
                 <button
                   type="button"
                   onClick={() => handleStartEdit(f.id, f.name)}
-                  className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-slate-700"
+                  className="hover-reveal transition-opacity text-muted-foreground hover:text-foreground"
                   aria-label="重命名"
                 >
                   <Edit3 className="w-3 h-3" />
@@ -174,7 +174,7 @@ export function SavedFiltersBar({ criteria, onApply }: SavedFiltersBarProps) {
                       deleteSavedFilter(f.id)
                     }
                   }}
-                  className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500"
+                  className="hover-reveal transition-opacity text-muted-foreground hover:text-destructive"
                   aria-label="删除"
                 >
                   <Trash2 className="w-3 h-3" />
@@ -189,7 +189,7 @@ export function SavedFiltersBar({ criteria, onApply }: SavedFiltersBarProps) {
         <button
           type="button"
           onClick={handleClearActive}
-          className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-0.5"
+          className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"
           title="清除当前激活的筛选"
         >
           <X className="w-3 h-3" />
@@ -211,13 +211,13 @@ export function SavedFiltersBar({ criteria, onApply }: SavedFiltersBarProps) {
                   }
                 }}
                 placeholder="筛选名…"
-                className="text-xs px-2 py-1 rounded border border-blue-300 dark:border-blue-700 bg-white dark:bg-slate-800 outline-none w-28"
+                className="text-xs px-2 py-1 rounded border border-primary/50 bg-background outline-none focus-visible:ring-2 focus-visible:ring-ring/40 w-28"
                 autoFocus
               />
               <button
                 type="button"
                 onClick={handleSave}
-                className="text-xs px-2 py-1 rounded bg-blue-500 hover:bg-blue-600 text-white"
+                className="text-xs px-2 py-1 rounded bg-primary hover:bg-primary/90 text-primary-foreground"
               >
                 保存
               </button>
@@ -227,7 +227,7 @@ export function SavedFiltersBar({ criteria, onApply }: SavedFiltersBarProps) {
                   setSaveDialogOpen(false)
                   setSaveName('')
                 }}
-                className="text-slate-400 hover:text-slate-600"
+                className="text-muted-foreground hover:text-foreground"
               >
                 <X className="w-3 h-3" />
               </button>
@@ -236,7 +236,7 @@ export function SavedFiltersBar({ criteria, onApply }: SavedFiltersBarProps) {
             <button
               type="button"
               onClick={() => setSaveDialogOpen(true)}
-              className="text-xs px-2 py-1 rounded-full border border-dashed border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:border-blue-400 hover:text-blue-500 flex items-center gap-1"
+              className="text-xs px-2 py-1 rounded-full border border-dashed border-border text-muted-foreground hover:border-primary hover:text-primary flex items-center gap-1"
             >
               <Save className="w-3 h-3" />
               保存当前筛选

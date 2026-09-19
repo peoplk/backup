@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Progress } from '@/components/ui/progress'
+import { EmptyState } from '@/components/ui/empty-state'
 import { TaskReminders } from '@/components/task-reminders'
 import { TaskEfficiencyCard } from '@/components/task-efficiency-card'
 import { QuickDatePresets } from '@/components/quick-date-presets'
@@ -48,6 +49,7 @@ import {
   Tag,
   CheckCircle2,
   AlertCircle,
+  Eye,
   ArrowUp,
   ArrowRight,
   ArrowDown,
@@ -147,20 +149,20 @@ const SortableKanbanCard = memo(function SortableKanbanCard({ task, today }: { t
         )}
         <div className="flex flex-wrap items-center gap-1.5">
           {task.project && (
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{task.project}</Badge>
+            <Badge variant="secondary" className="text-2xs px-1.5 py-0">{task.project}</Badge>
           )}
           {task.tags.slice(0, 2).map((tag) => (
-            <Badge key={tag} variant="outline" className="text-[10px] px-1.5 py-0">
+            <Badge key={tag} variant="outline" className="text-2xs px-1.5 py-0">
               <Tag className="mr-0.5 h-2.5 w-2.5" />{tag}
             </Badge>
           ))}
           {task.estimatedPomodoros && (
-            <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+            <span className="flex items-center gap-0.5 text-2xs text-muted-foreground">
               <Timer className="h-2.5 w-2.5" />{task.completedPomodoros}/{task.estimatedPomodoros}
             </span>
           )}
           {task.timeSpent && task.timeSpent > 0 && (
-            <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+            <span className="flex items-center gap-0.5 text-2xs text-muted-foreground">
               <Clock className="h-2.5 w-2.5" />
               {Math.round(task.timeSpent / 60)}m
             </span>
@@ -182,7 +184,7 @@ const SortableKanbanCard = memo(function SortableKanbanCard({ task, today }: { t
             
             return (
               <span className={cn(
-                "flex items-center gap-0.5 text-[10px]",
+                "flex items-center gap-0.5 text-2xs",
                 diffDays < 0 && task.status !== 'done' ? "text-destructive" : diffDays === 0 ? "text-primary font-medium" : "text-muted-foreground"
               )}>
                 <Calendar className="h-2.5 w-2.5" />
@@ -197,7 +199,7 @@ const SortableKanbanCard = memo(function SortableKanbanCard({ task, today }: { t
               value={(task.subTasks.filter(st => st.completed).length / task.subTasks.length) * 100}
               className="h-1 flex-1"
             />
-            <span className="text-[10px] text-muted-foreground">
+            <span className="text-2xs text-muted-foreground">
               {task.subTasks.filter(st => st.completed).length}/{task.subTasks.length}
             </span>
           </div>
@@ -987,13 +989,13 @@ export function TasksView() {
               <div className="h-4 w-4" />
             )}
           </button>
-          <GripVertical className="h-4 w-4 cursor-grab text-muted-foreground md:opacity-0 md:transition-opacity md:group-hover:opacity-100 shrink-0" />
+          <GripVertical className="h-4 w-4 cursor-grab text-muted-foreground hover-reveal transition-opacity shrink-0" />
           <button
             onClick={(e) => {
               e.stopPropagation()
               toggleTaskStar(task.id)
             }}
-            className="shrink-0 md:opacity-0 md:group-hover:opacity-100 transition-opacity"
+            className="shrink-0 hover-reveal transition-opacity"
           >
             <Star className={cn(
               'h-4 w-4 transition-colors',
@@ -1038,7 +1040,7 @@ export function TasksView() {
                 <Badge 
                   variant="outline" 
                   className={cn(
-                    "text-[10px] gap-0.5 h-4 px-1",
+                    "text-2xs gap-0.5 h-4 px-1",
                     task.repeatRule.paused 
                       ? "text-yellow-600 border-yellow-300 dark:text-yellow-400 dark:border-yellow-700"
                       : "text-purple-600 border-purple-300 dark:text-purple-400 dark:border-purple-700"
@@ -1051,28 +1053,28 @@ export function TasksView() {
                   )}
                 </Badge>
               )}
-              <Badge variant="outline" className="text-[10px] gap-0.5 h-4 px-1" style={{ borderColor: taskType.color, color: taskType.color }}>
+              <Badge variant="outline" className="text-2xs gap-0.5 h-4 px-1" style={{ borderColor: taskType.color, color: taskType.color }}>
                 {taskType.label}
               </Badge>
               {task.project && (
-                <Badge variant="secondary" className="text-[10px] h-4 px-1">
+                <Badge variant="secondary" className="text-2xs h-4 px-1">
                   {task.project}
                 </Badge>
               )}
               {task.tags.map((tag) => (
-                <Badge key={tag} variant="outline" className="text-[10px] h-4 px-1">
+                <Badge key={tag} variant="outline" className="text-2xs h-4 px-1">
                   <Tag className="mr-0.5 h-2.5 w-2.5" />
                   {tag}
                 </Badge>
               ))}
               {task.estimatedPomodoros && (
-                <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                <span className="flex items-center gap-0.5 text-2xs text-muted-foreground">
                   <Timer className="h-2.5 w-2.5" />
                   {task.completedPomodoros}/{task.estimatedPomodoros}
                 </span>
               )}
               {task.estimatedMinutes && (
-                <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                <span className="flex items-center gap-0.5 text-2xs text-muted-foreground">
                   <Clock className="h-2.5 w-2.5" />
                   {task.estimatedMinutes}分钟
                 </span>
@@ -1110,7 +1112,7 @@ export function TasksView() {
                   <Badge 
                     variant="outline" 
                     className={cn(
-                      "text-[10px] h-4 px-1",
+                      "text-2xs h-4 px-1",
                       isOverdue && "text-destructive border-destructive/50",
                       diffDays === 0 && "text-primary border-primary/30 font-medium"
                     )}
@@ -1124,7 +1126,7 @@ export function TasksView() {
                 <Badge 
                   variant="outline" 
                   className={cn(
-                    "text-[10px] gap-0.5 h-4 px-1",
+                    "text-2xs gap-0.5 h-4 px-1",
                     completedSubTasks === subTasks.length && "bg-chart-2/10 text-chart-2 border-chart-2/30"
                   )}
                 >
@@ -1144,7 +1146,7 @@ export function TasksView() {
               </div>
             )}
           </div>
-          <div className="flex items-center gap-1 md:opacity-0 md:transition-opacity md:group-hover:opacity-100 shrink-0">
+          <div className="flex items-center gap-1 hover-reveal transition-opacity shrink-0">
             {task.repeatRule && !task.repeatRule.paused && (
               <Button
                 variant="ghost"
@@ -1306,7 +1308,7 @@ export function TasksView() {
                 value={currentSubTaskInput}
                 onChange={(e) => setSubTaskInputs({ ...subTaskInputs, [task.id]: e.target.value })}
                 onKeyDown={(e) => handleSubTaskKeyDown(e, task.id)}
-                className="h-8 text-sm border-none shadow-none focus-visible:ring-0 bg-transparent px-0"
+                className="h-8 text-sm border-none shadow-none focus-visible:ring-2 focus-visible:ring-ring/40 bg-transparent px-0"
               />
               {currentSubTaskInput.trim() && (
                 <Button
@@ -1377,7 +1379,7 @@ export function TasksView() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-6 w-6 p-0 md:opacity-0 md:group-hover:opacity-100 shrink-0"
+                        className="h-6 w-6 p-0 hover-reveal transition-opacity shrink-0"
                         onClick={() => deleteTaskComment(task.id, comment.id)}
                       >
                         <X className="h-3 w-3" />
@@ -1516,7 +1518,7 @@ export function TasksView() {
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6 md:opacity-0 md:group-hover:opacity-100 shrink-0"
+              className="h-6 w-6 hover-reveal transition-opacity shrink-0"
               aria-label="子任务选项"
             >
               <MoreHorizontal className="h-3 w-3 text-muted-foreground" />
@@ -1546,7 +1548,7 @@ export function TasksView() {
   })
 
   return (
-    <div className="space-y-6 pb-20 animate-fade-in-up">
+    <div className="space-y-6 pb-20 view-enter">
       <QuickAddTask className="mb-2" />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -1593,7 +1595,7 @@ export function TasksView() {
                 新建
               </Button>
             </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent aria-describedby={undefined} className="sm:max-w-[500px]">
             <DialogHeader>
               <DialogTitle>{editingTask ? '编辑' : '创建'}{newTask.type === 'event' ? '日程' : newTask.type === 'reminder' ? '提醒' : '任务'}</DialogTitle>
             </DialogHeader>
@@ -1656,7 +1658,7 @@ export function TasksView() {
                   />
                   {newTask.title && !editingTask && parseEnhancedInput(newTask.title).dueDate && (
                     <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5">
+                      <Badge variant="secondary" className="text-2xs px-1.5 py-0 h-5">
                         🤖 已解析
                       </Badge>
                     </div>
@@ -2138,7 +2140,7 @@ export function TasksView() {
                       设置WIP
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="sm:max-w-[360px]">
+                  <DialogContent aria-describedby={undefined} className="sm:max-w-[360px]">
                     <DialogHeader>
                       <DialogTitle>WIP 限制设置</DialogTitle>
                     </DialogHeader>
@@ -2268,10 +2270,7 @@ export function TasksView() {
                       <TaskItem key={task.id} task={task} />
                     ))}
                     {matrixGroups.doFirst.length === 0 && (
-                      <div className="flex flex-col items-center justify-center py-6 text-muted-foreground">
-                        <CheckCircle2 className="h-6 w-6 opacity-30 mb-1" />
-                        <p className="text-xs">暂无紧急重要任务</p>
-                      </div>
+                      <EmptyState icon={<CheckCircle2 />} title="暂无紧急重要任务" className="border-none py-6" />
                     )}
                   </CardContent>
                 </Card>
@@ -2289,10 +2288,7 @@ export function TasksView() {
                       <TaskItem key={task.id} task={task} />
                     ))}
                     {matrixGroups.schedule.length === 0 && (
-                      <div className="flex flex-col items-center justify-center py-6 text-muted-foreground">
-                        <Calendar className="h-6 w-6 opacity-30 mb-1" />
-                        <p className="text-xs">暂无计划安排任务</p>
-                      </div>
+                      <EmptyState icon={<Calendar />} title="暂无计划安排任务" className="border-none py-6" />
                     )}
                   </CardContent>
                 </Card>
@@ -2310,10 +2306,7 @@ export function TasksView() {
                       <TaskItem key={task.id} task={task} />
                     ))}
                     {matrixGroups.delegate.length === 0 && (
-                      <div className="flex flex-col items-center justify-center py-6 text-muted-foreground">
-                        <User className="h-6 w-6 opacity-30 mb-1" />
-                        <p className="text-xs">暂无委托任务</p>
-                      </div>
+                      <EmptyState icon={<User />} title="暂无委托任务" className="border-none py-6" />
                     )}
                   </CardContent>
                 </Card>
@@ -2331,10 +2324,7 @@ export function TasksView() {
                       <TaskItem key={task.id} task={task} />
                     ))}
                     {matrixGroups.eliminate.length === 0 && (
-                      <div className="flex flex-col items-center justify-center py-6 text-muted-foreground">
-                        <CheckCircle2 className="h-6 w-6 opacity-30 mb-1" />
-                        <p className="text-xs">没有可删除的任务</p>
-                      </div>
+                      <EmptyState icon={<CheckCircle2 />} title="没有可删除的任务" className="border-none py-6" />
                     )}
                   </CardContent>
                 </Card>
@@ -2372,10 +2362,7 @@ export function TasksView() {
                   </CardHeader>
                   <CardContent className="space-y-2">
                     {items.length === 0 ? (
-                      <div className="flex items-center justify-center gap-2 py-6 text-base text-muted-foreground">
-                        <g.Icon className="h-4 w-4" />
-                        暂无任务
-                      </div>
+                      <EmptyState icon={<g.Icon />} title="暂无任务" className="border-none py-6" />
                     ) : (
                       items.map((task) => (
                         <TaskItem key={task.id} task={task} />
@@ -2443,6 +2430,16 @@ export function TasksView() {
               className="fixed z-50 min-w-[180px] rounded-xl border bg-popover p-1.5 shadow-xl animate-fade-in-up"
               style={{ left: contextMenu.x, top: contextMenu.y }}
             >
+              <button
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-muted transition-colors"
+                onClick={() => {
+                  setDetailTaskId(ctxTask.id)
+                  setContextMenu(null)
+                }}
+              >
+                <Eye className="h-4 w-4" />
+                查看详情
+              </button>
               <button
                 className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-muted transition-colors"
                 onClick={() => {

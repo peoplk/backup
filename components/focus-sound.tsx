@@ -205,7 +205,7 @@ export function FocusSound() {
         )}
       >
         <Icon className="h-4 w-4" />
-        <span className="text-[9px] mt-1 truncate w-full text-center">{sound.name}</span>
+        <span className="text-3xs mt-1 truncate w-full text-center">{sound.name}</span>
       </button>
     )
   }
@@ -239,7 +239,7 @@ export function FocusSound() {
               <Music className="h-4 w-4 text-primary" />
               <span className="font-semibold text-sm">专注音乐</span>
               {Object.keys(soundLevels).length > 1 && (
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-2xs text-muted-foreground">
                   混音 {Object.keys(soundLevels).length} 轨
                 </span>
               )}
@@ -275,7 +275,7 @@ export function FocusSound() {
                 <button
                   key={preset.id}
                   onClick={() => applyPreset(preset)}
-                  className="rounded-full border border-border/50 px-2.5 py-1 text-[11px] text-muted-foreground transition-all hover:border-primary/30 hover:bg-muted/30 hover:text-foreground"
+                  className="rounded-full border border-border/50 px-2.5 py-1 text-2xs text-muted-foreground transition-all hover:border-primary/30 hover:bg-muted/30 hover:text-foreground"
                 >
                   {preset.name}
                 </button>
@@ -312,7 +312,7 @@ export function FocusSound() {
                   )}
                 >
                   <span className="text-xs font-medium">{music.name}</span>
-                  <span className="text-[10px] text-muted-foreground mt-0.5">{music.description}</span>
+                  <span className="text-2xs text-muted-foreground mt-0.5">{music.description}</span>
                 </button>
               ))}
             </div>
@@ -332,7 +332,7 @@ export function FocusSound() {
               <button
                 onClick={() => setSleepTimer(null)}
                 className={cn(
-                  'rounded-lg border py-1.5 text-[11px] transition-all',
+                  'rounded-lg border py-1.5 text-2xs transition-all',
                   sleepTimerEndsAt === null
                     ? 'border-primary bg-primary/5 text-primary'
                     : 'border-border/50 text-muted-foreground hover:bg-muted/30'
@@ -345,7 +345,7 @@ export function FocusSound() {
                   key={min}
                   onClick={() => setSleepTimer(min)}
                   className={cn(
-                    'rounded-lg border py-1.5 text-[11px] transition-all',
+                    'rounded-lg border py-1.5 text-2xs transition-all',
                     sleepTimerEndsAt !== null && Math.abs((remainingMin ?? -1) - min) < 1
                       ? 'border-primary bg-primary/5 text-primary'
                       : 'border-border/50 text-muted-foreground hover:bg-muted/30'

@@ -39,7 +39,7 @@ export function HabitTemplatePicker({ onSelect }: HabitTemplatePickerProps) {
             key={c.id}
             onClick={() => setCat(c.id)}
             className={cn(
-              'rounded-full px-2 py-0.5 text-[11px] transition-all',
+              'rounded-full px-2 py-0.5 text-2xs transition-all',
               cat === c.id
                 ? 'bg-primary text-primary-foreground'
                 : 'text-muted-foreground hover:bg-muted'

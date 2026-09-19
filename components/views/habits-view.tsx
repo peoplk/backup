@@ -235,7 +235,7 @@ export function HabitsView() {
   }, [habitCheckIns])
 
   return (
-    <div className="space-y-6 animate-fade-in-up">
+    <div className="space-y-6 view-enter">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">习惯打卡</h1>
@@ -250,7 +250,7 @@ export function HabitsView() {
               添加习惯
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent aria-describedby={undefined}>
             <DialogHeader>
               <DialogTitle>{editingHabit ? '编辑习惯' : '添加新习惯'}</DialogTitle>
             </DialogHeader>
@@ -765,12 +765,12 @@ export function HabitsView() {
               <div className="overflow-x-auto -mx-4 px-4">
                 <div className="inline-flex flex-col gap-[3px] min-w-[680px]">
                   <div className="flex items-center gap-[3px] mb-1">
-                    <span className="w-8 text-[10px] text-muted-foreground" />
+                    <span className="w-8 text-2xs text-muted-foreground" />
                     {Array.from({ length: 15 }, (_, i) => {
                       const d = new Date()
                       d.setDate(d.getDate() - (14 - i) * 7)
                       return (
-                        <span key={i} className="flex-1 text-center text-[10px] text-muted-foreground">
+                        <span key={i} className="flex-1 text-center text-2xs text-muted-foreground">
                           {d.getMonth() + 1}/{d.getDate()}
                         </span>
                       )
@@ -780,7 +780,7 @@ export function HabitsView() {
                     const jsDay = dayIdx < 5 ? dayIdx + 1 : dayIdx === 5 ? 6 : 0
                     return (
                       <div key={dayIdx} className="flex items-center gap-[3px]">
-                        <span className="w-8 text-[10px] text-muted-foreground">{dayLabel}</span>
+                        <span className="w-8 text-2xs text-muted-foreground">{dayLabel}</span>
                         {Array.from({ length: 15 }, (_, weekIdx) => {
                           const d = new Date()
                           d.setDate(d.getDate() - ((14 - weekIdx) * 7 + (d.getDay() - jsDay + 7) % 7))
@@ -807,13 +807,13 @@ export function HabitsView() {
                     )
                   })}
                   <div className="flex items-center justify-end gap-1 mt-2">
-                    <span className="text-[10px] text-muted-foreground">少</span>
+                    <span className="text-2xs text-muted-foreground">少</span>
                     <div className="h-[10px] w-[10px] rounded-sm bg-muted/40" />
                     <div className="h-[10px] w-[10px] rounded-sm bg-chart-2/25" />
                     <div className="h-[10px] w-[10px] rounded-sm bg-chart-2/50" />
                     <div className="h-[10px] w-[10px] rounded-sm bg-chart-2/75" />
                     <div className="h-[10px] w-[10px] rounded-sm bg-chart-2" />
-                    <span className="text-[10px] text-muted-foreground">多</span>
+                    <span className="text-2xs text-muted-foreground">多</span>
                   </div>
                 </div>
               </div>
@@ -946,7 +946,7 @@ function HabitCard({
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span>{habitFrequencyLabel(habit)}</span>
                 {!isHabitScheduledOn(habit, today) && (
-                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground/70">
+                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground/70">
                     今日休息
                   </span>
                 )}

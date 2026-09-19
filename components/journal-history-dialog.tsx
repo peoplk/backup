@@ -109,7 +109,7 @@ export function JournalHistoryDialog({
                       <span className="text-sm font-medium">
                         {d.getMonth() + 1}月{d.getDate()}日 {WEEKDAYS[d.getDay()]}
                       </span>
-                      <span className="text-[10px] text-muted-foreground truncate">
+                      <span className="text-2xs text-muted-foreground truncate">
                         {meta?.label}
                         {(j.wins?.length ?? 0) > 0 && ` · ${j.wins!.length} 个成就`}
                         {(j.gratitude?.length ?? 0) > 0 && ` · 感恩 ${j.gratitude!.length}`}

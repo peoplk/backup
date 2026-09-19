@@ -280,7 +280,7 @@ export function TimeBlockView() {
   const currentDayIndex = (currentDate.getDay() + 6) % 7
 
   return (
-    <div className="space-y-5 animate-fade-in-up">
+    <div className="space-y-5 view-enter">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">时间块规划</h1>
@@ -344,11 +344,11 @@ export function TimeBlockView() {
                     : 'hover:bg-muted/50'
                 )}
               >
-                <span className="text-[10px]">{day}</span>
+                <span className="text-2xs">{day}</span>
                 <span className="text-sm font-bold">{date.getDate()}</span>
                 {blockCount > 0 && !isSelected && (
                   <span className={cn(
-                    'text-[9px] rounded-full px-1',
+                    'text-3xs rounded-full px-1',
                     isPast ? 'bg-muted' : 'bg-primary/10 text-primary'
                   )}>
                     {blockCount}
@@ -428,14 +428,14 @@ export function TimeBlockView() {
                               {block.title}
                             </span>
                             {linkedTask && (
-                              <span className="text-[10px] text-muted-foreground truncate block">
+                              <span className="text-2xs text-muted-foreground truncate block">
                                 关联: {linkedTask.title}
                               </span>
                             )}
                           </div>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
-                          <span className="text-[10px] text-muted-foreground tabular-nums">
+                          <span className="text-2xs text-muted-foreground tabular-nums">
                             {block.startTime}-{block.endTime}
                           </span>
                           <button
@@ -443,7 +443,7 @@ export function TimeBlockView() {
                               e.stopPropagation()
                               openEditDialog(block)
                             }}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-background/50 rounded"
+                            className="hover-reveal transition-opacity p-1 hover:bg-background/50 rounded"
                           >
                             <Edit3 className="h-3 w-3 text-muted-foreground" />
                           </button>
@@ -452,7 +452,7 @@ export function TimeBlockView() {
                               e.stopPropagation()
                               handleDeleteBlock(block)
                             }}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-destructive/10 rounded"
+                            className="hover-reveal transition-opacity p-1 hover:bg-destructive/10 rounded"
                           >
                             <Trash2 className="h-3 w-3 text-destructive" />
                           </button>
@@ -476,7 +476,7 @@ export function TimeBlockView() {
                         className={cn('flex rounded-lg transition-colors relative', isCurrentHour && 'bg-primary/5')}
                         style={{ height: `${HOUR_HEIGHT}px` }}
                       >
-                        <div className={cn('w-14 py-2 text-[11px] font-mono shrink-0 tabular-nums text-right pr-2', isCurrentHour ? 'text-primary font-bold' : 'text-muted-foreground')}>
+                        <div className={cn('w-14 py-2 text-2xs font-mono shrink-0 tabular-nums text-right pr-2', isCurrentHour ? 'text-primary font-bold' : 'text-muted-foreground')}>
                           {hour.toString().padStart(2, '0')}:00
                         </div>
                         <div
@@ -486,7 +486,7 @@ export function TimeBlockView() {
                           <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity cursor-pointer">
                             <div className="flex items-center gap-1 text-muted-foreground/50">
                               <Plus className="h-3 w-3" />
-                              <span className="text-[10px]">添加</span>
+                              <span className="text-2xs">添加</span>
                             </div>
                           </div>
                         </div>
@@ -505,19 +505,19 @@ export function TimeBlockView() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-xl bg-background/60 p-3">
                   <p className="text-2xl font-bold">{dayBlocks.length}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">时间块</p>
+                  <p className="text-2xs text-muted-foreground mt-0.5">时间块</p>
                 </div>
                 <div className="rounded-xl bg-background/60 p-3">
                   <p className="text-2xl font-bold">{completedBlocks}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">已完成</p>
+                  <p className="text-2xs text-muted-foreground mt-0.5">已完成</p>
                 </div>
                 <div className="rounded-xl bg-background/60 p-3">
                   <p className="text-2xl font-bold">{Math.round(totalPlannedMinutes / 60 * 10) / 10}h</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">已规划</p>
+                  <p className="text-2xs text-muted-foreground mt-0.5">已规划</p>
                 </div>
                 <div className="rounded-xl bg-background/60 p-3">
                   <p className="text-2xl font-bold">{dayBlocks.filter(b => !b.completed).length}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">待完成</p>
+                  <p className="text-2xs text-muted-foreground mt-0.5">待完成</p>
                 </div>
               </div>
             </div>
@@ -563,7 +563,7 @@ export function TimeBlockView() {
                         <Icon className={cn('h-3.5 w-3.5 shrink-0', config.colorClass)} />
                         <div className="flex-1 min-w-0">
                           <p className={cn('text-sm font-medium truncate', block.completed && 'line-through')}>{block.title}</p>
-                          <p className="text-[10px] text-muted-foreground tabular-nums">
+                          <p className="text-2xs text-muted-foreground tabular-nums">
                             {block.startTime} - {block.endTime}
                             {linkedTask && ` · ${linkedTask.title}`}
                           </p>
@@ -628,7 +628,7 @@ export function TimeBlockView() {
                       <Plus className="h-3 w-3 text-muted-foreground shrink-0" />
                       <span className="text-sm truncate">{task.title}</span>
                       {task.priority && (
-                        <Badge variant="outline" className={cn('text-[10px] shrink-0 h-5 ml-auto',
+                        <Badge variant="outline" className={cn('text-2xs shrink-0 h-5 ml-auto',
                           task.priority === 'urgent' && 'border-destructive/50 text-destructive',
                           task.priority === 'high' && 'border-chart-3/50 text-chart-3',
                         )}>
@@ -648,7 +648,7 @@ export function TimeBlockView() {
         setIsAddDialogOpen(open)
         if (!open) { setEditingBlock(null); resetNewBlock() }
       }}>
-        <DialogContent className="max-w-md">
+        <DialogContent aria-describedby={undefined} className="max-w-md">
           <DialogHeader>
             <DialogTitle>{editingBlock ? '编辑时间块' : '创建时间块'}</DialogTitle>
           </DialogHeader>
@@ -716,7 +716,7 @@ export function TimeBlockView() {
                       )}
                     >
                       <Icon className={cn('h-4 w-4', config.colorClass)} />
-                      <span className="text-[10px]">{config.label}</span>
+                      <span className="text-2xs">{config.label}</span>
                     </button>
                   )
                 })}

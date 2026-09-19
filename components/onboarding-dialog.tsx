@@ -112,7 +112,7 @@ export function OnboardingDialog({
         onOpenChange(next)
       }}
     >
-      <DialogContent className="max-w-md p-0 overflow-hidden" showCloseButton={false}>
+      <DialogContent aria-describedby={undefined} className="max-w-md p-0 overflow-hidden" showCloseButton={false}>
         <DialogHeader className="sr-only">
           <DialogTitle>新手引导</DialogTitle>
         </DialogHeader>

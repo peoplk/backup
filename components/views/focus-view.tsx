@@ -11,7 +11,7 @@ export function FocusView() {
   const [activeTab, setActiveTab] = useState<'pomodoro' | 'tracker' | 'shield'>('pomodoro')
 
   return (
-    <div className="space-y-6 animate-fade-in-up">
+    <div className="space-y-6 view-enter">
       <p className="text-muted-foreground">番茄工作法、时间追踪与专注屏蔽，提升你的效率</p>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="space-y-4">

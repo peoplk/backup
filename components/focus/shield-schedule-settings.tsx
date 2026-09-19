@@ -80,7 +80,7 @@ export function ShieldScheduleSettings() {
                 className="h-8 w-[110px] text-xs"
                 aria-label="窗口结束时间"
               />
-              <span className="text-[10px] text-muted-foreground">支持跨夜（如 22:00 → 07:00）</span>
+              <span className="text-2xs text-muted-foreground">支持跨夜（如 22:00 → 07:00）</span>
               <Button
                 variant="ghost"
                 size="icon"

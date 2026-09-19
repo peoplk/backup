@@ -98,7 +98,7 @@ function SmartInputField() {
             handleSubmit()
           }
         }}
-        className="h-9 border-none bg-transparent px-0 shadow-none focus-visible:ring-0 text-base placeholder:text-muted-foreground/60"
+        className="h-9 border-none bg-transparent px-0 shadow-none focus-visible:ring-2 focus-visible:ring-ring/40 text-base placeholder:text-muted-foreground/60"
       />
       {input.trim() && (
         <Button

@@ -113,15 +113,15 @@ export function QuickCapture() {
               <div>
                 <DialogTitle className="text-base font-semibold flex items-center gap-2">
                   快速捕获
-                  <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded-md border bg-muted/50 px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+                  <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded-md border bg-muted/50 px-1.5 font-mono text-2xs font-medium text-muted-foreground">
                     {modKeys.mod}
                   </kbd>
                   <span className="text-muted-foreground text-xs">+</span>
-                  <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded-md border bg-muted/50 px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+                  <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded-md border bg-muted/50 px-1.5 font-mono text-2xs font-medium text-muted-foreground">
                     {modKeys.shift}
                   </kbd>
                   <span className="text-muted-foreground text-xs">+</span>
-                  <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded-md border bg-muted/50 px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+                  <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded-md border bg-muted/50 px-1.5 font-mono text-2xs font-medium text-muted-foreground">
                     A
                   </kbd>
                 </DialogTitle>
@@ -147,7 +147,7 @@ export function QuickCapture() {
                 }
               }}
               placeholder="明天下午3点开会 p1 #工作 2🍅"
-              className="h-7 border-none bg-transparent px-0 shadow-none focus-visible:ring-0 text-sm placeholder:text-muted-foreground/60"
+              className="h-7 border-none bg-transparent px-0 shadow-none focus-visible:ring-2 focus-visible:ring-ring/40 text-sm placeholder:text-muted-foreground/60"
             />
             <Button
               size="sm"
@@ -168,14 +168,14 @@ export function QuickCapture() {
                   <p className="text-sm font-medium">{parsed.title}</p>
                   <div className="flex flex-wrap gap-1.5 mt-1.5">
                     {parsed.dueDate && (
-                      <Badge variant="secondary" className="text-[10px] gap-1">
+                      <Badge variant="secondary" className="text-2xs gap-1">
                         <Calendar className="h-2.5 w-2.5" />
                         {parsed.dueDate.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}
                         {parsed.startTime && ` ${parsed.startTime}`}
                       </Badge>
                     )}
                     {parsed.priority && (
-                      <Badge variant="secondary" className="text-[10px] gap-1">
+                      <Badge variant="secondary" className="text-2xs gap-1">
                         <Target className="h-2.5 w-2.5" />
                         {parsed.priority === 'urgent'
                           ? '紧急'
@@ -187,17 +187,17 @@ export function QuickCapture() {
                       </Badge>
                     )}
                     {parsed.estimatedPomodoros && (
-                      <Badge variant="secondary" className="text-[10px] gap-1">
+                      <Badge variant="secondary" className="text-2xs gap-1">
                         🍅 {parsed.estimatedPomodoros}
                       </Badge>
                     )}
                     {parsed.project && (
-                      <Badge variant="secondary" className="text-[10px] gap-1">
+                      <Badge variant="secondary" className="text-2xs gap-1">
                         📁 {parsed.project}
                       </Badge>
                     )}
                     {parsed.tags?.map((tag) => (
-                      <Badge key={tag} variant="outline" className="text-[10px] gap-1">
+                      <Badge key={tag} variant="outline" className="text-2xs gap-1">
                         <Tag className="h-2.5 w-2.5" />
                         {tag}
                       </Badge>
@@ -206,7 +206,7 @@ export function QuickCapture() {
                 </div>
               </div>
               {validation.warnings.length > 0 && (
-                <p className="text-[10px] text-amber-600 flex items-center gap-1">
+                <p className="text-2xs text-amber-600 flex items-center gap-1">
                   <Lightbulb className="h-3 w-3" />
                   {validation.warnings[0]}
                 </p>
@@ -241,7 +241,7 @@ export function QuickCapture() {
               <button
                 key={q.label}
                 onClick={() => setInput((v) => (v ? v + ' ' : '') + q.v)}
-                className="rounded-md border border-border/40 bg-background px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted/40 hover:text-foreground hover:border-border transition-colors"
+                className="rounded-md border border-border/40 bg-background px-2 py-1 text-2xs text-muted-foreground hover:bg-muted/40 hover:text-foreground hover:border-border transition-colors"
               >
                 {q.label}
               </button>
@@ -249,7 +249,7 @@ export function QuickCapture() {
           </div>
         </div>
 
-        <div className="border-t bg-muted/20 px-5 py-2.5 flex items-center justify-between text-[10px] text-muted-foreground">
+        <div className="border-t bg-muted/20 px-5 py-2.5 flex items-center justify-between text-2xs text-muted-foreground">
           <div className="flex items-center gap-1.5">
             <Keyboard className="h-3 w-3" />
             <span>Enter 保存 · Esc 关闭</span>

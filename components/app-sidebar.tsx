@@ -202,7 +202,7 @@ export function AppSidebar() {
         <nav className="flex-1 space-y-1 overflow-y-auto p-3">
           <div className={cn('mb-3', !sidebarCollapsed && 'px-3')}>
             {!sidebarCollapsed && (
-              <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-sidebar-muted/60">
+              <span className="text-2xs font-semibold uppercase tracking-[0.15em] text-sidebar-muted/60">
                 主菜单
               </span>
             )}
@@ -214,7 +214,7 @@ export function AppSidebar() {
           {!sidebarCollapsed && (
             <>
               <div className="mt-4 mb-3 px-3">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-sidebar-muted/60">
+                <span className="text-2xs font-semibold uppercase tracking-[0.15em] text-sidebar-muted/60">
                   智能列表
                 </span>
               </div>
@@ -236,7 +236,7 @@ export function AppSidebar() {
                 <Star className={cn('h-4 w-4 shrink-0', starredCount > 0 && 'fill-amber-500')} />
                 <span className="flex-1 text-left">已收藏</span>
                 {starredCount > 0 && (
-                  <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+                  <Badge variant="secondary" className="text-2xs h-5 px-1.5">
                     {starredCount}
                   </Badge>
                 )}
@@ -276,7 +276,7 @@ export function AppSidebar() {
                     </span>
                     <span className="flex-1 text-left">{list.name}</span>
                     {list.count > 0 && (
-                      <Badge variant={isOverdue ? 'destructive' : 'secondary'} className="text-[10px] h-5 px-1.5">
+                      <Badge variant={isOverdue ? 'destructive' : 'secondary'} className="text-2xs h-5 px-1.5">
                         {list.count}
                       </Badge>
                     )}
@@ -289,7 +289,7 @@ export function AppSidebar() {
           {!sidebarCollapsed && projects.length > 0 && (
             <>
               <div className="mt-4 mb-3 px-3">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.15em] text-sidebar-muted/60">
+                <span className="text-2xs font-semibold uppercase tracking-[0.15em] text-sidebar-muted/60">
                   项目
                 </span>
               </div>
@@ -373,7 +373,7 @@ export function AppSidebar() {
             )}
           >
             <Avatar className="h-9 w-9 ring-2 ring-sidebar-primary/30">
-              <AvatarImage src={USER_CONFIG.avatar} />
+              {USER_CONFIG.avatar && <AvatarImage src={USER_CONFIG.avatar} />}
               <AvatarFallback className="bg-gradient-to-br from-sidebar-primary to-sidebar-primary/80 text-sidebar-primary-foreground text-xs">
                 <User className="h-4 w-4" />
               </AvatarFallback>
@@ -466,7 +466,7 @@ function ProjectTree({
           />
           <span className="flex-1 text-left truncate">{project.name}</span>
           {totalCount > 0 && (
-            <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+            <Badge variant="secondary" className="text-2xs h-5 px-1.5">
               {totalCount}
             </Badge>
           )}

@@ -67,7 +67,7 @@ export function TimerPresets({
                 <span>{preset.name}</span>
                 <span className="text-muted-foreground">{preset.workDuration / 60}+{preset.shortBreakDuration / 60}</span>
                 {!isDefault && (
-                  <MoreHorizontal className="h-3 w-3 ml-0.5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <MoreHorizontal className="h-3 w-3 ml-0.5 hover-reveal transition-opacity" />
                 )}
               </button>
             </PopoverTrigger>

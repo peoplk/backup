@@ -67,7 +67,7 @@ export function TimerSettingsDialog({
           设置
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
+      <DialogContent aria-describedby={undefined} className="max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>番茄钟设置</DialogTitle>
         </DialogHeader>
@@ -333,7 +333,7 @@ export function TimerSettingsDialog({
                     <span className="text-base flex-shrink-0">{preset.icon}</span>
                     <div className="min-w-0">
                       <p className="text-xs font-medium truncate">{preset.name}</p>
-                      <p className="text-[10px] text-muted-foreground truncate">{preset.description}</p>
+                      <p className="text-2xs text-muted-foreground truncate">{preset.description}</p>
                     </div>
                   </div>
                   <button

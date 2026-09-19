@@ -136,7 +136,7 @@ export function DataBackup() {
           备份管理
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent aria-describedby={undefined} className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>数据备份与恢复</DialogTitle>
         </DialogHeader>

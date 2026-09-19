@@ -177,7 +177,7 @@ export function DistractionLog({ taskId, pomodoroSessionId, isTimerRunning = fal
           <AlertTriangle className={cn('h-4 w-4 transition-transform', showQuickReasons && 'rotate-12')} />
           <span className="text-xs font-medium">分心</span>
           {sessionDistractions.length > 0 && (
-            <Badge className="ml-0.5 h-4 min-w-4 px-1 text-[10px] bg-amber-500 text-white">
+            <Badge className="ml-0.5 h-4 min-w-4 px-1 text-2xs bg-amber-500 text-white">
               {sessionDistractions.length}
             </Badge>
           )}
@@ -211,13 +211,13 @@ export function DistractionLog({ taskId, pomodoroSessionId, isTimerRunning = fal
               <div className="p-3">
                 {recentReasons.length > 0 && !selectedCategory && (
                   <div className="mb-3">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2 font-medium">最近使用</p>
+                    <p className="text-2xs text-muted-foreground uppercase tracking-wider mb-2 font-medium">最近使用</p>
                     <div className="flex flex-wrap gap-1.5">
                       {recentReasons.map((reason) => (
                         <button
                           key={reason}
                           onClick={() => handleQuickDistraction(reason)}
-                          className="px-2.5 py-1 rounded-full text-[11px] font-medium bg-muted/50 hover:bg-muted transition-colors"
+                          className="px-2.5 py-1 rounded-full text-2xs font-medium bg-muted/50 hover:bg-muted transition-colors"
                         >
                           {reason}
                         </button>
@@ -228,7 +228,7 @@ export function DistractionLog({ taskId, pomodoroSessionId, isTimerRunning = fal
 
                 {!selectedCategory ? (
                   <div className="space-y-2">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2 font-medium">选择分类</p>
+                    <p className="text-2xs text-muted-foreground uppercase tracking-wider mb-2 font-medium">选择分类</p>
                     {DISTRACTION_CATEGORIES.map((category) => (
                       <button
                         key={category.id}
@@ -245,7 +245,7 @@ export function DistractionLog({ taskId, pomodoroSessionId, isTimerRunning = fal
                           <span className="text-sm font-medium">{category.label}</span>
                         </div>
                         <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] text-muted-foreground">{category.items.length}项</span>
+                          <span className="text-2xs text-muted-foreground">{category.items.length}项</span>
                           <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-primary transition-colors" />
                         </div>
                       </button>
@@ -310,8 +310,8 @@ export function DistractionLog({ taskId, pomodoroSessionId, isTimerRunning = fal
                 <div className="px-3 pb-3">
                   <div className="rounded-xl bg-amber-500/5 border border-amber-500/10 p-2.5">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-[10px] text-amber-600/80 font-medium">本次专注</span>
-                      <Badge variant="secondary" className="text-[10px] h-4 bg-amber-500/15 text-amber-600">
+                      <span className="text-2xs text-amber-600/80 font-medium">本次专注</span>
+                      <Badge variant="secondary" className="text-2xs h-4 bg-amber-500/15 text-amber-600">
                         {sessionDistractions.length} 次
                       </Badge>
                     </div>
@@ -319,7 +319,7 @@ export function DistractionLog({ taskId, pomodoroSessionId, isTimerRunning = fal
                       {sessionDistractions.slice(-3).reverse().map((d) => (
                         <span 
                           key={d.id} 
-                          className="text-[10px] px-1.5 py-0.5 rounded bg-muted/50 text-muted-foreground"
+                          className="text-2xs px-1.5 py-0.5 rounded bg-muted/50 text-muted-foreground"
                         >
                           {d.reason}
                         </span>
@@ -350,12 +350,12 @@ export function DistractionLog({ taskId, pomodoroSessionId, isTimerRunning = fal
           </div>
           <div className="flex items-center gap-2">
             {sessionDistractions.length > 0 && (
-              <Badge variant="secondary" className="text-[10px] bg-amber-500/15 text-amber-600">
+              <Badge variant="secondary" className="text-2xs bg-amber-500/15 text-amber-600">
                 {sessionDistractions.length} 次
               </Badge>
             )}
             <Dialog open={showDialog} onOpenChange={setShowDialog}>
-              <DialogContent className="max-w-md p-0 overflow-hidden" onClick={(e) => e.preventDefault()}>
+              <DialogContent aria-describedby={undefined} className="max-w-md p-0 overflow-hidden" onClick={(e) => e.preventDefault()}>
                 <DialogHeader className="p-4 border-b bg-gradient-to-r from-amber-500/5 to-orange-500/5">
                   <DialogTitle className="text-base flex items-center gap-2">
                     <AlertTriangle className="h-5 w-5 text-amber-500" />
@@ -365,7 +365,7 @@ export function DistractionLog({ taskId, pomodoroSessionId, isTimerRunning = fal
                 <div className="p-4 space-y-4">
                   {recentReasons.length > 0 && (
                     <div>
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2 font-medium">最近使用</p>
+                      <p className="text-2xs text-muted-foreground uppercase tracking-wider mb-2 font-medium">最近使用</p>
                       <div className="flex flex-wrap gap-1.5">
                         {recentReasons.map((reason) => (
                           <button
@@ -412,7 +412,7 @@ export function DistractionLog({ taskId, pomodoroSessionId, isTimerRunning = fal
                   <Separator />
                   
                   <div>
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2 font-medium">自定义原因</p>
+                    <p className="text-2xs text-muted-foreground uppercase tracking-wider mb-2 font-medium">自定义原因</p>
                     <div className="flex gap-2">
                       <Input
                         placeholder="输入自定义原因..."
@@ -457,7 +457,7 @@ export function DistractionLog({ taskId, pomodoroSessionId, isTimerRunning = fal
                 <div className="flex items-center gap-1 shrink-0">
                   <TrendingDown className="h-3 w-3 text-amber-500/60" />
                   <Clock className="h-3 w-3 text-muted-foreground/50" />
-                  <span className="text-[10px] text-muted-foreground">
+                  <span className="text-2xs text-muted-foreground">
                     {new Date(d.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
                   </span>
                 </div>
@@ -466,7 +466,7 @@ export function DistractionLog({ taskId, pomodoroSessionId, isTimerRunning = fal
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-5 w-5 shrink-0 opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
+                className="h-5 w-5 shrink-0 hover-reveal hover:text-destructive transition-opacity"
                 onClick={() => deleteDistraction(d.id)}
                 aria-label="删除分心记录"
               >
@@ -475,7 +475,7 @@ export function DistractionLog({ taskId, pomodoroSessionId, isTimerRunning = fal
             </div>
           ))}
           {sessionDistractions.length > 6 && (
-            <p className="text-[10px] text-muted-foreground text-center">
+            <p className="text-2xs text-muted-foreground text-center">
               还有 {sessionDistractions.length - 6} 条记录...
             </p>
           )}
@@ -483,9 +483,9 @@ export function DistractionLog({ taskId, pomodoroSessionId, isTimerRunning = fal
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
                 <BarChart3 className="h-3.5 w-3.5 text-amber-500/70" />
-                <span className="text-[11px] font-medium text-amber-600/80">今日分心总览</span>
+                <span className="text-2xs font-medium text-amber-600/80">今日分心总览</span>
               </div>
-              <span className="text-[11px] font-semibold text-amber-600">
+              <span className="text-2xs font-semibold text-amber-600">
                 {todayDistractions.length} 次
               </span>
             </div>
@@ -496,7 +496,7 @@ export function DistractionLog({ taskId, pomodoroSessionId, isTimerRunning = fal
                 return (
                   <div key={r.key} className="flex items-center gap-1">
                     <r.icon className="h-2.5 w-2.5 text-muted-foreground/60" />
-                    <span className="text-[10px] text-muted-foreground">{count}</span>
+                    <span className="text-2xs text-muted-foreground">{count}</span>
                   </div>
                 )
               })}

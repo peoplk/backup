@@ -217,7 +217,7 @@ export function TaskTemplates({ onSelectTemplate }: TaskTemplatesProps) {
                 <Plus className="h-4 w-4" />
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent aria-describedby={undefined}>
               <DialogHeader>
                 <DialogTitle>创建任务模板</DialogTitle>
               </DialogHeader>
@@ -334,7 +334,7 @@ export function TaskTemplates({ onSelectTemplate }: TaskTemplatesProps) {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6 opacity-0 group-hover:opacity-100"
+                    className="h-6 w-6 hover-reveal transition-opacity"
                     onClick={(e) => {
                       e.stopPropagation()
                       handleDeleteTemplate(template.id)
@@ -351,7 +351,7 @@ export function TaskTemplates({ onSelectTemplate }: TaskTemplatesProps) {
               {template.tags.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-1">
                   {template.tags.slice(0, 2).map((tag) => (
-                    <Badge key={tag} variant="outline" className="text-[10px] px-1 py-0">
+                    <Badge key={tag} variant="outline" className="text-2xs px-1 py-0">
                       {tag}
                     </Badge>
                   ))}

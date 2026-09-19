@@ -605,7 +605,7 @@ export function SettingsView() {
   const totalTrackedTime = timeEntries.reduce((acc, e) => acc + e.duration, 0)
 
   return (
-    <div className="space-y-6 animate-fade-in-up">
+    <div className="space-y-6 view-enter">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">设置</h1>
         <p className="text-muted-foreground mt-0.5">管理你的应用偏好</p>
@@ -930,7 +930,7 @@ export function SettingsView() {
                       </button>
                     ))}
                   </div>
-                  <p className="text-[11px] text-muted-foreground mt-2">
+                  <p className="text-2xs text-muted-foreground mt-2">
                     💡 设置工作时间有助于系统为你推荐最佳专注时段和智能提醒
                   </p>
                 </div>
@@ -962,7 +962,7 @@ export function SettingsView() {
                     return (
                       <div key={item.id} className="flex items-center justify-between rounded-lg border p-2">
                         <div className="flex items-center gap-2 min-w-0">
-                          <Badge variant="outline" className="text-[10px] shrink-0">
+                          <Badge variant="outline" className="text-2xs shrink-0">
                             {typeLabels[item.type]}
                           </Badge>
                           <span className="text-sm truncate">{data.title || data.name || '未知'}</span>
@@ -1109,7 +1109,7 @@ export function SettingsView() {
               <div className="flex items-center justify-between">
                 <div>
                   <span className="text-sm text-muted-foreground">无操作自动暂停</span>
-                  <p className="text-[10px] text-muted-foreground/70">番茄钟运行中超过该时长无操作将自动暂停（0=关闭）</p>
+                  <p className="text-2xs text-muted-foreground/70">番茄钟运行中超过该时长无操作将自动暂停（0=关闭）</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Input
@@ -1340,7 +1340,7 @@ export function SettingsView() {
             <CardTitle className="flex items-center gap-2">
               <Cloud className="h-5 w-5" />
               云同步
-              <Badge variant={activeSyncStore.isEnabled ? 'default' : 'outline'} className="ml-auto text-[10px]">
+              <Badge variant={activeSyncStore.isEnabled ? 'default' : 'outline'} className="ml-auto text-2xs">
                 {activeSyncStore.isEnabled ? '已启用' : '未启用'}
               </Badge>
             </CardTitle>
@@ -1352,7 +1352,7 @@ export function SettingsView() {
               <div className="flex flex-wrap items-center gap-3 text-xs">
                 <div className="flex items-center gap-1.5">
                   <span className="text-muted-foreground">当前服务：</span>
-                  <Badge variant="secondary" className="text-[10px]">
+                  <Badge variant="secondary" className="text-2xs">
                     {selectedProvider === 'none' && '未配置'}
                     {selectedProvider === 's3' && 'S3'}
                   </Badge>
@@ -1442,7 +1442,7 @@ export function SettingsView() {
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
                           <p className="text-sm font-medium truncate">{conflict.name}</p>
-                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                          <p className="text-2xs text-muted-foreground mt-0.5">
                             {conflict.type} · {conflict.localUpdatedAt ? `本地 ${new Date(conflict.localUpdatedAt).toLocaleString('zh-CN')}` : '本地无时间'} ·
                             {conflict.remoteUpdatedAt ? ` 远端 ${new Date(conflict.remoteUpdatedAt).toLocaleString('zh-CN')}` : ' 远端无时间'}
                           </p>
@@ -1518,13 +1518,13 @@ export function SettingsView() {
                     </div>
                     <p className="text-sm font-semibold">S3</p>
                   </div>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  <p className="text-2xs text-muted-foreground leading-relaxed">
                     S3 兼容存储（阿里云 OSS / MinIO / AWS），AccessKey 认证，定时轮询
                   </p>
                   <div className="flex flex-wrap gap-1">
-                    <Badge variant="secondary" className="text-[10px]">S3兼容</Badge>
-                    <Badge variant="secondary" className="text-[10px]">AccessKey</Badge>
-                    <Badge variant="secondary" className="text-[10px]">轮询</Badge>
+                    <Badge variant="secondary" className="text-2xs">S3兼容</Badge>
+                    <Badge variant="secondary" className="text-2xs">AccessKey</Badge>
+                    <Badge variant="secondary" className="text-2xs">轮询</Badge>
                   </div>
                   <Button size="sm" variant="outline" className="w-full mt-2 gap-1" onClick={() => setSelectedProvider('s3')}>
                     配置 S3
@@ -1544,7 +1544,7 @@ export function SettingsView() {
                 {!getIsS3Configured() && (
                   <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
                     <p className="text-xs text-amber-600 dark:text-amber-400 font-medium">S3 未配置</p>
-                    <p className="text-[11px] text-muted-foreground mt-1">请填写下方 S3 配置信息后保存</p>
+                    <p className="text-2xs text-muted-foreground mt-1">请填写下方 S3 配置信息后保存</p>
                   </div>
                 )}
 
@@ -1675,7 +1675,7 @@ export function SettingsView() {
                           onChange={(e) => setS3ConfigForm((p) => ({ ...p, syncInterval: Math.max(0, parseInt(e.target.value) || 0) }))}
                           className="h-8 text-xs"
                         />
-                        <p className="text-[10px] text-muted-foreground">0 = 仅手动</p>
+                        <p className="text-2xs text-muted-foreground">0 = 仅手动</p>
                       </div>
                     </div>
 
@@ -1736,7 +1736,7 @@ export function SettingsView() {
                       </div>
                     )}
 
-                    <div className="rounded-lg bg-amber-500/5 border border-amber-500/20 p-2.5 text-[11px] text-amber-600 dark:text-amber-400">
+                    <div className="rounded-lg bg-amber-500/5 border border-amber-500/20 p-2.5 text-2xs text-amber-600 dark:text-amber-400">
                       ⚠ AccessKey Secret 已通过操作系统安全存储加密（Electron 桌面端），浏览器端建议使用 RAM 子账号 + 最小权限以提升安全性
                     </div>
                   </div>
@@ -1760,7 +1760,7 @@ export function SettingsView() {
                             </p>
                           </div>
                         </div>
-                        <Badge variant="default" className="text-[10px]">S3</Badge>
+                        <Badge variant="default" className="text-2xs">S3</Badge>
                       </div>
                     )}
 
@@ -1829,7 +1829,7 @@ export function SettingsView() {
 
                     <div className="rounded-xl bg-muted/30 p-3 space-y-1.5">
                       <p className="text-xs font-medium">使用说明</p>
-                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      <p className="text-2xs text-muted-foreground leading-relaxed">
                         • S3 同步依赖 AccessKey，请妥善保管<br />
                         • 首次推送会自动创建远端对象；支持手动推送/拉取<br />
                         • 定时轮询自动同步，也可手动推送/拉取

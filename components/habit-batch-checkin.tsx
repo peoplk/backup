@@ -172,7 +172,7 @@ export function HabitBatchCheckIn() {
                           <span className="text-base">{habit.icon}</span>
                           <span className="flex-1 truncate font-medium">{habit.name}</span>
                           {selected && (
-                            <Badge variant="secondary" className="text-[10px]">
+                            <Badge variant="secondary" className="text-2xs">
                               已选
                             </Badge>
                           )}

@@ -234,22 +234,22 @@ export function DailyReviewDialog({ open, onOpenChange, onComplete }: DailyRevie
               <div className="rounded-xl bg-chart-1/8 p-3 text-center">
                 <CheckCircle2 className="h-4 w-4 mx-auto mb-1.5 text-chart-1" />
                 <div className="text-xl font-bold tabular-nums">{todayStats.tasksCompleted}</div>
-                <div className="text-[10px] text-muted-foreground">完成任务</div>
+                <div className="text-2xs text-muted-foreground">完成任务</div>
               </div>
               <div className="rounded-xl bg-chart-3/8 p-3 text-center">
                 <Flame className="h-4 w-4 mx-auto mb-1.5 text-chart-3" />
                 <div className="text-xl font-bold tabular-nums">{todayStats.pomodoros}</div>
-                <div className="text-[10px] text-muted-foreground">番茄钟</div>
+                <div className="text-2xs text-muted-foreground">番茄钟</div>
               </div>
               <div className="rounded-xl bg-chart-2/8 p-3 text-center">
                 <Timer className="h-4 w-4 mx-auto mb-1.5 text-chart-2" />
                 <div className="text-xl font-bold tabular-nums">{formatMinutes(todayStats.focusMinutes)}</div>
-                <div className="text-[10px] text-muted-foreground">专注时长</div>
+                <div className="text-2xs text-muted-foreground">专注时长</div>
               </div>
               <div className="rounded-xl bg-chart-4/8 p-3 text-center">
                 <Trophy className="h-4 w-4 mx-auto mb-1.5 text-chart-4" />
                 <div className="text-xl font-bold tabular-nums">{todayStats.habitRate}%</div>
-                <div className="text-[10px] text-muted-foreground">习惯 {todayStats.habitsCompleted}/{todayStats.habitsTotal}</div>
+                <div className="text-2xs text-muted-foreground">习惯 {todayStats.habitsCompleted}/{todayStats.habitsTotal}</div>
               </div>
             </div>
 
@@ -292,7 +292,7 @@ export function DailyReviewDialog({ open, onOpenChange, onComplete }: DailyRevie
                     )}
                   >
                     <Icon className={cn('h-5 w-5', selected ? opt.color : 'text-muted-foreground')} />
-                    <span className={cn('text-[10px]', selected ? 'font-medium' : 'text-muted-foreground')}>
+                    <span className={cn('text-2xs', selected ? 'font-medium' : 'text-muted-foreground')}>
                       {opt.label}
                     </span>
                   </button>

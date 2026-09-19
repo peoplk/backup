@@ -290,16 +290,16 @@ export function CommandPalette() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="overflow-hidden p-0 shadow-lg max-w-lg">
+      <DialogContent aria-describedby={undefined} className="overflow-hidden p-0 shadow-lg max-w-lg">
         <div className="flex items-center border-b px-3">
           <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
           <Input
             placeholder="搜索命令或输入任务..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="flex h-11 w-full rounded-md border-0 bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
+            className="flex h-11 w-full rounded-md border-0 bg-transparent py-3 text-sm placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
           />
-          <kbd className="pointer-events-none hidden h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100 sm:flex">
+          <kbd className="pointer-events-none hidden h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-2xs font-medium opacity-100 sm:flex">
             <span className="text-xs">ESC</span>
           </kbd>
         </div>
@@ -337,7 +337,7 @@ export function CommandPalette() {
                         {command.shortcut.map((key, i) => (
                           <kbd
                             key={i}
-                            className="pointer-events-none h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium"
+                            className="pointer-events-none h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-2xs font-medium"
                           >
                             {key}
                           </kbd>
@@ -358,20 +358,20 @@ export function CommandPalette() {
         <div className="flex items-center justify-between border-t px-4 py-2 text-xs text-muted-foreground">
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1">
-              <kbd className="h-4 rounded border bg-muted px-1 text-[10px]">↑↓</kbd>
+              <kbd className="h-4 rounded border bg-muted px-1 text-2xs">↑↓</kbd>
               <span>选择</span>
             </div>
             <div className="flex items-center gap-1">
-              <kbd className="h-4 rounded border bg-muted px-1 text-[10px]">↵</kbd>
+              <kbd className="h-4 rounded border bg-muted px-1 text-2xs">↵</kbd>
               <span>确认</span>
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <kbd className="h-4 rounded border bg-muted px-1 text-[10px]">
+            <kbd className="h-4 rounded border bg-muted px-1 text-2xs">
               {isMac ? <Command className="h-3 w-3" /> : 'Ctrl'}
             </kbd>
-            <kbd className="h-4 rounded border bg-muted px-1 text-[10px]">⇧</kbd>
-            <kbd className="h-4 rounded border bg-muted px-1 text-[10px]">P</kbd>
+            <kbd className="h-4 rounded border bg-muted px-1 text-2xs">⇧</kbd>
+            <kbd className="h-4 rounded border bg-muted px-1 text-2xs">P</kbd>
             <span>打开命令面板</span>
           </div>
         </div>

@@ -64,7 +64,7 @@ export function CalendarSubscriptionsManager() {
           <CalendarSync className="h-3.5 w-3.5" />
           订阅日历
           {calendars.length > 0 && (
-            <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">
+            <Badge variant="secondary" className="ml-1 h-4 px-1 text-2xs">
               {calendars.length}
             </Badge>
           )}
@@ -131,7 +131,7 @@ export function CalendarSubscriptionsManager() {
                   />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{cal.name}</p>
-                    <p className="truncate text-[11px] text-muted-foreground">
+                    <p className="truncate text-2xs text-muted-foreground">
                       {cal.status === 'syncing' && '同步中…'}
                       {cal.status === 'error' && `同步失败：${cal.lastError || '未知错误'}`}
                       {cal.status === 'synced' &&

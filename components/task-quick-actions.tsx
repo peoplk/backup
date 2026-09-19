@@ -105,7 +105,7 @@ export function TaskQuickActions({ taskId, compact = false }: TaskQuickActionsPr
           <Badge
             variant={isCompleted ? 'default' : 'outline'}
             className={cn(
-              'text-[10px] gap-0.5 px-1.5 py-0 h-5',
+              'text-2xs gap-0.5 px-1.5 py-0 h-5',
               isCompleted && 'bg-chart-2 text-white'
             )}
           >
@@ -117,7 +117,7 @@ export function TaskQuickActions({ taskId, compact = false }: TaskQuickActionsPr
           <Button
             variant={isPomodoroRunning ? 'destructive' : 'default'}
             size="sm"
-            className="h-6 px-2 text-[10px] gap-1"
+            className="h-6 px-2 text-2xs gap-1"
             onClick={handleTogglePomodoro}
           >
             {isPomodoroRunning ? (
@@ -137,7 +137,7 @@ export function TaskQuickActions({ taskId, compact = false }: TaskQuickActionsPr
           <Button
             variant="ghost"
             size="sm"
-            className="h-6 px-2 text-[10px] gap-1"
+            className="h-6 px-2 text-2xs gap-1"
             onClick={handleStartPomodoro}
           >
             <Timer className="h-3 w-3" />
@@ -145,7 +145,7 @@ export function TaskQuickActions({ taskId, compact = false }: TaskQuickActionsPr
           </Button>
         )}
         {isTracking && (
-          <Badge variant="outline" className="text-[10px] gap-1 px-1.5 py-0 h-5 animate-pulse bg-chart-2/10 text-chart-2 border-chart-2/30">
+          <Badge variant="outline" className="text-2xs gap-1 px-1.5 py-0 h-5 animate-pulse bg-chart-2/10 text-chart-2 border-chart-2/30">
             <Clock className="h-3 w-3" />
             计时中
           </Badge>
@@ -169,7 +169,7 @@ export function TaskQuickActions({ taskId, compact = false }: TaskQuickActionsPr
             className={cn('h-1.5', isCompleted && '[&>div]:bg-chart-2')}
           />
           {isCompleted && !task.status.includes('done') && (
-            <p className="text-[10px] text-chart-2 mt-1 flex items-center gap-1">
+            <p className="text-2xs text-chart-2 mt-1 flex items-center gap-1">
               <CheckCircle2 className="h-3 w-3" />
               已完成预估番茄钟，可以标记完成了
             </p>

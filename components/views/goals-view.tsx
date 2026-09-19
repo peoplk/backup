@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
+import { EmptyState } from '@/components/ui/empty-state'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   SortableContext,
@@ -336,7 +337,7 @@ export function GoalsView() {
         <Button
           variant="ghost"
           size="icon"
-          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+          className="h-6 w-6 hover-reveal transition-opacity text-muted-foreground hover:text-destructive"
           onClick={() => deleteMilestone(goalId, milestone.id)}
           aria-label="删除里程碑"
         >
@@ -540,7 +541,7 @@ export function GoalsView() {
                             {task.title}
                           </span>
                           <button
-                            className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                            className="hover-reveal transition-opacity text-muted-foreground hover:text-destructive"
                             onClick={(e) => {
                               e.stopPropagation()
                               dataLinkService.unlinkTaskFromGoal(taskId, goal.id)
@@ -603,7 +604,7 @@ export function GoalsView() {
                           <span className="text-base">{habit.icon}</span>
                           <span className="flex-1 truncate">{habit.name}</span>
                           <button
-                            className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                            className="hover-reveal transition-opacity text-muted-foreground hover:text-destructive"
                             onClick={() => dataLinkService.unlinkHabitFromGoal(habitId, goal.id)}
                             aria-label="取消关联习惯"
                           >
@@ -677,7 +678,7 @@ export function GoalsView() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in-up">
+    <div className="space-y-6 view-enter">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">目标管理</h1>
@@ -712,7 +713,7 @@ export function GoalsView() {
               新建目标
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
+          <DialogContent aria-describedby={undefined} className="sm:max-w-[500px]">
             <DialogHeader>
               <DialogTitle>{editingGoal ? '编辑目标' : '创建新目标'}</DialogTitle>
             </DialogHeader>
@@ -883,18 +884,17 @@ export function GoalsView() {
         {(['in-progress', 'not-started', 'completed', 'paused'] as const).map((status) => (
           <TabsContent key={status} value={status}>
             {goalsByStatus[status].length === 0 ? (
-              <Card>
-                <CardContent className="py-12 text-center text-muted-foreground">
-                  <Target className="mx-auto h-12 w-12 opacity-50 mb-3" />
-                  <p className="text-sm">
-                    {status === 'in-progress' && '暂无进行中的目标'}
-                    {status === 'not-started' && '暂无未开始的目标'}
-                    {status === 'completed' && '暂无已完成的目标'}
-                    {status === 'paused' && '暂无已暂停的目标'}
-                  </p>
-                  <p className="text-xs mt-1">点击上方“新建目标”创建第一个目标</p>
-                </CardContent>
-              </Card>
+              <EmptyState
+                icon={<Target />}
+                title={
+                  status === 'in-progress' ? '暂无进行中的目标'
+                    : status === 'not-started' ? '暂无未开始的目标'
+                    : status === 'completed' ? '暂无已完成的目标'
+                    : '暂无已暂停的目标'
+                }
+                description="点击上方“新建目标”创建第一个目标"
+                className="py-14"
+              />
             ) : (
               <div className="grid gap-4 md:grid-cols-2">
                 {goalsByStatus[status].map((goal) => (

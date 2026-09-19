@@ -412,7 +412,7 @@ export function PrivacyLock() {
       </Card>
 
       <Dialog open={showSetupDialog} onOpenChange={setShowSetupDialog}>
-        <DialogContent className="max-w-sm">
+        <DialogContent aria-describedby={undefined} className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <KeyRound className="h-5 w-5" />
@@ -472,7 +472,7 @@ export function PrivacyLock() {
       </Dialog>
 
       <Dialog open={showUnlockDialog} onOpenChange={setShowUnlockDialog}>
-        <DialogContent className="max-w-sm">
+        <DialogContent aria-describedby={undefined} className="max-w-sm">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Lock className="h-5 w-5" />

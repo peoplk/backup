@@ -108,12 +108,12 @@ function ChainNode({ task, isBlocked }: { task: Task; isBlocked: boolean }) {
         {task.title}
       </span>
       {task.priority === 'urgent' && !isDone && (
-        <Badge variant="outline" className="text-[10px] text-destructive border-destructive/30">
+        <Badge variant="outline" className="text-2xs text-destructive border-destructive/30">
           紧急
         </Badge>
       )}
       {isBlocked && !isDone && (
-        <Badge variant="outline" className="text-[10px] text-destructive border-destructive/30 gap-1">
+        <Badge variant="outline" className="text-2xs text-destructive border-destructive/30 gap-1">
           <AlertTriangle className="h-2.5 w-2.5" />
           阻塞
         </Badge>
@@ -154,7 +154,7 @@ export function TaskDependencyGraph({ taskId }: { taskId: string }) {
         <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
           <ArrowUp className="h-3.5 w-3.5" />
           上游链路（前置任务）
-          <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[10px]">
+          <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-2xs">
             {chain.upstream.length}
           </Badge>
         </div>
@@ -175,7 +175,7 @@ export function TaskDependencyGraph({ taskId }: { taskId: string }) {
         <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
           <ArrowDown className="h-3.5 w-3.5" />
           下游链路（被阻塞任务）
-          <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[10px]">
+          <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-2xs">
             {chain.downstream.length}
           </Badge>
         </div>

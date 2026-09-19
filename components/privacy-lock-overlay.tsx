@@ -116,7 +116,7 @@ export function PrivacyLockOverlay() {
   if (!isEnabled || !isLocked) return null
 
   return (
-    <div className="fixed inset-0 z-[9999] bg-background/95 backdrop-blur-sm flex items-center justify-center">
+    <div className="fixed inset-0 z-[9999] bg-background/95 backdrop-blur-sm flex items-center justify-center animate-in fade-in-0 duration-300">
       <Card className="w-full max-w-sm mx-4">
         <CardContent className="p-6 space-y-4">
           <div className="flex justify-center">

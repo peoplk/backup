@@ -105,7 +105,7 @@ export function MiniTimer() {
               {formatTime(timeLeft)}
             </span>
             <span className={cn(
-              'text-[10px]',
+              'text-2xs',
               isRunning ? 'text-white/70' : 'text-muted-foreground'
             )}>
               {config.label}
@@ -189,21 +189,21 @@ export function MiniTimer() {
                 <Target className="h-3.5 w-3.5" />
                 <span className="text-sm font-bold tabular-nums" style={{ fontFamily: 'var(--font-timer), "Space Grotesk", "Inter", sans-serif' }}>{todaySessions}</span>
               </div>
-              <p className="text-[10px] text-muted-foreground mt-0.5">今日番茄钟</p>
+              <p className="text-2xs text-muted-foreground mt-0.5">今日番茄钟</p>
             </div>
             <div className="text-center rounded-lg bg-muted/50 p-2">
               <div className="flex items-center justify-center gap-1 text-chart-3">
                 <Flame className="h-3.5 w-3.5" />
                 <span className="text-sm font-bold tabular-nums" style={{ fontFamily: 'var(--font-timer), "Space Grotesk", "Inter", sans-serif' }}>{completedSessions}</span>
               </div>
-              <p className="text-[10px] text-muted-foreground mt-0.5">本轮进度</p>
+              <p className="text-2xs text-muted-foreground mt-0.5">本轮进度</p>
             </div>
             <div className="text-center rounded-lg bg-muted/50 p-2">
               <div className="flex items-center justify-center gap-1 text-chart-2">
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 <span className="text-sm font-bold tabular-nums" style={{ fontFamily: 'var(--font-timer), "Space Grotesk", "Inter", sans-serif' }}>{pomodoroSettings.sessionsBeforeLongBreak}</span>
               </div>
-              <p className="text-[10px] text-muted-foreground mt-0.5">长休息间隔</p>
+              <p className="text-2xs text-muted-foreground mt-0.5">长休息间隔</p>
             </div>
           </div>
 

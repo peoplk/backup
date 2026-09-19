@@ -186,7 +186,7 @@ export function AnniversariesView() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in-up">
+    <div className="space-y-6 view-enter">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">倒数纪念日</h1>
@@ -199,7 +199,7 @@ export function AnniversariesView() {
               添加纪念日
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent aria-describedby={undefined}>
             <DialogHeader>
               <DialogTitle>{editingAnniversary ? '编辑纪念日' : '添加新纪念日'}</DialogTitle>
             </DialogHeader>

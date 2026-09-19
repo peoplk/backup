@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { EmptyState } from '@/components/ui/empty-state'
 import { FocusReport } from '@/components/focus-report'
 import { ReportExportDialog } from '@/components/report-export-dialog'
 import { ActivityTimelineCard } from '@/components/activity-timeline-card'
@@ -546,7 +547,7 @@ export function AnalyticsView() {
   // ============ 渲染 ============
 
   return (
-    <div className="space-y-6 animate-fade-in-up">
+    <div className="space-y-6 view-enter">
       {/* 顶部标题 + Tab 导航 */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -624,7 +625,7 @@ export function AnalyticsView() {
             <CardContent className="relative p-5">
               <div className="flex items-center justify-between mb-3">
                 <div className="rounded-xl bg-purple-500/10 p-2.5"><Activity className="h-5 w-5 text-purple-500" /></div>
-                <Badge className={cn("text-[10px] h-5", efficiencyLevel.bg, efficiencyLevel.color)}>{efficiencyLevel.label}</Badge>
+                <Badge className={cn("text-2xs h-5", efficiencyLevel.bg, efficiencyLevel.color)}>{efficiencyLevel.label}</Badge>
               </div>
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">效率评分</p>
               <div className="flex items-baseline gap-1 mt-1">
@@ -728,7 +729,7 @@ export function AnalyticsView() {
                   </CardTitle>
                   <CardDescription>7天 x 24小时专注分布</CardDescription>
                 </div>
-                <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground shrink-0">
+                <div className="flex items-center gap-1.5 text-2xs text-muted-foreground shrink-0">
                   <span>少</span>
                   <div className="flex gap-0.5">
                     {[0, 0.2, 0.4, 0.6, 0.8, 1].map(v => <div key={v} className={cn('h-3 w-3 rounded-sm', heatCellColor(v))} />)}
@@ -743,7 +744,7 @@ export function AnalyticsView() {
                   {/* 小时标签 */}
                   <div className="flex items-center mb-1 pl-10">
                     {Array.from({ length: 24 }, (_, h) => (
-                      <div key={h} className="flex-1 text-center text-[9px] text-muted-foreground/60 tabular-nums">{h % 3 === 0 ? `${h}` : ''}</div>
+                      <div key={h} className="flex-1 text-center text-3xs text-muted-foreground/60 tabular-nums">{h % 3 === 0 ? `${h}` : ''}</div>
                     ))}
                   </div>
                   {/* 热力图网格 */}
@@ -751,7 +752,7 @@ export function AnalyticsView() {
                     const dayLabels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
                     return (
                       <div key={dayIdx} className="flex items-center gap-1 mb-1">
-                        <div className="w-8 text-right text-[10px] text-muted-foreground shrink-0">{dayLabels[dayIdx]}</div>
+                        <div className="w-8 text-right text-2xs text-muted-foreground shrink-0">{dayLabels[dayIdx]}</div>
                         <div className="flex-1 flex gap-0.5">
                           {row.map(cell => (
                             <div key={cell.hour}
@@ -800,7 +801,7 @@ export function AnalyticsView() {
                 </CardTitle>
                 <CardDescription>最近 28 天每日专注时长分布</CardDescription>
               </div>
-              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground shrink-0">
+              <div className="flex items-center gap-1.5 text-2xs text-muted-foreground shrink-0">
                 <span>少</span>
                 <div className="flex gap-0.5">
                   <div className="h-3 w-3 rounded-sm bg-muted/30" />
@@ -814,12 +815,12 @@ export function AnalyticsView() {
             <div className="max-w-lg">
               <div className="flex items-center gap-1 mb-1 pl-11">
                 {['一', '二', '三', '四', '五', '六', '日'].map(d => (
-                  <div key={d} className="flex-1 text-center text-[9px] text-muted-foreground/60">{d}</div>
+                  <div key={d} className="flex-1 text-center text-3xs text-muted-foreground/60">{d}</div>
                 ))}
               </div>
               {fourWeekHeatmap.weeks.map((week, w) => (
                 <div key={w} className="flex items-center gap-1 mb-1">
-                  <div className="w-10 text-right text-[10px] text-muted-foreground shrink-0 tabular-nums">
+                  <div className="w-10 text-right text-2xs text-muted-foreground shrink-0 tabular-nums">
                     {week[0].date.getMonth() + 1}/{week[0].date.getDate()}
                   </div>
                   <div className="flex-1 flex gap-0.5">
@@ -934,7 +935,7 @@ export function AnalyticsView() {
             <CardContent>
               <div className="h-[280px]">
                 {projects.length === 0 ? (
-                  <EmptyState message="暂无项目数据" />
+                  <ChartEmpty message="暂无项目数据" />
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={projectTrendData}>
@@ -962,7 +963,7 @@ export function AnalyticsView() {
             <CardContent>
               <div className="h-[280px]">
                 {habitTrendData.length === 0 ? (
-                  <EmptyState message="暂无习惯数据" />
+                  <ChartEmpty message="暂无习惯数据" />
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={habitTrendData}>
@@ -1097,7 +1098,7 @@ function GoalRing({ rate }: { rate: number }) {
       </svg>
       <div className="absolute flex flex-col items-center">
         <span className="text-3xl font-bold tabular-nums" style={{ fontFamily: 'var(--font-timer), "Space Grotesk", "Inter", sans-serif' }}>{rate}%</span>
-        <span className="text-[10px] text-muted-foreground">达成率</span>
+        <span className="text-2xs text-muted-foreground">达成率</span>
       </div>
     </div>
   )
@@ -1120,7 +1121,7 @@ function InsightItem({ icon: Icon, color, label, value, hint }: {
       <div className="flex-1 min-w-0">
         <p className="text-xs text-muted-foreground">{label}</p>
         <p className="text-sm font-semibold truncate">{value}</p>
-        {hint && <p className="text-[10px] text-muted-foreground mt-0.5">{hint}</p>}
+        {hint && <p className="text-2xs text-muted-foreground mt-0.5">{hint}</p>}
       </div>
     </div>
   )
@@ -1128,12 +1129,8 @@ function InsightItem({ icon: Icon, color, label, value, hint }: {
 
 // ============ 空状态 ============
 
-function EmptyState({ message }: { message: string }) {
-  return (
-    <div className="flex items-center justify-center h-full">
-      <p className="text-sm text-muted-foreground">{message}</p>
-    </div>
-  )
+function ChartEmpty({ message }: { message: string }) {
+  return <EmptyState title={message} className="h-full border-none py-0" />
 }
 
 // ============ 单日分析区块 ============
@@ -1198,8 +1195,8 @@ function DayAnalyticsSection({ selectedDate, isSelectedToday, isSelectedFuture, 
               <div className="text-xl sm:text-2xl font-bold tracking-tight truncate">{format(selectedDate, 'yyyy年M月d日', { locale: zhCN })}</div>
               <div className="text-sm text-muted-foreground flex items-center justify-center gap-2 mt-1 flex-wrap">
                 <span>{format(selectedDate, 'EEEE', { locale: zhCN })}</span>
-                {isSelectedToday && <Badge className="bg-primary/10 text-primary border-0 text-[10px] h-5">今天</Badge>}
-                {isSelectedFuture && <Badge variant="secondary" className="text-[10px] h-5">未来</Badge>}
+                {isSelectedToday && <Badge className="bg-primary/10 text-primary border-0 text-2xs h-5">今天</Badge>}
+                {isSelectedFuture && <Badge variant="secondary" className="text-2xs h-5">未来</Badge>}
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
@@ -1212,9 +1209,9 @@ function DayAnalyticsSection({ selectedDate, isSelectedToday, isSelectedFuture, 
 
       {/* 空状态 */}
       {isSelectedFuture ? (
-        <Card><CardContent className="p-12 text-center"><Sunrise className="h-12 w-12 mx-auto text-muted-foreground/40 mb-3" /><p className="text-sm text-muted-foreground">未来日期，暂无数据</p></CardContent></Card>
+        <Card><CardContent className="p-4"><EmptyState icon={<Sunrise />} title="未来日期，暂无数据" className="border-none" /></CardContent></Card>
       ) : !dailyStats.hasData ? (
-        <Card><CardContent className="p-12 text-center"><Hourglass className="h-12 w-12 mx-auto text-muted-foreground/40 mb-3" /><p className="text-sm font-medium mb-1">这一天还没有数据</p><p className="text-xs text-muted-foreground">开始一个番茄钟来记录你的专注</p></CardContent></Card>
+        <Card><CardContent className="p-4"><EmptyState icon={<Hourglass />} title="这一天还没有数据" description="开始一个番茄钟来记录你的专注" className="border-none" /></CardContent></Card>
       ) : (
         <>
           {/* 6 个核心指标 */}
@@ -1229,9 +1226,9 @@ function DayAnalyticsSection({ selectedDate, isSelectedToday, isSelectedFuture, 
               <CardContent className="relative p-4">
                 <div className="flex items-center justify-between mb-2">
                   <div className={cn('rounded-lg p-1.5', scoreLevel.bg)}><Gauge className={cn('h-4 w-4', scoreLevel.color)} /></div>
-                  <Badge className={cn('text-[10px] h-5 border-0', scoreLevel.bg, scoreLevel.color)}>{scoreLevel.label}</Badge>
+                  <Badge className={cn('text-2xs h-5 border-0', scoreLevel.bg, scoreLevel.color)}>{scoreLevel.label}</Badge>
                 </div>
-                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">生产效率</p>
+                <p className="text-2xs font-medium text-muted-foreground uppercase tracking-wide">生产效率</p>
                 <p className="text-2xl font-bold mt-1 tracking-tight tabular-nums" style={{ fontFamily: 'var(--font-timer), "Space Grotesk", "Inter", sans-serif' }}>{dailyStats.productivityScore}<span className="text-xs font-normal text-muted-foreground" style={{ fontFamily: 'var(--font-sans)' }}>/100</span></p>
                 <Progress value={dailyStats.productivityScore} className="mt-2 h-1" />
               </CardContent>
@@ -1247,7 +1244,7 @@ function DayAnalyticsSection({ selectedDate, isSelectedToday, isSelectedFuture, 
                     <CardTitle className="text-base font-semibold flex items-center gap-2"><Sparkles className="h-5 w-5 text-blue-500" />24 小时专注分布</CardTitle>
                     <CardDescription>每小时专注时长热力图</CardDescription>
                   </div>
-                  <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground shrink-0">
+                  <div className="flex items-center gap-1.5 text-2xs text-muted-foreground shrink-0">
                     <span>少</span>
                     <div className="flex gap-0.5">{[0, 0.2, 0.4, 0.6, 0.8, 1].map(v => <div key={v} className={cn('h-3 w-3 rounded-sm', heatColor(v))} />)}</div>
                     <span>多</span>
@@ -1261,8 +1258,8 @@ function DayAnalyticsSection({ selectedDate, isSelectedToday, isSelectedFuture, 
                     return (
                       <div key={section.title}>
                         <div className="flex items-center justify-between mb-1.5 px-0.5">
-                          <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground"><section.icon className="h-3.5 w-3.5" />{section.title}</div>
-                          <div className="text-[10px] text-muted-foreground/60 tabular-nums">{sectionMinutes > 0 ? `${sectionMinutes} 分钟` : '无专注'}</div>
+                          <div className="flex items-center gap-1.5 text-2xs font-medium text-muted-foreground"><section.icon className="h-3.5 w-3.5" />{section.title}</div>
+                          <div className="text-2xs text-muted-foreground/60 tabular-nums">{sectionMinutes > 0 ? `${sectionMinutes} 分钟` : '无专注'}</div>
                         </div>
                         <div className="grid grid-cols-12 gap-1.5">
                           {section.data.map(cell => {
@@ -1279,7 +1276,7 @@ function DayAnalyticsSection({ selectedDate, isSelectedToday, isSelectedFuture, 
                                   isActive && 'hover:scale-110 hover:shadow-md hover:z-10 cursor-pointer ring-1 ring-blue-500/20',
                                   !isActive && 'opacity-50'
                                 )} />
-                                <div className={cn('text-[9px] mt-1 tabular-nums transition-colors', isActive ? 'text-muted-foreground font-semibold' : 'text-muted-foreground/30')}>{cell.hour}</div>
+                                <div className={cn('text-3xs mt-1 tabular-nums transition-colors', isActive ? 'text-muted-foreground font-semibold' : 'text-muted-foreground/30')}>{cell.hour}</div>
                               </div>
                             )
                           })}
@@ -1320,7 +1317,7 @@ function DayAnalyticsSection({ selectedDate, isSelectedToday, isSelectedFuture, 
                           </div>
                           {s.taskTitle && <p className="text-xs text-muted-foreground truncate mt-0.5">{s.taskTitle}</p>}
                         </div>
-                        {s.projectName && <div className="rounded-full px-2 py-0.5 text-[10px] font-medium text-white shrink-0" style={{ backgroundColor: s.projectColor }}>{s.projectName}</div>}
+                        {s.projectName && <div className="rounded-full px-2 py-0.5 text-2xs font-medium text-white shrink-0" style={{ backgroundColor: s.projectColor }}>{s.projectName}</div>}
                       </div>
                     )
                   })}
@@ -1356,7 +1353,7 @@ function DayAnalyticsSection({ selectedDate, isSelectedToday, isSelectedFuture, 
                             </div>
                             <div className="flex items-baseline gap-1 shrink-0">
                               <span className="font-semibold tabular-nums">{p.minutes}</span>
-                              <span className="text-[10px] text-muted-foreground">m</span>
+                              <span className="text-2xs text-muted-foreground">m</span>
                               <span className="text-xs text-muted-foreground ml-1">{pct.toFixed(0)}%</span>
                             </div>
                           </div>
@@ -1365,7 +1362,7 @@ function DayAnalyticsSection({ selectedDate, isSelectedToday, isSelectedFuture, 
                           </div>
                           {budget !== undefined && (
                             <div className="flex items-center gap-2">
-                              <span className="text-[10px] text-muted-foreground shrink-0">
+                              <span className="text-2xs text-muted-foreground shrink-0">
                                 周预算 {weekMinutes}/{budget} 分钟
                               </span>
                               <div className="h-1 flex-1 bg-muted rounded-full overflow-hidden">
@@ -1374,7 +1371,7 @@ function DayAnalyticsSection({ selectedDate, isSelectedToday, isSelectedFuture, 
                                   style={{ width: `${budgetPct}%` }}
                                 />
                               </div>
-                              {overBudget && <span className="text-[10px] text-destructive shrink-0">超预算</span>}
+                              {overBudget && <span className="text-2xs text-destructive shrink-0">超预算</span>}
                             </div>
                           )}
                         </div>
@@ -1403,13 +1400,13 @@ function DayAnalyticsSection({ selectedDate, isSelectedToday, isSelectedFuture, 
                           <div className="flex-1 min-w-0">
                             <p className={cn('text-sm font-medium truncate', t.completed && 'line-through text-muted-foreground')}>{t.title}</p>
                             <div className="flex items-center gap-2 mt-0.5">
-                              <span className={cn('text-[10px] font-medium uppercase', priorityColor)}>{t.priority}</span>
-                              {t.projectName && <div className="flex items-center gap-1"><div className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: t.projectColor }} /><span className="text-[10px] text-muted-foreground">{t.projectName}</span></div>}
+                              <span className={cn('text-2xs font-medium uppercase', priorityColor)}>{t.priority}</span>
+                              {t.projectName && <div className="flex items-center gap-1"><div className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: t.projectColor }} /><span className="text-2xs text-muted-foreground">{t.projectName}</span></div>}
                             </div>
                           </div>
                           <div className="text-right shrink-0">
                             <p className="text-sm font-semibold tabular-nums">{t.focusedMinutes}</p>
-                            <p className="text-[10px] text-muted-foreground">分钟</p>
+                            <p className="text-2xs text-muted-foreground">分钟</p>
                           </div>
                         </div>
                       )
@@ -1503,17 +1500,17 @@ function DayMetricCard({ icon: Icon, label, value, unit, trend, subtext, color }
         <div className="flex items-center justify-between mb-2">
           <div className={cn('rounded-lg p-1.5', c.bg)}><Icon className={cn('h-4 w-4', c.text)} /></div>
           {typeof trend === 'number' && trend !== 0 && (
-            <div className={cn('flex items-center gap-0.5 text-[10px] font-medium', trend > 0 ? 'text-emerald-500' : 'text-rose-500')}>
+            <div className={cn('flex items-center gap-0.5 text-2xs font-medium', trend > 0 ? 'text-emerald-500' : 'text-rose-500')}>
               {trend > 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
               <span>{Math.abs(trend)}%</span>
             </div>
           )}
         </div>
-        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
+        <p className="text-2xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
         <p className="text-2xl font-bold mt-1 tracking-tight tabular-nums" style={{ fontFamily: 'var(--font-timer), "Space Grotesk", "Inter", sans-serif' }}>
           {value}<span className="text-xs font-normal text-muted-foreground ml-0.5" style={{ fontFamily: 'var(--font-sans)' }}>{unit}</span>
         </p>
-        {subtext && <p className="text-[10px] text-muted-foreground mt-1 truncate">{subtext}</p>}
+        {subtext && <p className="text-2xs text-muted-foreground mt-1 truncate">{subtext}</p>}
       </CardContent>
     </Card>
   )
@@ -1531,9 +1528,9 @@ function DayMiniStat({ icon: Icon, label, value, unit }: {
     <div className="flex items-center gap-2">
       <div className="rounded-md bg-muted p-1.5"><Icon className="h-3.5 w-3.5 text-muted-foreground" /></div>
       <div>
-        <p className="text-[10px] text-muted-foreground">{label}</p>
+        <p className="text-2xs text-muted-foreground">{label}</p>
         <p className="text-sm font-semibold tabular-nums" style={{ fontFamily: 'var(--font-timer), "Space Grotesk", "Inter", sans-serif' }}>
-          {value}{unit && <span className="text-[10px] text-muted-foreground ml-0.5" style={{ fontFamily: 'var(--font-sans)' }}>{unit}</span>}
+          {value}{unit && <span className="text-2xs text-muted-foreground ml-0.5" style={{ fontFamily: 'var(--font-sans)' }}>{unit}</span>}
         </p>
       </div>
     </div>

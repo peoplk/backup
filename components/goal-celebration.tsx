@@ -24,7 +24,6 @@ export function GoalCelebration({ open, onClose, streakDays }: GoalCelebrationPr
   const [mounted, setMounted] = useState(false)
   useEffect(() => {
     if (open) {
-      setMounted(true)
       const t = setTimeout(() => setMounted(true), 30)
       return () => clearTimeout(t)
     } else {

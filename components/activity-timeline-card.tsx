@@ -137,7 +137,7 @@ export function ActivityTimelineCard() {
                 </Badge>
               )}
               <div className="ml-auto flex items-center gap-1.5">
-                <span className="text-[10px]">保留</span>
+                <span className="text-2xs">保留</span>
                 <Select
                   value={String(activitySettings.retentionDays ?? 14)}
                   onValueChange={(v) => updateActivitySettings({ retentionDays: Number(v) })}
@@ -187,7 +187,7 @@ export function ActivityTimelineCard() {
                           >
                             <SelectTrigger
                               className={cn(
-                                'h-5 w-[68px] border-0 bg-transparent px-1 text-[10px] shadow-none focus:ring-0',
+                                'h-5 w-[68px] border-0 bg-transparent px-1 text-2xs shadow-none focus-visible:ring-1 focus-visible:ring-ring/40',
                                 meta.className
                               )}
                               aria-label="修改归类"
@@ -205,7 +205,7 @@ export function ActivityTimelineCard() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-5 px-1.5 text-[10px] opacity-0 group-hover/app:opacity-100 transition-opacity"
+                            className="h-5 px-1.5 text-2xs opacity-0 group-hover/app:opacity-100 transition-opacity"
                             onClick={() => handleConvert(app)}
                           >
                             转记录

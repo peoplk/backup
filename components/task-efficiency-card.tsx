@@ -96,7 +96,7 @@ export function TaskEfficiencyCard({ taskId, className }: TaskEfficiencyCardProp
           </div>
           <Progress value={completionPct} className="h-1.5" />
           {stats.overdue && (
-            <div className="flex items-center gap-1 text-[10px] text-amber-600 dark:text-amber-400">
+            <div className="flex items-center gap-1 text-2xs text-amber-600 dark:text-amber-400">
               <TrendingUp className="h-3 w-3" />
               已超出预估 {stats.completed - stats.estimated} 个番茄
             </div>
@@ -106,7 +106,7 @@ export function TaskEfficiencyCard({ taskId, className }: TaskEfficiencyCardProp
         {/* 时间投入 */}
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-lg bg-muted/40 p-2.5">
-            <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+            <div className="flex items-center gap-1 text-2xs text-muted-foreground">
               <Clock className="h-3 w-3" />
               实际投入
             </div>
@@ -115,7 +115,7 @@ export function TaskEfficiencyCard({ taskId, className }: TaskEfficiencyCardProp
             </div>
           </div>
           <div className="rounded-lg bg-muted/40 p-2.5">
-            <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+            <div className="flex items-center gap-1 text-2xs text-muted-foreground">
               <Timer className="h-3 w-3" />
               预估时长
             </div>
@@ -130,17 +130,17 @@ export function TaskEfficiencyCard({ taskId, className }: TaskEfficiencyCardProp
           <div className="flex items-center justify-between rounded-lg border border-border/50 bg-card/40 p-2.5">
             <div className="flex items-center gap-2">
               {stats.rating === 'efficient' ? (
-                <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-[10px]">
+                <Badge className="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 text-2xs">
                   <CheckCircle2 className="h-3 w-3 mr-0.5" />
                   比预估快
                 </Badge>
               ) : stats.rating === 'over' || stats.rating === 'slow' ? (
-                <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 text-[10px]">
+                <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400 text-2xs">
                   <TrendingDown className="h-3 w-3 mr-0.5" />
                   {stats.rating === 'slow' ? '超出较多' : '略超预估'}
                 </Badge>
               ) : (
-                <Badge variant="secondary" className="text-[10px]">
+                <Badge variant="secondary" className="text-2xs">
                   接近预估
                 </Badge>
               )}

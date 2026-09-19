@@ -136,7 +136,7 @@ export function DataImport() {
           导入数据
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[400px]">
+      <DialogContent aria-describedby={undefined} className="sm:max-w-[400px]">
         <DialogHeader>
           <DialogTitle>导入数据</DialogTitle>
         </DialogHeader>

@@ -376,7 +376,7 @@ export function FocusShield() {
               <Monitor className="h-4 w-4 text-primary shrink-0 mt-0.5" />
               <div>
                 <p className="text-xs font-medium">系统级屏蔽已就绪</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">
+                <p className="text-2xs text-muted-foreground mt-0.5">
                   网站通过Hosts文件拦截，应用通过进程终止屏蔽。需要管理员权限。
                 </p>
               </div>
@@ -388,14 +388,14 @@ export function FocusShield() {
               <AlertTriangle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-destructive">屏蔽未真正生效</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">
+                <p className="text-2xs text-muted-foreground mt-0.5">
                   {SHIELD_HEALTH_TEXT[shieldHealth.reason]}
                 </p>
               </div>
               <Button
                 size="sm"
                 variant="outline"
-                className="h-7 text-[10px] px-2 gap-1 shrink-0"
+                className="h-7 text-2xs px-2 gap-1 shrink-0"
                 onClick={retryShield}
                 disabled={systemShieldStatus === 'applying'}
               >
@@ -422,7 +422,7 @@ export function FocusShield() {
           {isElectronApp && isActive && (
             <div className="rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 p-3 flex items-start gap-2.5">
               <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-              <p className="text-[10px] text-amber-700 dark:text-amber-400 leading-relaxed">
+              <p className="text-2xs text-amber-700 dark:text-amber-400 leading-relaxed">
                 hosts 屏蔽可被浏览器「安全 DNS（DoH）」绕过：Chrome/Edge 在
                 设置 → 隐私与安全 → 安全 → 使用安全 DNS 中选择了「安全（经加密解析）」时，
                 域名解析不走 hosts 文件。屏蔽期间请将浏览器安全 DNS 设为「关」，或使用系统级 DNS 过滤。
@@ -472,7 +472,7 @@ export function FocusShield() {
                     onClick={() => activateShield(min)}
                   >
                     <span className="text-lg font-bold">{min}</span>
-                    <span className="text-[10px] text-muted-foreground">分钟</span>
+                    <span className="text-2xs text-muted-foreground">分钟</span>
                   </Button>
                 ))}
               </div>
@@ -511,7 +511,7 @@ export function FocusShield() {
                 {mode === 'blacklist' ? '黑名单（屏蔽列表中的项目）' : '白名单（仅允许列表中的项目）'}
               </p>
               <div className="flex items-center gap-2">
-                <div className="flex gap-2 text-[10px] text-muted-foreground">
+                <div className="flex gap-2 text-2xs text-muted-foreground">
                   <span className="flex items-center gap-1">
                     <Globe className="h-3 w-3" />
                     {websiteCount}
@@ -525,7 +525,7 @@ export function FocusShield() {
                   <Button
                     variant={mode === 'blacklist' ? 'default' : 'outline'}
                     size="sm"
-                    className="h-6 text-[10px] px-2"
+                    className="h-6 text-2xs px-2"
                     onClick={() => switchMode('blacklist')}
                     disabled={isActive}
                   >
@@ -534,7 +534,7 @@ export function FocusShield() {
                   <Button
                     variant={mode === 'whitelist' ? 'default' : 'outline'}
                     size="sm"
-                    className="h-6 text-[10px] px-2"
+                    className="h-6 text-2xs px-2"
                     onClick={() => switchMode('whitelist')}
                     disabled={isActive}
                   >
@@ -559,7 +559,7 @@ export function FocusShield() {
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm truncate">{item.name}</p>
-                    <p className="text-[10px] text-muted-foreground truncate">{item.pattern}</p>
+                    <p className="text-2xs text-muted-foreground truncate">{item.pattern}</p>
                   </div>
                   <Switch
                     checked={item.enabled}
@@ -568,7 +568,7 @@ export function FocusShield() {
                   />
                   <button
                     onClick={() => deleteItem(item.id)}
-                    className="p-1 hover:bg-destructive/10 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="p-1 hover:bg-destructive/10 rounded hover-reveal transition-opacity"
                   >
                     <Trash2 className="h-3 w-3 text-destructive" />
                   </button>
@@ -592,7 +592,7 @@ export function FocusShield() {
       <ShieldScheduleSettings />
 
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="max-w-sm">
+        <DialogContent aria-describedby={undefined} className="max-w-sm">
           <DialogHeader>
             <DialogTitle>添加屏蔽规则</DialogTitle>
           </DialogHeader>
@@ -636,7 +636,7 @@ export function FocusShield() {
                 onKeyDown={(e) => e.key === 'Enter' && addItem()}
               />
               {newItemType === 'app' && (
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-2xs text-muted-foreground">
                   输入Windows任务管理器中显示的进程名称（不含.exe）
                 </p>
               )}

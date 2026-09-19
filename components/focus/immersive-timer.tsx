@@ -1660,7 +1660,7 @@ export function ImmersiveTimer({
 
         {/* 严格模式：唯一出口是长按放弃；同时反馈被拦截的离开尝试 */}
         {isStrict && (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, marginTop: 30 }}>
+          <div className="animate-in fade-in-0 slide-in-from-bottom-2 duration-300" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, marginTop: 30 }}>
             {canGiveUp && onRequestGiveUp ? (
               <HoldToGiveUpButton seconds={strictHoldSeconds} onComplete={onRequestGiveUp} />
             ) : (
@@ -1669,7 +1669,7 @@ export function ImmersiveTimer({
               </span>
             )}
             {strictViolationCount > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'rgba(252,165,165,0.85)' }}>
+              <div key={strictViolationCount} className="animate-in fade-in-0 slide-in-from-bottom-1 duration-200" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'rgba(252,165,165,0.85)' }}>
                 <AlertTriangle style={{ width: 13, height: 13 }} />
                 <span>检测到 {strictViolationCount} 次离开尝试，已自动回到专注</span>
               </div>

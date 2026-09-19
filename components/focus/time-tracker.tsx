@@ -584,7 +584,7 @@ export function TimeTracker() {
                       <div className="flex items-center gap-2">
                         <span className="truncate max-w-[200px]">{task.title}</span>
                         {task.project && (
-                          <Badge variant="secondary" className="text-[10px] shrink-0">
+                          <Badge variant="secondary" className="text-2xs shrink-0">
                             {task.project}
                           </Badge>
                         )}
@@ -961,7 +961,7 @@ export function TimeTracker() {
                     <div className="text-right">
                       <p className="text-lg font-semibold">{formatDuration(entry.duration)}</p>
                     </div>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center gap-1 hover-reveal transition-opacity">
                       <Button
                         size="icon"
                         variant="ghost"
@@ -996,7 +996,7 @@ export function TimeTracker() {
           setNewProject({ name: '', color: COLOR_PALETTE[0], rate: '' })
         }
       }}>
-        <DialogContent>
+        <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>{editingProject ? '编辑项目' : '新建项目'}</DialogTitle>
           </DialogHeader>
@@ -1089,7 +1089,7 @@ export function TimeTracker() {
           setEditingEntryId(null)
         }
       }}>
-        <DialogContent className="sm:max-w-[400px]">
+        <DialogContent aria-describedby={undefined} className="sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle>{editingEntryId ? '编辑时间记录' : '手动添加时间记录'}</DialogTitle>
           </DialogHeader>

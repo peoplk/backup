@@ -52,7 +52,7 @@ export function TimerSummaryDialog({
 }: TimerSummaryDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent aria-describedby={undefined} className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg">
             <Sparkles className="h-5 w-5 text-chart-1" />
@@ -93,7 +93,7 @@ export function TimerSummaryDialog({
                 <div className="flex items-center justify-between mb-1">
                   <p className="text-xs text-muted-foreground">关联任务</p>
                   {isTaskComplete && task.status !== 'done' && (
-                    <Badge className="bg-chart-2 text-[10px]">可完成</Badge>
+                    <Badge className="bg-chart-2 text-2xs">可完成</Badge>
                   )}
                 </div>
                 <p className="font-medium text-sm">{task.title}</p>

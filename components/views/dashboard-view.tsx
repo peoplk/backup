@@ -171,7 +171,7 @@ export function DashboardView() {
   }, [now])
 
   return (
-    <div className="h-full flex flex-col gap-4 animate-fade-in-up pb-4">
+    <div className="h-full flex flex-col gap-4 view-enter pb-4">
       {isFirstTime && (
         <Card className="border-primary/20 bg-gradient-to-br from-primary/5 via-primary/3 to-chart-2/5 overflow-hidden shrink-0">
           <CardContent className="p-5">
@@ -248,7 +248,7 @@ export function DashboardView() {
                     <Badge
                       variant="outline"
                       className={cn(
-                        'gap-1 text-[11px] font-medium shrink-0',
+                        'gap-1 text-2xs font-medium shrink-0',
                         dayOverDayPct >= 0
                           ? 'text-emerald-600 border-emerald-500/30 bg-emerald-500/10'
                           : 'text-rose-600 border-rose-500/30 bg-rose-500/10'
@@ -262,15 +262,15 @@ export function DashboardView() {
               </div>
               <div className="flex gap-6 sm:gap-8 pb-0.5 shrink-0">
                 <div className="px-3 py-2">
-                  <p className="text-[11px] text-muted-foreground">完成任务</p>
+                  <p className="text-2xs text-muted-foreground">完成任务</p>
                   <p className="text-lg font-bold text-foreground tabular-nums">{stats.completedToday} 项</p>
                 </div>
                 <div className="px-3 py-2">
-                  <p className="text-[11px] text-muted-foreground">连续专注</p>
+                  <p className="text-2xs text-muted-foreground">连续专注</p>
                   <p className="text-lg font-bold text-foreground tabular-nums">{streak} 天</p>
                 </div>
                 <div className="px-3 py-2">
-                  <p className="text-[11px] text-muted-foreground">效率评分</p>
+                  <p className="text-2xs text-muted-foreground">效率评分</p>
                   <p className="text-lg font-bold text-foreground tabular-nums">
                     {stats.todayFocusSeconds > 0 || stats.completedToday > 0 ? `${stats.efficiencyScore}%` : '—'}
                   </p>
@@ -313,12 +313,12 @@ export function DashboardView() {
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                   <span className="text-2xl font-bold tabular-nums">{Math.round(dailyGoalProgress)}%</span>
-                  <span className="text-[10px] text-muted-foreground mt-0.5">{todayMinutes} / {focusGoals.dailyMinutes} 分钟</span>
+                  <span className="text-2xs text-muted-foreground mt-0.5">{todayMinutes} / {focusGoals.dailyMinutes} 分钟</span>
                 </div>
               </div>
             </div>
             <Progress value={dailyGoalProgress} className="h-1.5" />
-            <p className="text-[11px] text-muted-foreground text-center mt-2">
+            <p className="text-2xs text-muted-foreground text-center mt-2">
               {dailyGoalProgress >= 100 ? '🎉 今日目标已完成' : dailyGoalProgress >= 50 ? '保持节奏，加油' : '开始你的第一次专注'}
             </p>
           </CardContent>
@@ -360,7 +360,7 @@ export function DashboardView() {
                 <ListTodo className="h-4 w-4 text-primary" />
                 今日待办
                 {todayTasks.length > 0 && (
-                  <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-normal">
+                  <Badge variant="secondary" className="text-2xs h-5 px-1.5 font-normal">
                     {completedTodayCount}/{todayTasks.length}
                   </Badge>
                 )}
@@ -390,13 +390,13 @@ export function DashboardView() {
                       <span className="truncate flex-1 text-muted-foreground">{task.title}</span>
                       <div className="flex gap-1 shrink-0">
                         <button
-                          className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium"
+                          className="text-2xs px-1.5 py-0.5 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium"
                           onClick={(e) => { e.stopPropagation(); rescheduleTask(task.id, new Date()) }}
                         >
                           今天
                         </button>
                         <button
-                          className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium"
+                          className="text-2xs px-1.5 py-0.5 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium"
                           onClick={(e) => {
                             e.stopPropagation()
                             const tomorrow = new Date()
@@ -438,7 +438,7 @@ export function DashboardView() {
                       className="border-destructive/50 data-[state=checked]:bg-destructive data-[state=checked]:border-destructive h-4 w-4"
                     />
                     <p className="text-sm font-medium truncate flex-1">{task.title}</p>
-                    <Badge variant="destructive" className="text-[10px] h-4 shrink-0 px-1.5">紧急</Badge>
+                    <Badge variant="destructive" className="text-2xs h-4 shrink-0 px-1.5">紧急</Badge>
                   </div>
                 ))}
                 {todayTasks.slice(0, urgentTasks.length > 0 ? 5 : 8).map((task: TodayTask) => {
@@ -472,25 +472,25 @@ export function DashboardView() {
                         <p className={cn("text-sm font-medium truncate", completedToday && "line-through text-muted-foreground")}>{task.title}</p>
                         <div className="flex items-center gap-1.5 mt-0.5">
                           {task.repeatRule && (
-                            <Badge variant="outline" className="text-[9px] h-3.5 px-1 border-purple-300 text-purple-600 dark:border-purple-700 dark:text-purple-400">
+                            <Badge variant="outline" className="text-3xs h-3.5 px-1 border-purple-300 text-purple-600 dark:border-purple-700 dark:text-purple-400">
                               {task.repeatRule.type === 'daily' ? '每天' : task.repeatRule.type === 'weekly' ? '每周' : task.repeatRule.type === 'monthly' ? '每月' : '每年'}
                             </Badge>
                           )}
                           {task.project && (
-                            <Badge variant="secondary" className="text-[9px] h-3.5 px-1">{task.project}</Badge>
+                            <Badge variant="secondary" className="text-3xs h-3.5 px-1">{task.project}</Badge>
                           )}
                           {task.estimatedPomodoros && task.estimatedPomodoros > 0 && (
-                            <span className="text-[10px] text-muted-foreground">🍅 {task.estimatedPomodoros}</span>
+                            <span className="text-2xs text-muted-foreground">🍅 {task.estimatedPomodoros}</span>
                           )}
                         </div>
                       </div>
                       {completedToday && (
-                        <Badge variant="outline" className="text-[9px] h-4 border-emerald-500/50 text-emerald-600 shrink-0 px-1.5">
+                        <Badge variant="outline" className="text-3xs h-4 border-emerald-500/50 text-emerald-600 shrink-0 px-1.5">
                           已完成
                         </Badge>
                       )}
                       {isOverdue && !completedToday && (
-                        <Badge variant="outline" className="text-[9px] h-4 border-amber-500/50 text-amber-600 shrink-0 px-1.5">
+                        <Badge variant="outline" className="text-3xs h-4 border-amber-500/50 text-amber-600 shrink-0 px-1.5">
                           过期
                         </Badge>
                       )}
@@ -539,7 +539,7 @@ export function DashboardView() {
                 </h2>
                 {todayHabits.length > 0 && (
                   <div className="mt-2">
-                    <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
+                    <div className="flex items-center justify-between text-2xs text-muted-foreground mb-1">
                       <span>完成进度</span>
                       <span className="font-medium">{Math.round(habitProgress)}%</span>
                     </div>
@@ -558,7 +558,7 @@ export function DashboardView() {
                     <Target className="h-5 w-5 text-muted-foreground/60" />
                   </div>
                   <p className="text-xs text-muted-foreground">还没有设置习惯</p>
-                  <Button variant="link" size="sm" onClick={() => setActiveView('habits')} className="mt-1 h-6 text-[10px]">
+                  <Button variant="link" size="sm" onClick={() => setActiveView('habits')} className="mt-1 h-6 text-2xs">
                     添加第一个习惯
                   </Button>
                 </div>

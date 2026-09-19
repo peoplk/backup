@@ -116,7 +116,7 @@ export function QuickDatePresets({ value, onChange }: QuickDatePresetsProps) {
               onClick={() => onChange(p.clear ? undefined : p.compute())}
               className={`text-xs px-2.5 py-1 rounded-md transition-colors ${
                 active
-                  ? 'bg-blue-500 text-white'
+                  ? 'bg-primary text-primary-foreground'
                   : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600'
               }`}
             >

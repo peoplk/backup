@@ -5,12 +5,13 @@ import { useAppStore } from '@/lib/store'
 import { formatDuration } from '@/lib/format'
 import type { Task } from '@/lib/types'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from '@/components/ui/sheet'
+import { useIsMobile } from '@/components/ui/use-mobile'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -103,6 +104,8 @@ export function TaskDetailDrawer({ taskId, open, onOpenChange, onEdit }: TaskDet
     }
   }, [task, tasks])
 
+  const isMobile = useIsMobile()
+
   if (!task) return null
 
   const statusConfig = STATUS_CONFIG[task.status]
@@ -117,27 +120,27 @@ export function TaskDetailDrawer({ taskId, open, onOpenChange, onEdit }: TaskDet
   const enabledReminders = (task.reminders || []).filter((r) => r.enabled)
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg p-0 gap-0 overflow-hidden max-h-[85vh] flex flex-col">
-        <DialogHeader className="shrink-0 px-5 pt-5 pb-4 border-b border-border/60 space-y-3">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side={isMobile ? 'bottom' : 'right'} showHandle className="p-0 gap-0 sm:max-w-lg">
+        <SheetHeader className="shrink-0 px-5 pt-6 pb-4 text-left border-b border-border/60 space-y-3">
           <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant="outline" className={cn('text-[11px]', statusConfig.className)}>
+            <Badge variant="outline" className={cn('text-2xs', statusConfig.className)}>
               {statusConfig.label}
             </Badge>
-            <Badge variant="outline" className={cn('text-[11px]', priorityConfig.className)}>
+            <Badge variant="outline" className={cn('text-2xs', priorityConfig.className)}>
               {priorityConfig.label}
             </Badge>
             {task.starred && <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />}
             {task.isRepeatInstance && (
-              <Badge variant="outline" className="text-[11px] text-purple-500 border-purple-500/20">
+              <Badge variant="outline" className="text-2xs text-purple-500 border-purple-500/20">
                 <Repeat className="h-2.5 w-2.5 mr-0.5" />
                 重复实例
               </Badge>
             )}
           </div>
-          <DialogTitle className="text-lg font-semibold leading-snug text-left">{task.title}</DialogTitle>
-          <DialogDescription className="sr-only">任务详情</DialogDescription>
-        </DialogHeader>
+          <SheetTitle className="text-lg font-semibold leading-snug text-left">{task.title}</SheetTitle>
+          <SheetDescription className="sr-only">任务详情</SheetDescription>
+        </SheetHeader>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
           {task.description && (
@@ -186,7 +189,7 @@ export function TaskDetailDrawer({ taskId, open, onOpenChange, onEdit }: TaskDet
             {task.tags.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mt-3">
                 {task.tags.map((tag) => (
-                  <Badge key={tag} variant="secondary" className="text-[11px] gap-1">
+                  <Badge key={tag} variant="secondary" className="text-2xs gap-1">
                     <Tag className="h-2.5 w-2.5" />
                     {tag}
                   </Badge>
@@ -221,7 +224,7 @@ export function TaskDetailDrawer({ taskId, open, onOpenChange, onEdit }: TaskDet
                   <ListTodo className="h-3.5 w-3.5" />
                   子任务
                 </h3>
-                <Badge variant="secondary" className="text-[10px] h-5 px-1.5 font-normal">
+                <Badge variant="secondary" className="text-2xs h-5 px-1.5 font-normal">
                   {doneSubTasks}/{subTasks.length}
                 </Badge>
               </div>
@@ -251,13 +254,13 @@ export function TaskDetailDrawer({ taskId, open, onOpenChange, onEdit }: TaskDet
               <div className="space-y-2">
                 {relatedTasks.blockedBy.length > 0 && (
                   <div>
-                    <p className="text-[11px] text-muted-foreground mb-1">被阻塞于</p>
+                    <p className="text-2xs text-muted-foreground mb-1">被阻塞于</p>
                     {relatedTasks.blockedBy.map((t) => (
                       <div key={t.id} className="flex items-center gap-2 text-sm py-0.5">
                         <span className={cn('truncate', t.status === 'done' && 'line-through text-muted-foreground')}>
                           {t.title}
                         </span>
-                        <Badge variant="outline" className="text-[10px] h-4 px-1 ml-auto shrink-0">
+                        <Badge variant="outline" className="text-2xs h-4 px-1 ml-auto shrink-0">
                           {STATUS_CONFIG[t.status].label}
                         </Badge>
                       </div>
@@ -266,13 +269,13 @@ export function TaskDetailDrawer({ taskId, open, onOpenChange, onEdit }: TaskDet
                 )}
                 {relatedTasks.dependsOn.length > 0 && (
                   <div>
-                    <p className="text-[11px] text-muted-foreground mb-1">前置任务</p>
+                    <p className="text-2xs text-muted-foreground mb-1">前置任务</p>
                     {relatedTasks.dependsOn.map((t) => (
                       <div key={t.id} className="flex items-center gap-2 text-sm py-0.5">
                         <span className={cn('truncate', t.status === 'done' && 'line-through text-muted-foreground')}>
                           {t.title}
                         </span>
-                        <Badge variant="outline" className="text-[10px] h-4 px-1 ml-auto shrink-0">
+                        <Badge variant="outline" className="text-2xs h-4 px-1 ml-auto shrink-0">
                           {STATUS_CONFIG[t.status].label}
                         </Badge>
                       </div>
@@ -319,7 +322,7 @@ export function TaskDetailDrawer({ taskId, open, onOpenChange, onEdit }: TaskDet
             </Button>
           )}
         </div>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   )
 }

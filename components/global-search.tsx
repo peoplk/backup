@@ -99,7 +99,7 @@ export function GlobalSearch({ open, onOpenChange, onNavigate }: GlobalSearchPro
           placeholder="搜索任务、习惯、纪念日..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          className="border-none shadow-none focus-visible:ring-0 h-12"
+          className="border-none shadow-none focus-visible:ring-2 focus-visible:ring-ring/40 h-12"
           autoFocus
         />
       </div>
@@ -267,7 +267,7 @@ export function GlobalSearch({ open, onOpenChange, onNavigate }: GlobalSearchPro
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="p-0 gap-0 max-w-lg">
+      <DialogContent aria-describedby={undefined} className="p-0 gap-0 max-w-lg">
         <DialogTitle className="sr-only">全局搜索</DialogTitle>
         {content}
       </DialogContent>

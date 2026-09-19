@@ -113,7 +113,7 @@ export function PomodoroQuickTask({ onTaskCreated, className }: PomodoroQuickTas
       >
         <Plus className="h-4 w-4" />
         <span>快速添加待办...</span>
-        <Badge variant="outline" className="ml-auto text-[10px] px-1.5">
+        <Badge variant="outline" className="ml-auto text-2xs px-1.5">
           Enter
         </Badge>
       </button>
@@ -136,7 +136,7 @@ export function PomodoroQuickTask({ onTaskCreated, className }: PomodoroQuickTas
           <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
             <Badge 
               variant="outline" 
-              className={cn('text-[10px] px-1.5 cursor-pointer', priorityConfig[priority].textColor)}
+              className={cn('text-2xs px-1.5 cursor-pointer', priorityConfig[priority].textColor)}
               onClick={() => setShowOptions(!showOptions)}
             >
               {priorityConfig[priority].label}
@@ -231,7 +231,7 @@ export function PomodoroQuickTask({ onTaskCreated, className }: PomodoroQuickTas
                   <div className={cn('w-2 h-2 rounded-full', priorityConfig[p].color)} />
                   <span>{priorityConfig[p].label}优先级</span>
                   {priority === p && (
-                    <Badge variant="secondary" className="ml-auto text-[10px] px-1">
+                    <Badge variant="secondary" className="ml-auto text-2xs px-1">
                       ✓
                     </Badge>
                   )}
@@ -245,7 +245,7 @@ export function PomodoroQuickTask({ onTaskCreated, className }: PomodoroQuickTas
           <>
             <div className="h-4 w-px bg-border" />
             <Select value={project} onValueChange={setProject}>
-              <SelectTrigger className="h-7 w-auto min-w-[100px] text-xs border-none bg-transparent p-0 h-auto focus:ring-0">
+              <SelectTrigger className="h-7 w-auto min-w-[100px] text-xs border-none bg-transparent p-0 h-auto">
                 <SelectValue placeholder="选择项目" />
               </SelectTrigger>
               <SelectContent>

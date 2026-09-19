@@ -237,7 +237,7 @@ function MenuDropdown({ items, onClose }: { items: MenuItem[]; onClose: () => vo
               </span>
             </div>
             {item.accelerator && (
-              <span className="shrink-0 text-[10px] leading-none font-medium text-muted-foreground/50 px-1.5 py-1 rounded border border-zinc-200/70 dark:border-white/[0.08] bg-zinc-50 dark:bg-white/[0.04] group-hover:border-indigo-500/20 dark:group-hover:border-indigo-300/20">
+              <span className="shrink-0 text-2xs leading-none font-medium text-muted-foreground/50 px-1.5 py-1 rounded border border-zinc-200/70 dark:border-white/[0.08] bg-zinc-50 dark:bg-white/[0.04] group-hover:border-indigo-500/20 dark:group-hover:border-indigo-300/20">
                 {item.accelerator}
               </span>
             )}
@@ -320,7 +320,7 @@ export function TitleBar() {
       <div className="flex items-center h-full" ref={menuRef}>
         <div className="flex items-center gap-2 px-3">
           <div className="w-4 h-4 rounded-sm bg-gradient-to-br from-chart-1 to-chart-2 flex items-center justify-center">
-            <span className="text-white text-[8px] font-bold">F</span>
+            <span className="text-white text-3xs font-bold">F</span>
           </div>
           <span className="text-xs font-medium opacity-80">FocusFlow</span>
         </div>

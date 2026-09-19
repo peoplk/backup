@@ -83,6 +83,7 @@ export function AchievementsWall() {
   const purchaseShopItem = useAppStore((s) => s.purchaseShopItem)
   const [filter, setFilter] = useState<'all' | 'unlocked' | 'locked'>('all')
   const [shopHabitId, setShopHabitId] = useState('')
+  const nowAtMount = useMemo(() => Date.now(), [])
 
   const handlePurchase = (itemId: ShopItem['id']) => {
     const res = purchaseShopItem(itemId, shopHabitId)
@@ -180,7 +181,7 @@ export function AchievementsWall() {
               <div className="mt-1 text-2xl font-bold tabular-nums">
                 Lv.{gameProgress.level}
               </div>
-              <div className="text-[10px] text-muted-foreground">
+              <div className="text-2xs text-muted-foreground">
                 {getLevelTitle(gameProgress.level)}
               </div>
             </div>
@@ -200,7 +201,7 @@ export function AchievementsWall() {
                 <Coins className="h-4 w-4 text-amber-500" />
                 硬币商店
               </div>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">
+              <p className="mt-0.5 text-2xs text-muted-foreground">
                 完成任务 / 专注 / 打卡获得经验时同步赚取硬币，可兑换习惯冻结道具
               </p>
             </div>
@@ -238,7 +239,7 @@ export function AchievementsWall() {
                       <span className="text-xl">{item.icon}</span>
                       <div className="min-w-0 flex-1">
                         <div className="text-xs font-semibold">{item.name}</div>
-                        <div className="text-[10px] text-muted-foreground">{item.description}</div>
+                        <div className="text-2xs text-muted-foreground">{item.description}</div>
                       </div>
                       <Button
                         size="sm"
@@ -264,21 +265,21 @@ export function AchievementsWall() {
         <TabsList>
           <TabsTrigger value="all" className="gap-1.5">
             全部
-            <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[10px]">
+            <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-2xs">
               {totalCount}
             </Badge>
           </TabsTrigger>
           <TabsTrigger value="unlocked" className="gap-1.5">
             <Trophy className="h-3.5 w-3.5" />
             已解锁
-            <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[10px]">
+            <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-2xs">
               {unlockedCount}
             </Badge>
           </TabsTrigger>
           <TabsTrigger value="locked" className="gap-1.5">
             <Lock className="h-3.5 w-3.5" />
             未解锁
-            <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[10px]">
+            <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-2xs">
               {totalCount - unlockedCount}
             </Badge>
           </TabsTrigger>
@@ -297,7 +298,7 @@ export function AchievementsWall() {
                 <Icon className={cn('h-4 w-4', config.color)} />
               </div>
               <h3 className="text-sm font-semibold">{config.label}</h3>
-              <Badge variant="secondary" className="h-4 px-1.5 text-[10px]">
+              <Badge variant="secondary" className="h-4 px-1.5 text-2xs">
                 {items.filter((a) => a.earned).length} / {items.length}
               </Badge>
             </div>
@@ -306,6 +307,9 @@ export function AchievementsWall() {
                 const tier = getTier(ach.requirement.value)
                 const tierStyle = TIER_STYLES[tier]
                 const progress = getProgress(ach, stats)
+                const isFresh =
+                  ach.earned && ach.earnedAt &&
+                  nowAtMount - new Date(ach.earnedAt).getTime() < 5 * 60 * 1000
                 return (
                   <Card
                     key={ach.id}
@@ -313,9 +317,15 @@ export function AchievementsWall() {
                       'relative overflow-hidden transition-all',
                       ach.earned
                         ? cn('border-amber-500/30 ring-1', tierStyle.ring, 'shadow-md', tierStyle.glow)
-                        : 'opacity-70 grayscale'
+                        : 'opacity-70 grayscale',
+                      isFresh && 'animate-in fade-in-0 zoom-in-95 duration-500'
                     )}
                   >
+                    {isFresh && (
+                      <Badge className="absolute right-2 top-2 z-10 h-5 bg-amber-500 text-2xs text-white animate-pulse-soft">
+                        刚刚解锁
+                      </Badge>
+                    )}
                     <CardContent className="p-4">
                       <div className="flex items-start gap-3">
                         <div
@@ -323,7 +333,8 @@ export function AchievementsWall() {
                             'flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-2xl',
                             ach.earned
                               ? 'bg-gradient-to-br from-amber-100 to-amber-200 dark:from-amber-900/40 dark:to-amber-800/40'
-                              : 'bg-muted'
+                              : 'bg-muted',
+                            isFresh && 'animate-checkmark-pop'
                           )}
                         >
                           {ach.earned ? ach.icon : <Lock className="h-5 w-5 text-muted-foreground" />}
@@ -332,14 +343,14 @@ export function AchievementsWall() {
                           <div className="flex items-center gap-1.5">
                             <h4 className="text-sm font-semibold truncate">{ach.name}</h4>
                           </div>
-                          <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2">
+                          <p className="text-2xs text-muted-foreground mt-0.5 line-clamp-2">
                             {ach.description}
                           </p>
                           <div className="mt-2 flex items-center gap-1.5">
-                            <Badge variant="outline" className={cn('h-4 px-1.5 text-[10px]', tierStyle.text)}>
+                            <Badge variant="outline" className={cn('h-4 px-1.5 text-2xs', tierStyle.text)}>
                               {tier}
                             </Badge>
-                            <span className="flex items-center gap-0.5 text-[10px] text-amber-600 dark:text-amber-400">
+                            <span className="flex items-center gap-0.5 text-2xs text-amber-600 dark:text-amber-400">
                               <Sparkles className="h-2.5 w-2.5" />
                               +{ach.points}
                             </span>
@@ -347,13 +358,13 @@ export function AchievementsWall() {
                           {!ach.earned && progress > 0 && (
                             <div className="mt-2">
                               <Progress value={progress} className="h-1" />
-                              <p className="text-[9px] text-muted-foreground mt-0.5 tabular-nums">
+                              <p className="text-3xs text-muted-foreground mt-0.5 tabular-nums">
                                 {Math.round(progress)}%
                               </p>
                             </div>
                           )}
                           {ach.earned && ach.earnedAt && (
-                            <p className="text-[10px] text-muted-foreground mt-1.5">
+                            <p className="text-2xs text-muted-foreground mt-1.5">
                               ✓ {new Date(ach.earnedAt).toLocaleDateString('zh-CN')}
                             </p>
                           )}

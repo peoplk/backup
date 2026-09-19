@@ -108,28 +108,28 @@ export function TimerFloat() {
       </div>
 
       <div className="flex flex-col items-start gap-0.5" style={{ WebkitAppRegion: 'no-drag' }}>
-        <span className="text-[11px] font-medium text-white/80">{MODE_LABEL[mode]}</span>
-        <span className="text-[10px] text-white/40">{isRunning ? '进行中' : '已暂停'}</span>
+        <span className="text-2xs font-medium text-white/80">{MODE_LABEL[mode]}</span>
+        <span className="text-2xs text-white/40">{isRunning ? '进行中' : '已暂停'}</span>
       </div>
 
       <div className="flex items-center gap-1.5" style={{ WebkitAppRegion: 'no-drag' }}>
         <button
           onClick={() => window.electronAPI?.sendFloatControl?.('toggle')}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition-colors duration-200 hover:bg-white/20"
           title={isRunning ? '暂停' : '开始'}
         >
           {isRunning ? <Pause size={14} /> : <Play size={14} />}
         </button>
         <button
           onClick={() => window.electronAPI?.sendFloatControl?.('reset')}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20"
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white transition-colors duration-200 hover:bg-white/20"
           title="重置"
         >
           <RotateCcw size={13} />
         </button>
         <button
           onClick={() => window.electronAPI?.closeTimerFloat?.()}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white/60 transition hover:bg-red-500/40 hover:text-white"
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white/60 transition-colors duration-200 hover:bg-red-500/40 hover:text-white"
           title="关闭浮窗"
         >
           <X size={14} />

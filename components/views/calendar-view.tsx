@@ -495,30 +495,30 @@ export function CalendarView() {
                     {day.getDate()}
                   </span>
                   {eventCount > 0 && !isToday && (
-                    <span className="text-[10px] text-muted-foreground bg-muted/50 rounded-full px-1.5">{eventCount}</span>
+                    <span className="text-2xs text-muted-foreground bg-muted/50 rounded-full px-1.5">{eventCount}</span>
                   )}
                 </div>
                 <div className="space-y-0.5 overflow-hidden flex-1">
                   {events.slice(0, 2).map((event, i) => (
                     <div
                       key={i}
-                      className={cn('truncate rounded-md px-1.5 py-0.5 text-[10px] leading-tight font-medium', event.colorClass, event.bgClass)}
+                      className={cn('truncate rounded-md px-1.5 py-0.5 text-2xs leading-tight font-medium', event.colorClass, event.bgClass)}
                     >
                       {event.time && <span className="opacity-60">{event.time.slice(0, 5)} </span>}
                       {event.title}
                     </div>
                   ))}
                   {eventCount > 2 && (
-                    <div className="text-[10px] text-muted-foreground pl-1">+{eventCount - 2} 更多</div>
+                    <div className="text-2xs text-muted-foreground pl-1">+{eventCount - 2} 更多</div>
                   )}
                 </div>
                 {(stats.completedTasks > 0 || stats.dayPomodoros > 0) && (
                   <div className="mt-auto pt-1 flex gap-1.5 shrink-0">
                     {stats.completedTasks > 0 && (
-                      <span className="text-[10px] text-chart-2 bg-chart-2/8 rounded-md px-1">✓{stats.completedTasks}</span>
+                      <span className="text-2xs text-chart-2 bg-chart-2/8 rounded-md px-1">✓{stats.completedTasks}</span>
                     )}
                     {stats.dayPomodoros > 0 && (
-                      <span className="text-[10px] text-chart-3 bg-chart-3/8 rounded-md px-1">🍅{stats.dayPomodoros}</span>
+                      <span className="text-2xs text-chart-3 bg-chart-3/8 rounded-md px-1">🍅{stats.dayPomodoros}</span>
                     )}
                   </div>
                 )}
@@ -541,7 +541,7 @@ export function CalendarView() {
                 </p>
               </div>
               {selectedDate.toDateString() === today.toDateString() && (
-                <Badge className="text-[10px] h-5">今天</Badge>
+                <Badge className="text-2xs h-5">今天</Badge>
               )}
             </div>
             <div className="grid grid-cols-2 gap-2">
@@ -554,7 +554,7 @@ export function CalendarView() {
                 <div key={stat.label} className="rounded-lg bg-background/60 p-2">
                   <div className="flex items-center gap-1.5 mb-0.5">
                     <stat.icon className={cn('h-3 w-3', stat.color)} />
-                    <span className="text-[10px] text-muted-foreground">{stat.label}</span>
+                    <span className="text-2xs text-muted-foreground">{stat.label}</span>
                   </div>
                   <p className="text-lg font-bold">{stat.value}</p>
                 </div>
@@ -583,20 +583,20 @@ export function CalendarView() {
                     <div className={cn('h-1.5 w-1.5 rounded-full shrink-0', event.bgClass)} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{event.title}</p>
-                      {event.time && <p className="text-[11px] text-muted-foreground">{event.time}</p>}
+                      {event.time && <p className="text-2xs text-muted-foreground">{event.time}</p>}
                     </div>
                     {event.extEvent && (
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-6 px-2 text-[10px] shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="h-6 px-2 text-2xs shrink-0 hover-reveal transition-opacity"
                         onClick={() => handleImportExternalEvent(event.extEvent!)}
                       >
                         <Import className="h-3 w-3 mr-1" />
                         导入
                       </Button>
                     )}
-                    <Badge variant="outline" className="text-[10px] shrink-0 h-5">
+                    <Badge variant="outline" className="text-2xs shrink-0 h-5">
                       {event.type === 'task' ? '任务' : event.type === 'event' ? '日程' : '提醒'}
                     </Badge>
                   </div>
@@ -612,7 +612,7 @@ export function CalendarView() {
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
                 <ListTodo className="h-4 w-4 text-chart-1" />
                 待办任务
-                <Badge variant="secondary" className="text-[10px] h-5 ml-auto">{selectedDayTasks.length}</Badge>
+                <Badge variant="secondary" className="text-2xs h-5 ml-auto">{selectedDayTasks.length}</Badge>
               </CardTitle>
             </CardHeader>
             <CardContent className="px-5 pb-4">
@@ -625,7 +625,7 @@ export function CalendarView() {
                     />
                     <span className="text-sm truncate flex-1">{task.title}</span>
                     {task.priority && (
-                      <Badge variant="outline" className={cn('text-[10px] shrink-0 h-5',
+                      <Badge variant="outline" className={cn('text-2xs shrink-0 h-5',
                         task.priority === 'urgent' && 'border-destructive/50 text-destructive',
                         task.priority === 'high' && 'border-chart-3/50 text-chart-3',
                       )}>
@@ -789,7 +789,7 @@ export function CalendarView() {
                 {event.time}
               </span>
               {event.endTime && (
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-2xs text-muted-foreground">
                   {event.endTime}
                 </span>
               )}
@@ -817,10 +817,10 @@ export function CalendarView() {
                 {event.title}
               </p>
               {event.priority === 'urgent' && (
-                <Badge className="text-[9px] h-4 bg-destructive shrink-0">紧急</Badge>
+                <Badge className="text-3xs h-4 bg-destructive shrink-0">紧急</Badge>
               )}
               {event.priority === 'high' && (
-                <Badge className="text-[9px] h-4 bg-chart-3 shrink-0">高优</Badge>
+                <Badge className="text-3xs h-4 bg-chart-3 shrink-0">高优</Badge>
               )}
             </div>
             {event.description && (
@@ -919,7 +919,7 @@ export function CalendarView() {
                           isSelected ? 'bg-primary-foreground/20' : 'bg-muted/50'
                         )}>
                           <span className={cn(
-                            'text-[9px] font-medium',
+                            'text-3xs font-medium',
                             isSelected ? 'text-primary-foreground/70' : 'text-muted-foreground'
                           )}>
                             {WEEK_DAYS[day.getDay()]}
@@ -954,7 +954,7 @@ export function CalendarView() {
                               ))}
                               {taskEvents.length > 2 && (
                                 <span className={cn(
-                                  'text-[10px]',
+                                  'text-2xs',
                                   isSelected ? 'text-primary-foreground/60' : 'text-muted-foreground'
                                 )}>
                                   +{taskEvents.length - 2} 更多
@@ -975,7 +975,7 @@ export function CalendarView() {
                           <div className="flex flex-col items-end gap-0.5 shrink-0">
                             {taskEvents.filter(e => e.status === 'done').length > 0 && (
                               <span className={cn(
-                                'text-[9px] px-1.5 py-0.5 rounded-full',
+                                'text-3xs px-1.5 py-0.5 rounded-full',
                                 isSelected ? 'bg-primary-foreground/20 text-primary-foreground/80' : 'bg-chart-2/10 text-chart-2'
                               )}>
                                 ✓{taskEvents.filter(e => e.status === 'done').length}
@@ -1010,7 +1010,7 @@ export function CalendarView() {
                         <stat.icon className={cn('h-3.5 w-3.5', stat.color)} />
                       </div>
                       <div>
-                        <p className="text-[10px] text-muted-foreground">{stat.label}</p>
+                        <p className="text-2xs text-muted-foreground">{stat.label}</p>
                         <p className="text-sm font-bold">{stat.value}</p>
                       </div>
                     </div>
@@ -1030,7 +1030,7 @@ export function CalendarView() {
                         'flex flex-col items-center justify-center w-16 h-16 rounded-2xl shadow-sm',
                         isSelectedToday ? 'bg-primary text-primary-foreground' : 'bg-muted/50'
                       )}>
-                        <span className="text-[10px] font-medium opacity-70">{WEEK_DAYS[selectedDate.getDay()]}</span>
+                        <span className="text-2xs font-medium opacity-70">{WEEK_DAYS[selectedDate.getDay()]}</span>
                         <span className="text-2xl font-bold leading-none mt-0.5 tabular-nums" style={{ fontFamily: 'var(--font-timer), "Space Grotesk", "Inter", sans-serif' }}>{selectedDate.getDate()}</span>
                       </div>
                       <div>
@@ -1040,7 +1040,7 @@ export function CalendarView() {
                         <p className="text-sm text-muted-foreground">
                           {WEEK_DAYS_FULL[selectedDate.getDay()]}
                           {isSelectedToday && (
-                            <Badge className="ml-2 text-[10px] h-5">今天</Badge>
+                            <Badge className="ml-2 text-2xs h-5">今天</Badge>
                           )}
                         </p>
                       </div>
@@ -1054,11 +1054,11 @@ export function CalendarView() {
                     <div className="grid grid-cols-2 gap-2">
                       <div className="text-center px-4 py-2 rounded-xl bg-chart-2/10 border border-chart-2/20">
                         <p className="text-lg font-bold text-chart-2">{selectedStats.completedTasks}</p>
-                        <p className="text-[10px] text-muted-foreground">已完成</p>
+                        <p className="text-2xs text-muted-foreground">已完成</p>
                       </div>
                       <div className="text-center px-4 py-2 rounded-xl bg-chart-3/10 border border-chart-3/20">
                         <p className="text-lg font-bold text-chart-3">{selectedStats.dayPomodoros}</p>
-                        <p className="text-[10px] text-muted-foreground">番茄钟</p>
+                        <p className="text-2xs text-muted-foreground">番茄钟</p>
                       </div>
                     </div>
                   </div>
@@ -1084,7 +1084,7 @@ export function CalendarView() {
                         >
                           <div className="h-2 w-2 rounded-full bg-destructive shrink-0 ml-4" />
                           <div className="flex-1 h-px bg-destructive/40" />
-                          <span className="text-[10px] text-destructive font-mono ml-2 mr-4 tabular-nums" style={{ fontFamily: 'var(--font-timer), "Space Grotesk", "Inter", sans-serif' }}>
+                          <span className="text-2xs text-destructive font-mono ml-2 mr-4 tabular-nums" style={{ fontFamily: 'var(--font-timer), "Space Grotesk", "Inter", sans-serif' }}>
                             {currentHour.toString().padStart(2, '0')}:{currentMinute.toString().padStart(2, '0')}
                           </span>
                         </div>
@@ -1101,7 +1101,7 @@ export function CalendarView() {
                     {morningEvents.length > 0 && (
                       <div className="px-4 py-2 bg-muted/20">
                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                          <span className="w-4 h-4 rounded-full bg-chart-4/20 flex items-center justify-center text-[10px]">☀</span>
+                          <span className="w-4 h-4 rounded-full bg-chart-4/20 flex items-center justify-center text-2xs">☀</span>
                           上午
                         </p>
                       </div>
@@ -1111,7 +1111,7 @@ export function CalendarView() {
                     {afternoonEvents.length > 0 && (
                       <div className="px-4 py-2 bg-muted/20">
                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                          <span className="w-4 h-4 rounded-full bg-chart-1/20 flex items-center justify-center text-[10px]">🌤</span>
+                          <span className="w-4 h-4 rounded-full bg-chart-1/20 flex items-center justify-center text-2xs">🌤</span>
                           下午
                         </p>
                       </div>
@@ -1121,7 +1121,7 @@ export function CalendarView() {
                     {eveningEvents.length > 0 && (
                       <div className="px-4 py-2 bg-muted/20">
                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                          <span className="w-4 h-4 rounded-full bg-chart-5/20 flex items-center justify-center text-[10px]">🌙</span>
+                          <span className="w-4 h-4 rounded-full bg-chart-5/20 flex items-center justify-center text-2xs">🌙</span>
                           晚上
                         </p>
                       </div>
@@ -1169,10 +1169,10 @@ export function CalendarView() {
                           />
                           <span className="text-xs truncate flex-1">{task.title}</span>
                           {task.priority === 'urgent' && (
-                            <Badge className="text-[9px] h-4 bg-destructive">紧急</Badge>
+                            <Badge className="text-3xs h-4 bg-destructive">紧急</Badge>
                           )}
                           {task.priority === 'high' && (
-                            <Badge className="text-[9px] h-4 bg-chart-3">高优</Badge>
+                            <Badge className="text-3xs h-4 bg-chart-3">高优</Badge>
                           )}
                         </div>
                       ))}
@@ -1245,7 +1245,7 @@ export function CalendarView() {
                       时间块
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="max-w-md">
+                  <DialogContent aria-describedby={undefined} className="max-w-md">
                     <DialogHeader>
                       <DialogTitle>{editingBlock ? '编辑' : '创建'}时间块</DialogTitle>
                     </DialogHeader>
@@ -1313,7 +1313,7 @@ export function CalendarView() {
                                 )}
                               >
                                 <Icon className={cn('h-4 w-4', config.colorClass)} />
-                                <span className="text-[10px]">{config.label}</span>
+                                <span className="text-2xs">{config.label}</span>
                               </button>
                             )
                           })}
@@ -1394,7 +1394,7 @@ export function CalendarView() {
                           <Icon className={cn('h-3.5 w-3.5 shrink-0', config.colorClass)} />
                           <span className={cn('text-sm font-medium truncate', block.completed && 'line-through')}>{block.title}</span>
                         </div>
-                        <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums" style={{ fontFamily: 'var(--font-timer), "Space Grotesk", "Inter", sans-serif' }}>
+                        <span className="text-2xs text-muted-foreground shrink-0 tabular-nums" style={{ fontFamily: 'var(--font-timer), "Space Grotesk", "Inter", sans-serif' }}>
                           {block.startTime}-{block.endTime}
                         </span>
                       </div>
@@ -1411,7 +1411,7 @@ export function CalendarView() {
                     const isCurrentHour = hour === currentHour && isViewingToday
                     return (
                       <div key={hour} className={cn('flex rounded-lg transition-colors', isCurrentHour && 'bg-primary/5')} style={{ height: `${HOUR_HEIGHT}px` }}>
-                        <div className={cn('w-14 py-1.5 text-[11px] shrink-0 tabular-nums', isCurrentHour ? 'text-primary font-bold' : 'text-muted-foreground font-semibold')} style={{ fontFamily: 'var(--font-timer), "Space Grotesk", "Inter", sans-serif' }}>
+                        <div className={cn('w-14 py-1.5 text-2xs shrink-0 tabular-nums', isCurrentHour ? 'text-primary font-bold' : 'text-muted-foreground font-semibold')} style={{ fontFamily: 'var(--font-timer), "Space Grotesk", "Inter", sans-serif' }}>
                           {hour.toString().padStart(2, '0')}:00
                         </div>
                         <div className="flex-1 py-1 space-y-0.5 border-b border-border/20">
@@ -1450,7 +1450,7 @@ export function CalendarView() {
                       <div className={cn('rounded-md p-1', stat.bg)}>
                         <stat.icon className={cn('h-3 w-3', stat.color)} />
                       </div>
-                      <span className="text-[10px] text-muted-foreground">{stat.label}</span>
+                      <span className="text-2xs text-muted-foreground">{stat.label}</span>
                     </div>
                     <p className="text-xl font-bold">{stat.value}</p>
                   </div>
@@ -1465,7 +1465,7 @@ export function CalendarView() {
                 <CardTitle className="text-sm font-semibold flex items-center gap-2">
                   <CalendarClock className="h-4 w-4 text-chart-1" />
                   时间块
-                  <Badge variant="secondary" className="text-[10px] h-5 ml-auto">{completedBlocks}/{dayBlocks.length}</Badge>
+                  <Badge variant="secondary" className="text-2xs h-5 ml-auto">{completedBlocks}/{dayBlocks.length}</Badge>
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-5 pb-4">
@@ -1487,7 +1487,7 @@ export function CalendarView() {
                         <Icon className={cn('h-3.5 w-3.5 shrink-0', config.colorClass)} />
                         <div className="flex-1 min-w-0">
                           <p className={cn('text-sm font-medium truncate', block.completed && 'line-through')}>{block.title}</p>
-                          <p className="text-[10px] text-muted-foreground tabular-nums" style={{ fontFamily: 'var(--font-timer), "Space Grotesk", "Inter", sans-serif' }}>
+                          <p className="text-2xs text-muted-foreground tabular-nums" style={{ fontFamily: 'var(--font-timer), "Space Grotesk", "Inter", sans-serif' }}>
                             {block.startTime} - {block.endTime}
                           </p>
                         </div>
@@ -1539,7 +1539,7 @@ export function CalendarView() {
                       <div className={cn('h-1.5 w-1.5 rounded-full shrink-0', event.bgClass)} />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{event.title}</p>
-                        {event.time && <p className="text-[11px] text-muted-foreground tabular-nums" style={{ fontFamily: 'var(--font-timer), "Space Grotesk", "Inter", sans-serif' }}>{event.time}</p>}
+                        {event.time && <p className="text-2xs text-muted-foreground tabular-nums" style={{ fontFamily: 'var(--font-timer), "Space Grotesk", "Inter", sans-serif' }}>{event.time}</p>}
                       </div>
                     </div>
                   ))}
@@ -1565,7 +1565,7 @@ export function CalendarView() {
                         onCheckedChange={() => handleCompleteTask(task.id)}
                       />
                       <span className="text-sm truncate flex-1">{task.title}</span>
-                      <Badge variant="outline" className={cn('text-[10px] shrink-0 h-5',
+                      <Badge variant="outline" className={cn('text-2xs shrink-0 h-5',
                         task.priority === 'urgent' && 'border-destructive/50 text-destructive',
                         task.priority === 'high' && 'border-chart-3/50 text-chart-3',
                       )}>
@@ -1583,7 +1583,7 @@ export function CalendarView() {
   }
 
   return (
-    <div className="space-y-5 animate-fade-in-up">
+    <div className="space-y-5 view-enter">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">日历</h1>
@@ -1592,7 +1592,7 @@ export function CalendarView() {
         <div className="flex items-center gap-3">
           <div className="flex gap-1.5">
             {Object.entries(typeConfig).map(([key, config]) => (
-              <Badge key={key} variant="outline" className="gap-1.5 text-[11px] h-6">
+              <Badge key={key} variant="outline" className="gap-1.5 text-2xs h-6">
                 <div className={cn('h-1.5 w-1.5 rounded-full', config.bg)} />
                 <span className={config.color}>{config.label}</span>
               </Badge>

@@ -260,7 +260,7 @@ export function TimerMainCard({
                     <div className="flex items-center gap-2">
                       <span className="truncate">{task.title}</span>
                       {task.estimatedPomodoros && (
-                        <Badge variant="outline" className="text-[10px] px-1 ml-auto shrink-0">
+                        <Badge variant="outline" className="text-2xs px-1 ml-auto shrink-0">
                           {task.completedPomodoros}/{task.estimatedPomodoros}
                         </Badge>
                       )}
@@ -275,10 +275,10 @@ export function TimerMainCard({
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium truncate">{selectedTask.title}</span>
                   {selectedTask.priority === 'urgent' && (
-                    <Badge className="bg-red-500 text-[10px]">紧急</Badge>
+                    <Badge className="bg-red-500 text-2xs">紧急</Badge>
                   )}
                   {selectedTask.priority === 'high' && (
-                    <Badge className="bg-orange-500 text-[10px]">高优</Badge>
+                    <Badge className="bg-orange-500 text-2xs">高优</Badge>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
@@ -318,7 +318,7 @@ export function TimerMainCard({
             {sessionTags.length > 0 && (
               <div className="flex flex-wrap gap-1 mb-2">
                 {sessionTags.map((tag) => (
-                  <Badge key={tag} variant="secondary" className="gap-1 text-[11px]">
+                  <Badge key={tag} variant="secondary" className="gap-1 text-2xs">
                     {tag}
                     <button
                       onClick={() => setSessionTags(sessionTags.filter((t) => t !== tag))}
@@ -389,7 +389,7 @@ export function TimerMainCard({
             </div>
             {recentTags.length > 0 && (
               <div className="mt-1.5 flex flex-wrap gap-1 items-center">
-                <span className="text-[10px] text-muted-foreground/60 mr-0.5">最近</span>
+                <span className="text-2xs text-muted-foreground/60 mr-0.5">最近</span>
                 {recentTags.map((name) => {
                   const selected = sessionTags.includes(name)
                   return (
@@ -403,7 +403,7 @@ export function TimerMainCard({
                         }
                       }}
                       className={cn(
-                        'rounded-full px-2 py-0.5 text-[10px] border transition-all',
+                        'rounded-full px-2 py-0.5 text-2xs border transition-all',
                         selected
                           ? 'bg-primary text-primary-foreground border-primary'
                           : 'bg-muted/40 text-muted-foreground border-border/40 hover:border-primary/40 hover:bg-primary/5'
