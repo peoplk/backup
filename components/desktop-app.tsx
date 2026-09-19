@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { AppSidebar } from '@/components/app-sidebar'
+import { MobileBottomNav } from '@/components/mobile-bottom-nav'
 import { DashboardView } from '@/components/views/dashboard-view'
 import { TasksView } from '@/components/views/tasks-view'
 import { FocusView } from '@/components/views/focus-view'
@@ -468,6 +469,8 @@ export function DesktopApp() {
           {renderView()}
         </div>
       </main>
+
+      <MobileBottomNav onOpenMenu={() => setShowMobileMenu(true)} />
 
       <GlobalSearch open={showSearch} onOpenChange={setShowSearch} />
       <CommandPalette />
