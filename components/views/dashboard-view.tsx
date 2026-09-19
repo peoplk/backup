@@ -6,6 +6,7 @@ import { useShallow } from 'zustand/react/shallow'
 import {
   useStats,
   useStreak,
+  useWeekStats,
   formatDuration,
   useTodayTasks,
   type TodayTask,
@@ -37,7 +38,7 @@ import {
   BarChart3,
   Calendar,
   Clock,
-  ArrowUpRight,
+  CalendarDays,
   Sparkle,
   TrendingDown,
   LayoutDashboard,
@@ -48,6 +49,8 @@ import { useDailyGoalWatcher } from '@/lib/hooks/use-daily-goal'
 import { cn } from '@/lib/utils'
 import { useIsMobile } from '@/components/ui/use-mobile'
 
+
+const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
 
 const GREETINGS = [
   { start: 0, end: 6, text: '夜深了', subtext: '注意休息，明天继续', icon: Moon, accent: 'from-indigo-500/20 to-purple-500/10' },
@@ -60,7 +63,7 @@ const GREETINGS = [
 ]
 
 export function DashboardView() {
-  const { setActiveView, tasks, habits, pomodoroSessions, focusGoals, completeTask, rescheduleTask, habitCheckIns, checkInHabit } = useAppStore(useShallow((state) => ({
+  const { setActiveView, tasks, habits, pomodoroSessions, focusGoals, completeTask, rescheduleTask, habitCheckIns, checkInHabit, timeBlocks, externalEvents } = useAppStore(useShallow((state) => ({
     setActiveView: state.setActiveView,
     tasks: state.tasks,
     habits: state.habits,
@@ -70,6 +73,8 @@ export function DashboardView() {
     rescheduleTask: state.rescheduleTask,
     habitCheckIns: state.habitCheckIns,
     checkInHabit: state.checkInHabit,
+    timeBlocks: state.timeBlocks,
+    externalEvents: state.externalEvents,
   })))
 
   const handleCompleteTask = (taskId: string) => {
@@ -157,13 +162,6 @@ export function DashboardView() {
     return todayTasks.find((t: TodayTask) => !t.completedToday)
   }, [todayTasks])
 
-  const quickActions = useMemo(() => [
-    { icon: Timer, label: '开始专注', view: 'focus' as const, color: 'from-blue-500 to-cyan-500', iconColor: 'text-white' },
-    { icon: ListTodo, label: '添加任务', view: 'tasks' as const, color: 'from-emerald-500 to-teal-500', iconColor: 'text-white' },
-    { icon: BarChart3, label: '数据分析', view: 'analytics' as const, color: 'from-violet-500 to-purple-500', iconColor: 'text-white' },
-    { icon: Calendar, label: '日历视图', view: 'calendar' as const, color: 'from-amber-500 to-orange-500', iconColor: 'text-white' },
-  ], [])
-
   const timeString = useMemo(() => {
     return now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
   }, [now])
@@ -171,6 +169,61 @@ export function DashboardView() {
   const dayString = useMemo(() => {
     return now.toLocaleDateString('zh-CN', { weekday: 'long', month: 'long', day: 'numeric' })
   }, [now])
+
+  const weekStats = useWeekStats()
+
+  const weekFocusDays = useMemo(() => {
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(today)
+      d.setDate(d.getDate() - (6 - i))
+      const minutes = Math.round(
+        pomodoroSessions
+          .filter((s) => s.type === 'work' && new Date(s.completedAt).toDateString() === d.toDateString())
+          .reduce((acc, s) => acc + s.duration, 0) / 60
+      )
+      return { date: d, minutes, isToday: i === 6 }
+    })
+  }, [pomodoroSessions, today])
+
+  const maxDayMinutes = useMemo(
+    () => Math.max(focusGoals.dailyMinutes, ...weekFocusDays.map((d) => d.minutes), 1),
+    [weekFocusDays, focusGoals.dailyMinutes]
+  )
+
+  const todaySchedule = useMemo(() => {
+    const hhmm = (dt: Date) =>
+      dt.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+    const blocks = timeBlocks
+      .filter((tb) => new Date(tb.date).toDateString() === todayStr)
+      .map((tb) => ({
+        id: `block-${tb.id}`,
+        kind: 'block' as const,
+        start: tb.startTime,
+        end: tb.endTime,
+        allDay: false,
+        title: tb.title,
+        color: tb.color as string | undefined,
+      }))
+    const events = externalEvents
+      .filter((ev) => new Date(ev.start).toDateString() === todayStr)
+      .map((ev) => ({
+        id: `event-${ev.id}`,
+        kind: 'event' as const,
+        start: hhmm(new Date(ev.start)),
+        end: ev.allDay ? '' : hhmm(new Date(ev.end)),
+        allDay: ev.allDay,
+        title: ev.title,
+        color: undefined as string | undefined,
+      }))
+    return [...blocks, ...events].sort((a, b) => a.start.localeCompare(b.start))
+  }, [timeBlocks, externalEvents, todayStr])
+
+  const nextTask = useMemo(() => {
+    const urgent = urgentTasks[0]
+    if (urgent) return { title: urgent.title, isUrgent: true }
+    const pending = todayTasks.find((t: TodayTask) => !t.completedToday)
+    return pending ? { title: pending.title, isUrgent: false } : null
+  }, [urgentTasks, todayTasks])
 
   const [dashTab, setDashTab] = useState('overview')
 
@@ -228,144 +281,342 @@ export function DashboardView() {
         </ViewTabsList>
 
         <ViewTabsContent value="overview" className="flex flex-col gap-4 min-h-0 overflow-y-auto">
-      {/* Hero Section（黑板报：与自习室同一套教室语言） */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 shrink-0">
-        <Card className="lg:col-span-2 overflow-hidden relative border-border">
-          <CardContent className="relative h-full flex flex-col p-5 sm:p-6">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm text-muted-foreground">{dayString}</p>
-                <h1
-                  className={cn('font-bold tracking-tight mt-1 text-foreground', isMobile ? 'text-3xl' : 'text-4xl')}
-                >
-                  {greeting.text}
-                  <span
-                    className="ml-3 text-xl font-normal text-muted-foreground tabular-nums"
-                    style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace' }}
-                  >
-                    {timeString}
-                  </span>
-                </h1>
-              </div>
-              <Button
-                onClick={() => setActiveView('focus')}
-                className="gap-2 h-10 px-5 rounded-full"
-                variant="outline"
-                size="default"
-              >
-                <Play className="h-4 w-4 fill-current" />
-                开始专注
-              </Button>
-            </div>
+      {/* 指挥区：问候 + 快速捕捉 + 开始专注 */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center shrink-0">
+        <div className="min-w-0 lg:shrink-0">
+          <div className="flex items-baseline gap-2.5 flex-wrap">
+            <h1 className={cn('font-bold tracking-tight text-foreground', isMobile ? 'text-2xl' : 'text-3xl')}>
+              {greeting.text}
+            </h1>
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {dayString} · {timeString}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">{greeting.subtext}</p>
+        </div>
+        <div className="flex-1 min-w-0 lg:max-w-md">
+          <SmartQuickAddTask />
+        </div>
+        <Button
+          onClick={() => setActiveView('focus')}
+          className="gap-2 h-10 px-5 rounded-full shrink-0 self-start lg:self-auto"
+          variant="outline"
+        >
+          <Play className="h-4 w-4 fill-current" />
+          开始专注
+        </Button>
+      </div>
 
-            <div className="mt-auto pt-5 border-t border-border flex items-end justify-between gap-4 flex-wrap">
-              <div className="min-w-0">
-                <p className="text-xs text-muted-foreground font-medium">今日专注</p>
-                <div className="flex items-baseline gap-2.5 flex-wrap mt-1">
-                  <span className="text-4xl sm:text-5xl font-bold tracking-tight text-foreground tabular-nums">
-                    {formatDuration(stats.todayFocusSeconds)}
-                  </span>
-                  {dayOverDayPct !== null && (
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        'gap-1 text-2xs font-medium shrink-0',
-                        dayOverDayPct >= 0
-                          ? 'text-emerald-600 border-emerald-500/30 bg-emerald-500/10'
-                          : 'text-rose-600 border-rose-500/30 bg-rose-500/10'
-                      )}
-                    >
-                      {dayOverDayPct >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                      {Math.abs(Math.round(dayOverDayPct))}% 较昨日
-                    </Badge>
+      {/* 核心指标 */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 shrink-0">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground font-medium">今日专注</p>
+              {dayOverDayPct !== null && (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    'gap-1 text-3xs font-medium shrink-0',
+                    dayOverDayPct >= 0
+                      ? 'text-emerald-600 border-emerald-500/30 bg-emerald-500/10'
+                      : 'text-rose-600 border-rose-500/30 bg-rose-500/10'
                   )}
-                </div>
-              </div>
-              <div className="flex gap-6 sm:gap-8 pb-0.5 shrink-0">
-                <div className="px-3 py-2">
-                  <p className="text-2xs text-muted-foreground">完成任务</p>
-                  <p className="text-lg font-bold text-foreground tabular-nums">{stats.completedToday} 项</p>
-                </div>
-                <div className="px-3 py-2">
-                  <p className="text-2xs text-muted-foreground">连续专注</p>
-                  <p className="text-lg font-bold text-foreground tabular-nums">{streak} 天</p>
-                </div>
-                <div className="px-3 py-2">
-                  <p className="text-2xs text-muted-foreground">效率评分</p>
-                  <p className="text-lg font-bold text-foreground tabular-nums">
-                    {stats.todayFocusSeconds > 0 || stats.completedToday > 0 ? `${stats.efficiencyScore}%` : '—'}
-                  </p>
-                </div>
-              </div>
+                >
+                  {dayOverDayPct >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                  {Math.abs(Math.round(dayOverDayPct))}%
+                </Badge>
+              )}
+            </div>
+            <p className="text-2xl font-bold tracking-tight tabular-nums mt-0.5">
+              {formatDuration(stats.todayFocusSeconds)}
+            </p>
+            <div className="flex items-end gap-1 h-7 mt-2" aria-hidden>
+              {weekFocusDays.map((d) => (
+                <div
+                  key={d.date.toDateString()}
+                  title={`周${WEEKDAYS[d.date.getDay()]}：${d.minutes} 分钟`}
+                  className={cn('flex-1 rounded-sm', d.isToday ? 'bg-primary' : 'bg-primary/25')}
+                  style={{ height: `${Math.max((d.minutes / maxDayMinutes) * 100, 10)}%` }}
+                />
+              ))}
             </div>
           </CardContent>
         </Card>
 
-        {/* Daily Goal Ring */}
-        <Card className="border-border/40 overflow-hidden relative">
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/8 via-primary/3 to-transparent" />
-          <CardContent className="p-5 sm:p-6 relative h-full flex flex-col">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground font-medium">今日目标</p>
-                <p className="text-sm font-semibold mt-0.5">专注 {focusGoals.dailyMinutes} 分钟</p>
-              </div>
-              <div className="rounded-full bg-primary/10 p-2">
-                <Target className="h-4 w-4 text-primary" />
-              </div>
-            </div>
-            <div className="flex-1 flex items-center justify-center py-2">
-              <div className="relative">
-                <svg className="w-32 h-32 -rotate-90">
-                  <circle cx="64" cy="64" r="56" fill="none" stroke="currentColor" strokeWidth="8" className="text-muted/20" />
-                  <circle
-                    cx="64" cy="64" r="56" fill="none" stroke="url(#goal-gradient)" strokeWidth="8"
-                    strokeLinecap="round"
-                    strokeDasharray={`${2 * Math.PI * 56}`}
-                    strokeDashoffset={`${2 * Math.PI * 56 * (1 - Math.min(dailyGoalProgress / 100, 1))}`}
-                    className="transition-all duration-700"
-                  />
-                  <defs>
-                    <linearGradient id="goal-gradient" x1="0" y1="0" x2="1" y2="1">
-                      <stop offset="0%" stopColor="hsl(var(--primary))" />
-                      <stop offset="100%" stopColor="hsl(var(--chart-1))" />
-                    </linearGradient>
-                  </defs>
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-2xl font-bold tabular-nums">{Math.round(dailyGoalProgress)}%</span>
-                  <span className="text-2xs text-muted-foreground mt-0.5">{todayMinutes} / {focusGoals.dailyMinutes} 分钟</span>
-                </div>
-              </div>
-            </div>
-            <Progress value={dailyGoalProgress} className="h-1.5" />
-            <p className="text-2xs text-muted-foreground text-center mt-2">
-              {dailyGoalProgress >= 100 ? '🎉 今日目标已完成' : dailyGoalProgress >= 50 ? '保持节奏，加油' : '开始你的第一次专注'}
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
+              <Target className="h-3.5 w-3.5 text-primary" />
+              今日目标
+            </p>
+            <p className="text-2xl font-bold tracking-tight tabular-nums mt-0.5">
+              {todayMinutes}
+              <span className="text-sm font-medium text-muted-foreground ml-1.5">/ {focusGoals.dailyMinutes} 分钟</span>
+            </p>
+            <Progress value={dailyGoalProgress} className="h-1.5 mt-3" />
+            <p className="text-2xs text-muted-foreground mt-1.5">
+              {dailyGoalProgress >= 100 ? '🎉 今日目标已完成' : `还差 ${Math.max(focusGoals.dailyMinutes - todayMinutes, 0)} 分钟`}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
+              <ListTodo className="h-3.5 w-3.5 text-primary" />
+              今日任务
+            </p>
+            <p className="text-2xl font-bold tracking-tight tabular-nums mt-0.5">
+              {completedTodayCount}
+              <span className="text-sm font-medium text-muted-foreground ml-1.5">/ {todayTasks.length} 项</span>
+            </p>
+            <Progress
+              value={todayTasks.length > 0 ? (completedTodayCount / todayTasks.length) * 100 : 0}
+              className="h-1.5 mt-3"
+            />
+            <p className="text-2xs mt-1.5">
+              {overdueTasks.length > 0 ? (
+                <span className="text-amber-600 dark:text-amber-500">{overdueTasks.length} 项已过期</span>
+              ) : (
+                <span className="text-muted-foreground">
+                  {todayTasks.length > 0 && completedTodayCount === todayTasks.length
+                    ? '全部完成 🎉'
+                    : `还有 ${Math.max(todayTasks.length - completedTodayCount, 0)} 项待处理`}
+                </span>
+              )}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
+              <Flame className="h-3.5 w-3.5 text-orange-500" />
+              连续专注
+            </p>
+            <p className="text-2xl font-bold tracking-tight tabular-nums mt-0.5">
+              {streak}
+              <span className="text-sm font-medium text-muted-foreground ml-1.5">天</span>
+            </p>
+            <p className="text-2xs text-muted-foreground mt-3">
+              效率评分{' '}
+              <span className="font-semibold text-foreground tabular-nums">
+                {stats.todayFocusSeconds > 0 || stats.completedToday > 0 ? `${stats.efficiencyScore}%` : '—'}
+              </span>
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Quick Actions Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 shrink-0">
-        {quickActions.map((item) => {
-          const Icon = item.icon
-          return (
-            <button
-              key={item.view}
-              onClick={() => setActiveView(item.view)}
-              className="group relative overflow-hidden rounded-xl border border-border/40 bg-card hover:border-border/80 transition-all hover:shadow-md p-3.5 flex items-center gap-3 text-left"
-            >
-              <div className={cn('rounded-lg p-2 shrink-0 bg-gradient-to-br shadow-sm', item.color)}>
-                <Icon className={cn('h-4 w-4', item.iconColor)} />
+      {/* 主体两栏：日程与趋势 / 行动入口 */}
+      <div className="grid gap-4 lg:grid-cols-3 shrink-0">
+        <div className="lg:col-span-2 space-y-4 min-w-0">
+          {/* 今日安排：时间块 + 订阅日程合并 */}
+          <Card>
+            <div className="px-5 pt-4 pb-1 flex items-center justify-between">
+              <h2 className="font-semibold text-sm flex items-center gap-2">
+                <CalendarDays className="h-4 w-4 text-primary" />
+                今日安排
+                {todaySchedule.length > 0 && (
+                  <Badge variant="secondary" className="text-2xs h-5 px-1.5 font-normal">{todaySchedule.length}</Badge>
+                )}
+              </h2>
+              <Button variant="ghost" size="sm" onClick={() => setActiveView('time-block')} className="text-xs h-7 px-2.5">
+                规划时间
+                <ChevronRight className="ml-0.5 h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <CardContent className="px-4 pb-4">
+              {todaySchedule.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-6 text-center">
+                  今天还没有安排，去「时间块」规划你的一天
+                </p>
+              ) : (
+                <div className="space-y-0.5">
+                  {todaySchedule.map((item) => {
+                    const past = !item.allDay && item.end !== '' && item.end <= timeString
+                    return (
+                      <div
+                        key={item.id}
+                        className={cn(
+                          'flex items-center gap-3 rounded-lg px-2.5 py-2 hover:bg-muted/30 transition-colors',
+                          past && 'opacity-45'
+                        )}
+                      >
+                        <span className="text-2xs text-muted-foreground tabular-nums w-24 shrink-0" style={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace' }}>
+                          {item.allDay ? '全天' : `${item.start}${item.end ? ` – ${item.end}` : ''}`}
+                        </span>
+                        {item.kind === 'block' ? (
+                          <span className="h-2.5 w-2.5 rounded-full shrink-0" style={{ background: item.color }} />
+                        ) : (
+                          <Calendar className="h-3 w-3 text-muted-foreground shrink-0" />
+                        )}
+                        <span className="text-sm truncate flex-1">{item.title}</span>
+                        <Badge variant="outline" className="text-3xs h-4 px-1.5 shrink-0 text-muted-foreground font-normal">
+                          {item.kind === 'block' ? '时间块' : '日程'}
+                        </Badge>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* 近7日专注趋势 */}
+          <Card>
+            <div className="px-5 pt-4 pb-1 flex items-center justify-between">
+              <h2 className="font-semibold text-sm flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-primary" />
+                近7日专注
+              </h2>
+              <Button variant="ghost" size="sm" onClick={() => setActiveView('analytics')} className="text-xs h-7 px-2.5">
+                数据分析
+                <ChevronRight className="ml-0.5 h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <CardContent className="px-5 pb-4">
+              <div className="flex items-end gap-2 sm:gap-3">
+                {weekFocusDays.map((d) => {
+                  const pct = (d.minutes / maxDayMinutes) * 100
+                  return (
+                    <div key={d.date.toDateString()} className="flex-1 flex flex-col items-center gap-1">
+                      <span className="text-3xs tabular-nums text-muted-foreground h-4">
+                        {d.minutes > 0 ? d.minutes : ''}
+                      </span>
+                      <div className="relative h-24 w-full flex items-end rounded-md bg-muted/30 overflow-hidden">
+                        <div
+                          className="absolute inset-x-0 border-t border-dashed border-primary/40 z-10"
+                          style={{ bottom: `${(focusGoals.dailyMinutes / maxDayMinutes) * 100}%` }}
+                        />
+                        <div
+                          title={`周${WEEKDAYS[d.date.getDay()]}：${d.minutes} 分钟`}
+                          className={cn('w-full rounded-t-md', d.isToday ? 'bg-primary' : 'bg-primary/30')}
+                          style={{ height: `${Math.max(pct, 2)}%` }}
+                        />
+                      </div>
+                      <span className={cn('text-2xs', d.isToday ? 'font-semibold text-foreground' : 'text-muted-foreground')}>
+                        周{WEEKDAYS[d.date.getDay()]}
+                      </span>
+                    </div>
+                  )
+                })}
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold">{item.label}</p>
-              </div>
-              <ArrowUpRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-primary group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all" />
-            </button>
-          )
-        })}
+              <p className="text-2xs text-muted-foreground mt-3 text-center tabular-nums">
+                本周合计 {weekStats.weekHours.toFixed(1)} 小时 · {weekStats.weekPomodoros} 个番茄 · 虚线为每日目标 {focusGoals.dailyMinutes} 分钟
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="space-y-4 min-w-0">
+          {/* 下一步 */}
+          {nextTask && (
+            <Card>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Clock className="h-3.5 w-3.5 text-primary" />
+                  <span className="text-xs font-semibold text-muted-foreground">下一步</span>
+                  {nextTask.isUrgent && (
+                    <Badge variant="destructive" className="text-3xs h-4 px-1.5">紧急</Badge>
+                  )}
+                </div>
+                <p className="text-sm font-semibold line-clamp-2">{nextTask.title}</p>
+                <div className="flex gap-2 mt-3">
+                  <Button onClick={() => setActiveView('focus')} size="sm" className="flex-1 h-8 text-xs gap-1.5">
+                    <Play className="h-3 w-3 fill-current" />
+                    开始专注
+                  </Button>
+                  <Button onClick={() => setDashTab('tasks')} variant="outline" size="sm" className="h-8 text-xs">
+                    今日待办
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* 习惯速览 */}
+          <Card>
+            <div className="px-4 pt-4 pb-2 flex items-center justify-between">
+              <h2 className="font-semibold text-sm flex items-center gap-2">
+                <Target className="h-4 w-4 text-emerald-500" />
+                今日习惯
+              </h2>
+              <Button variant="ghost" size="sm" onClick={() => setDashTab('habits')} className="text-xs h-7 px-2.5">
+                {todayHabits.length > 0 ? `${completedHabitsCount}/${todayHabits.length}` : '管理'}
+                <ChevronRight className="ml-0.5 h-3.5 w-3.5" />
+              </Button>
+            </div>
+            <CardContent className="px-4 pb-4">
+              {todayHabits.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-4 text-center">
+                  还没有习惯，去「习惯」页面添加第一个
+                </p>
+              ) : (
+                <>
+                  <Progress value={habitProgress} className="h-1 mb-3" />
+                  <div className="space-y-1">
+                    {todayHabits.slice(0, 5).map((habit) => (
+                      <button
+                        key={habit.id}
+                        className={cn(
+                          'w-full flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 transition-all text-left',
+                          habit.completed
+                            ? 'bg-emerald-500/8 border border-emerald-500/15'
+                            : 'bg-muted/30 hover:bg-muted/60 border border-transparent'
+                        )}
+                        onClick={() => {
+                          if (!habit.completed) checkInHabit(habit.id, new Date(), true)
+                        }}
+                      >
+                        <span className="text-sm shrink-0">{habit.icon}</span>
+                        <span className={cn('text-xs flex-1 truncate font-medium', habit.completed && 'line-through text-muted-foreground')}>
+                          {habit.name}
+                        </span>
+                        {habit.completed ? (
+                          <div className="rounded-full bg-emerald-500/15 p-0.5 shrink-0">
+                            <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                          </div>
+                        ) : (
+                          <CircleDot className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
+                        )}
+                      </button>
+                    ))}
+                    {todayHabits.length > 5 && (
+                      <p className="text-2xs text-muted-foreground text-center pt-1">
+                        还有 {todayHabits.length - 5} 个习惯
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* 本周摘要 */}
+          <Card>
+            <div className="px-4 pt-4 pb-2">
+              <h2 className="font-semibold text-sm flex items-center gap-2">
+                <TrendingUp className="h-4 w-4 text-primary" />
+                本周摘要
+              </h2>
+            </div>
+            <CardContent className="px-4 pb-4 space-y-2.5">
+              {[
+                { label: '专注时长', value: `${weekStats.weekHours.toFixed(1)} 小时` },
+                { label: '完成番茄', value: `${weekStats.weekPomodoros} 个` },
+                { label: '完成任务', value: `${weekStats.weekTasks} 项` },
+                { label: '时间记录', value: `${weekStats.weekTimeHours.toFixed(1)} 小时` },
+              ].map((row) => (
+                <div key={row.label} className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">{row.label}</span>
+                  <span className="text-sm font-semibold tabular-nums">{row.value}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
       </div>
         </ViewTabsContent>
 
