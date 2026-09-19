@@ -96,6 +96,7 @@ export function GoalsView() {
     deleteGoal,
     addMilestone,
     toggleMilestone,
+    updateMilestone,
     deleteMilestone,
     reorderMilestones,
     tasks,
@@ -109,6 +110,7 @@ export function GoalsView() {
     deleteGoal: state.deleteGoal,
     addMilestone: state.addMilestone,
     toggleMilestone: state.toggleMilestone,
+    updateMilestone: state.updateMilestone,
     deleteMilestone: state.deleteMilestone,
     reorderMilestones: state.reorderMilestones,
     tasks: state.tasks,
@@ -274,12 +276,14 @@ export function GoalsView() {
     return diff
   }
 
-  const SortableMilestoneItem = ({ milestone, goalId, toggleMilestone, deleteMilestone }: {
+  const SortableMilestoneItem = ({ milestone, goalId, toggleMilestone, deleteMilestone, updateMilestone }: {
     milestone: Milestone
     goalId: string
     toggleMilestone: (goalId: string, milestoneId: string) => void
     deleteMilestone: (goalId: string, milestoneId: string) => void
+    updateMilestone: (goalId: string, milestoneId: string, updates: Partial<Omit<Milestone, 'id'>>) => void
   }) => {
+    const [editingDueDate, setEditingDueDate] = useState(false)
     const {
       attributes,
       listeners,
@@ -330,10 +334,44 @@ export function GoalsView() {
         )}>
           {milestone.title}
         </span>
-        {milestone.dueDate && (
-          <span className="text-xs text-muted-foreground shrink-0">
-            {new Date(milestone.dueDate).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })}
-          </span>
+        {editingDueDate ? (
+          <input
+            type="date"
+            autoFocus
+            defaultValue={
+              milestone.dueDate
+                ? `${String(new Date(milestone.dueDate).getFullYear())}-${String(new Date(milestone.dueDate).getMonth() + 1).padStart(2, '0')}-${String(new Date(milestone.dueDate).getDate()).padStart(2, '0')}`
+                : ''
+            }
+            className="h-6 w-28 shrink-0 rounded border border-input bg-background px-1 text-xs"
+            onChange={(e) => {
+              const v = e.target.value
+              updateMilestone(goalId, milestone.id, {
+                dueDate: v ? new Date(`${v}T00:00:00`) : undefined,
+              })
+            }}
+            onBlur={() => setEditingDueDate(false)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === 'Escape') setEditingDueDate(false)
+            }}
+            aria-label="里程碑截止日期"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setEditingDueDate(true)}
+            title="设置里程碑截止日期"
+            className={cn(
+              'text-xs shrink-0 rounded px-1 py-0.5 hover:bg-muted/60 transition-colors flex items-center gap-1',
+              milestone.dueDate ? 'text-muted-foreground' : 'text-muted-foreground/40 hover-reveal',
+              milestone.dueDate && !milestone.completed && new Date(milestone.dueDate) < today && 'text-destructive'
+            )}
+          >
+            <Calendar className="h-3 w-3" />
+            {milestone.dueDate
+              ? new Date(milestone.dueDate).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
+              : '设日期'}
+          </button>
         )}
         <Button
           variant="ghost"
@@ -514,6 +552,7 @@ export function GoalsView() {
                           goalId={goal.id}
                           toggleMilestone={toggleMilestone}
                           deleteMilestone={deleteMilestone}
+                          updateMilestone={updateMilestone}
                         />
                       ))}
                     </div>

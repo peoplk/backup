@@ -331,6 +331,7 @@ export function TasksView() {
   const [filterTag, setFilterTag] = useState<string>('all')
   const [filterDate, setFilterDate] = useState<Date | null>(null)
   const [filterType, setFilterType] = useState<string>('all')
+  const [filterEnergy, setFilterEnergy] = useState<string>('all')
   const [filterProject, setFilterProject] = useState<string>(() => {
     if (typeof window === 'undefined') return 'all'
     return window.localStorage.getItem('focusflow-active-project') || 'all'
@@ -433,11 +434,12 @@ export function TasksView() {
       const matchesStatus = filterStatus === 'all' || task.status === filterStatus
       const matchesTag = filterTag === 'all' || task.tags.includes(filterTag)
       const matchesType = filterType === 'all' || task.type === filterType
+      const matchesEnergy = filterEnergy === 'all' || (task.energy || 'medium') === filterEnergy
       const matchesProject = filterProject === 'all' || task.project === filterProject
       const matchesArchived = showArchived ? !!task.archived : !task.archived
       const matchesDate = !filterDate || 
         (task.dueDate && new Date(task.dueDate).toDateString() === filterDate.toDateString())
-      return matchesSearch && matchesPriority && matchesStatus && matchesTag && matchesType && matchesProject && matchesArchived && matchesDate
+      return matchesSearch && matchesPriority && matchesStatus && matchesTag && matchesType && matchesEnergy && matchesProject && matchesArchived && matchesDate
     })
     
     if (activeSmartList) {
@@ -451,7 +453,7 @@ export function TasksView() {
     }
     
     return filtered
-  }, [tasks, searchQuery, filterPriority, filterStatus, filterTag, filterType, filterDate, filterProject, showArchived, activeSmartList, getSmartListTasks])
+  }, [tasks, searchQuery, filterPriority, filterStatus, filterTag, filterType, filterEnergy, filterDate, filterProject, showArchived, activeSmartList, getSmartListTasks])
 
   const hasAnyFilter = useMemo(() =>
     !!searchQuery ||
@@ -459,9 +461,10 @@ export function TasksView() {
     filterStatus !== 'all' ||
     filterTag !== 'all' ||
     filterType !== 'all' ||
+    filterEnergy !== 'all' ||
     filterProject !== 'all' ||
     !!filterDate
-  , [searchQuery, filterPriority, filterStatus, filterTag, filterType, filterProject, filterDate])
+  , [searchQuery, filterPriority, filterStatus, filterTag, filterType, filterEnergy, filterProject, filterDate])
 
   const isDoneVisibleToday = useCallback((t: Task) => {
     if (t.status !== 'done' || !!t.repeatRule) return false
@@ -2005,6 +2008,17 @@ export function TasksView() {
                   ))}
                 </SelectContent>
               </Select>
+              <Select value={filterEnergy} onValueChange={setFilterEnergy}>
+                <SelectTrigger className="w-full sm:w-[120px]">
+                  <SelectValue placeholder="能量" />
+                </SelectTrigger>
+                <SelectContent align="start">
+                  <SelectItem value="all">全部能量</SelectItem>
+                  <SelectItem value="high">⚡ 高能量</SelectItem>
+                  <SelectItem value="medium">🔋 中能量</SelectItem>
+                  <SelectItem value="low">🌙 低能量</SelectItem>
+                </SelectContent>
+              </Select>
               {projects.length > 0 && (
                 <Select value={filterProject} onValueChange={applyProjectFilter}>
                   <SelectTrigger className="w-full sm:w-[140px]">
@@ -2057,6 +2071,7 @@ export function TasksView() {
                       status: filterStatus !== 'all' ? filterStatus : undefined,
                       tag: filterTag !== 'all' ? filterTag : undefined,
                       type: filterType !== 'all' ? filterType : undefined,
+                      energy: filterEnergy !== 'all' ? filterEnergy : undefined,
                       project: filterProject !== 'all' ? filterProject : undefined,
                       date: filterDate ? filterDate.toISOString().split('T')[0] : undefined,
                       viewMode,
@@ -2067,6 +2082,7 @@ export function TasksView() {
                       setFilterStatus(c.status || 'all')
                       setFilterTag(c.tag || 'all')
                       setFilterType(c.type || 'all')
+                      setFilterEnergy(c.energy || 'all')
                       applyProjectFilter(c.project || 'all')
                       setFilterDate(c.date ? new Date(c.date) : null)
                       if (c.viewMode) setViewMode(c.viewMode)

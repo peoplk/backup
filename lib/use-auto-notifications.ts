@@ -6,7 +6,7 @@ import { sendBrowserNotification } from '@/lib/browser-notifications'
 import { markNotified, hasNotified } from '@/lib/notified-registry'
 import { isHabitScheduledOn } from '@/lib/habit-frequency'
 
-function getMobileNotifSetting(key: 'task' | 'habit' | 'focus' | 'review'): boolean {
+function getMobileNotifSetting(key: 'task' | 'habit' | 'focus' | 'review' | 'goal'): boolean {
   if (typeof window === 'undefined') return true
   return localStorage.getItem(`focusflow-notif-${key}`) !== 'false'
 }
@@ -16,6 +16,7 @@ export function useAutoNotifications() {
     tasks,
     habits,
     anniversaries,
+    goals,
     addNotification,
     notifications,
     repeatCompletions,
@@ -286,6 +287,55 @@ export function useAutoNotifications() {
         }
       })
 
+      // 目标截止与里程碑到期提醒
+      goals.forEach(goal => {
+        if (goal.status === 'completed' || goal.status === 'paused') return
+        const dayKey = today.toDateString()
+        const endDate = new Date(goal.endDate)
+        endDate.setHours(0, 0, 0, 0)
+        const diffDays = Math.floor((endDate.getTime() - today.getTime()) / 86400000)
+
+        const notifyGoal = (key: string, title: string, message: string) => {
+          if (existingKeys.has(`${title}-${message}`) || hasNotified(key)) return
+          markNotified(key)
+          addNotification({
+            type: 'goal-due',
+            title,
+            message,
+            actionUrl: 'goals',
+            relatedType: 'goal',
+            relatedId: goal.id,
+          })
+        }
+
+        if (diffDays < 0) {
+          notifyGoal(`goal-overdue-${goal.id}-${dayKey}`, '目标已逾期', `"${goal.title}" 已超过截止日期 ${Math.abs(diffDays)} 天`)
+        } else if (diffDays === 0) {
+          notifyGoal(`goal-due-${goal.id}-${dayKey}`, '目标今日截止', `"${goal.title}" 今天是最后期限`)
+          if (getMobileNotifSetting('goal')) {
+            sendBrowserNotification('🎯 目标今日截止', {
+              body: `"${goal.title}" 今天是最后期限`,
+              tag: `goal-due-push-${goal.id}-${dayKey}`,
+              data: { view: 'goals' },
+            })
+          }
+        } else if (diffDays === 3 || diffDays === 7) {
+          notifyGoal(`goal-due-soon-${goal.id}-${diffDays}-${dayKey}`, '目标即将截止', `"${goal.title}" 还有 ${diffDays} 天到期`)
+        }
+
+        goal.milestones.forEach(m => {
+          if (m.completed || !m.dueDate) return
+          const due = new Date(m.dueDate)
+          due.setHours(0, 0, 0, 0)
+          const mDiff = Math.floor((due.getTime() - today.getTime()) / 86400000)
+          if (mDiff === 0) {
+            notifyGoal(`milestone-due-${goal.id}-${m.id}-${dayKey}`, '里程碑今日到期', `"${goal.title}" 的里程碑 "${m.title}" 今天到期`)
+          } else if (mDiff < 0 && mDiff >= -7) {
+            notifyGoal(`milestone-overdue-${goal.id}-${m.id}-${dayKey}`, '里程碑已逾期', `"${goal.title}" 的里程碑 "${m.title}" 已逾期 ${Math.abs(mDiff)} 天`)
+          }
+        })
+      })
+
       // 每日回顾提醒
       if (dailyReviewSettings?.enabled && getMobileNotifSetting('review')) {
         const reviewTime = dailyReviewSettings.reviewTime || '21:00'
@@ -316,5 +366,5 @@ export function useAutoNotifications() {
         clearInterval(intervalRef.current)
       }
     }
-  }, [tasks, habits, anniversaries, addNotification, notifications, repeatCompletions, markReminderTriggered, pomodoroSessions, dailyReviewSettings, purgeOrphanedNotifications])
+  }, [tasks, habits, anniversaries, goals, addNotification, notifications, repeatCompletions, markReminderTriggered, pomodoroSessions, dailyReviewSettings, purgeOrphanedNotifications])
 }

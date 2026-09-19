@@ -53,6 +53,7 @@ export interface FilterCriteria {
   type?: string
   date?: string
   project?: string
+  energy?: string
   viewMode?: 'list' | 'kanban' | 'matrix'
 }
 
@@ -217,7 +218,7 @@ export interface Anniversary {
 
 export interface Notification {
   id: string
-  type: 'task-due' | 'task-overdue' | 'habit-reminder' | 'anniversary' | 'pomodoro' | 'achievement'
+  type: 'task-due' | 'task-overdue' | 'habit-reminder' | 'anniversary' | 'pomodoro' | 'achievement' | 'goal-due'
   title: string
   message: string
   timestamp: Date

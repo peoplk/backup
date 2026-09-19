@@ -64,7 +64,7 @@ export interface ReminderJobPayload {
   fireAt: number
   title: string
   body?: string
-  meta?: { kind?: 'task' | 'habit' | 'review'; taskId?: string; reminderId?: string; habitId?: string }
+  meta?: { kind?: 'task' | 'habit' | 'review' | 'goal'; taskId?: string; reminderId?: string; habitId?: string; goalId?: string }
 }
 
 export interface ElectronAPI {

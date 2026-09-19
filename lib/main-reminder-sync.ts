@@ -70,6 +70,35 @@ function buildReminderJobs(): ReminderJobPayload[] {
     })
   })
 
+  st.goals.forEach(goal => {
+    if (goal.status === 'completed' || goal.status === 'paused') return
+    const end = new Date(goal.endDate)
+    end.setHours(0, 0, 0, 0)
+    const diffDays = Math.floor((end.getTime() - today.getTime()) / 86400000)
+    const dayKey = today.toDateString()
+
+    const addGoalJob = (key: string, fireAt: number, title: string, body: string) => {
+      if (fireAt <= now.getTime() || hasNotified(key)) return
+      jobs.push({ key, fireAt, title, body, meta: { kind: 'goal', goalId: goal.id } })
+    }
+
+    if (diffDays === 0) {
+      addGoalJob(`goal-due-${goal.id}-${dayKey}`, onDueTime(end).getTime(), '🎯 目标今日截止', `"${goal.title}" 今天是最后期限`)
+    } else if (diffDays === 3 || diffDays === 7) {
+      addGoalJob(`goal-due-soon-${goal.id}-${diffDays}-${dayKey}`, onDueTime(end).getTime(), '🎯 目标即将截止', `"${goal.title}" 还有 ${diffDays} 天到期`)
+    }
+
+    goal.milestones.forEach(m => {
+      if (m.completed || !m.dueDate) return
+      const due = new Date(m.dueDate)
+      due.setHours(0, 0, 0, 0)
+      const mDiff = Math.floor((due.getTime() - today.getTime()) / 86400000)
+      if (mDiff === 0) {
+        addGoalJob(`milestone-due-${goal.id}-${m.id}-${dayKey}`, onDueTime(due).getTime(), '🎯 里程碑今日到期', `"${goal.title}" 的里程碑 "${m.title}" 今天到期`)
+      }
+    })
+  })
+
   const review = st.dailyReviewSettings
   if (review?.enabled) {
     const todayStr = now.toISOString().slice(0, 10)
@@ -106,13 +135,14 @@ function pushJobsToMain() {
 export function useMainReminderSync() {
   const tasks = useAppStore((s) => s.tasks)
   const habits = useAppStore((s) => s.habits)
+  const goals = useAppStore((s) => s.goals)
   const dailyReviewSettings = useAppStore((s) => s.dailyReviewSettings)
 
   useEffect(() => {
     pushJobsToMain()
     const interval = setInterval(pushJobsToMain, SYNC_INTERVAL_MS)
     return () => clearInterval(interval)
-  }, [tasks, habits, dailyReviewSettings])
+  }, [tasks, habits, goals, dailyReviewSettings])
 
   useEffect(() => {
     const api = typeof window !== 'undefined'
@@ -145,6 +175,15 @@ export function useMainReminderSync() {
           actionUrl: 'habits',
           relatedType: 'habit',
           relatedId: job.meta.habitId,
+        })
+      } else if (job.meta?.kind === 'goal' && job.meta.goalId) {
+        st.addNotification({
+          type: 'goal-due',
+          title: job.title || '🎯 目标提醒',
+          message: job.body || '',
+          actionUrl: 'goals',
+          relatedType: 'goal',
+          relatedId: job.meta.goalId,
         })
       }
     })

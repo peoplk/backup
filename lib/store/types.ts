@@ -160,6 +160,7 @@ export interface AppState {
   deleteGoal: (id: string) => void
   addMilestone: (goalId: string, milestone: Omit<Milestone, 'id'>) => void
   toggleMilestone: (goalId: string, milestoneId: string) => void
+  updateMilestone: (goalId: string, milestoneId: string, updates: Partial<Omit<Milestone, 'id'>>) => void
   deleteMilestone: (goalId: string, milestoneId: string) => void
   reorderMilestones: (goalId: string, milestoneIds: string[]) => void
 

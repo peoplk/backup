@@ -20,6 +20,7 @@ import {
   Timer,
   Trophy,
   Calendar,
+  Target,
   Check,
   Trash2,
 } from 'lucide-react'
@@ -34,6 +35,7 @@ const notificationIcons: Record<Notification['type'], React.ComponentType<{ clas
   'anniversary': Heart,
   'pomodoro': Timer,
   'achievement': Trophy,
+  'goal-due': Target,
 }
 
 const notificationColors: Record<Notification['type'], string> = {
@@ -43,6 +45,7 @@ const notificationColors: Record<Notification['type'], string> = {
   'anniversary': 'text-chart-3',
   'pomodoro': 'text-chart-1',
   'achievement': 'text-chart-4',
+  'goal-due': 'text-chart-1',
 }
 
 const notificationRoutes: Record<Notification['type'], string> = {
@@ -52,6 +55,7 @@ const notificationRoutes: Record<Notification['type'], string> = {
   'anniversary': 'anniversaries',
   'pomodoro': 'pomodoro',
   'achievement': 'analytics',
+  'goal-due': 'goals',
 }
 
 export function NotificationBell() {

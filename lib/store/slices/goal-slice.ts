@@ -81,6 +81,19 @@ export const createGoalSlice = (
       dataLinkService.updateGoalProgressAfterLink(goalId)
     })
   },
+  updateMilestone: (goalId: string, milestoneId: string, updates: Partial<Omit<Milestone, 'id'>>) =>
+    set((state) => ({
+      goals: state.goals.map((g) =>
+        g.id === goalId
+          ? {
+              ...g,
+              milestones: g.milestones.map((m) =>
+                m.id === milestoneId ? { ...m, ...updates } : m
+              ),
+            }
+          : g
+      ),
+    })),
   deleteMilestone: (goalId: string, milestoneId: string) => {
     set((state) => ({
       goals: state.goals.map((g) =>
