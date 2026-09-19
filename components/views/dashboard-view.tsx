@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useAppStore } from '@/lib/store'
 import { useShallow } from 'zustand/react/shallow'
 import {
   useStats,
   useStreak,
   useWeekStats,
+  useHabitStats,
   formatDuration,
   useTodayTasks,
   type TodayTask,
@@ -34,6 +35,7 @@ import {
   Moon,
   Activity,
   ChevronRight,
+  ChevronDown,
   AlertTriangle,
   BarChart3,
   Calendar,
@@ -158,10 +160,6 @@ export function DashboardView() {
     return todayTasks.filter((t: TodayTask) => t.completedToday).length
   }, [todayTasks])
 
-  const upcomingTask = useMemo(() => {
-    return todayTasks.find((t: TodayTask) => !t.completedToday)
-  }, [todayTasks])
-
   const timeString = useMemo(() => {
     return now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
   }, [now])
@@ -224,6 +222,63 @@ export function DashboardView() {
     const pending = todayTasks.find((t: TodayTask) => !t.completedToday)
     return pending ? { title: pending.title, isUrgent: false } : null
   }, [urgentTasks, todayTasks])
+
+  const habitStats = useHabitStats()
+  const [showCompletedToday, setShowCompletedToday] = useState(false)
+
+  const pendingTodayTasks = useMemo(
+    () => todayTasks.filter((t: TodayTask) => !t.completedToday && !t.isOverdue),
+    [todayTasks]
+  )
+  const completedTodayTasks = useMemo(
+    () => todayTasks.filter((t: TodayTask) => t.completedToday),
+    [todayTasks]
+  )
+
+  const pendingPomodoros = useMemo(
+    () => pendingTodayTasks.reduce((acc, t) => acc + (t.estimatedPomodoros ?? 0), 0),
+    [pendingTodayTasks]
+  )
+  const remainingGoalMinutes = Math.max(focusGoals.dailyMinutes - todayMinutes, 0)
+
+  const dueSoonTasks = useMemo(() => {
+    const start = new Date(today)
+    start.setDate(start.getDate() + 1)
+    const end = new Date(today)
+    end.setDate(end.getDate() + 3)
+    end.setHours(23, 59, 59, 999)
+    return tasks
+      .filter(t => t.status !== 'done' && !t.archived && t.dueDate)
+      .map(t => {
+        const due = new Date(t.dueDate!)
+        due.setHours(0, 0, 0, 0)
+        return { id: t.id, title: t.title, due, diffDays: Math.round((due.getTime() - start.getTime()) / 86_400_000) + 1 }
+      })
+      .filter(x => x.due >= start && x.due <= end)
+      .sort((a, b) => a.due.getTime() - b.due.getTime())
+      .slice(0, 6)
+      .map(x => ({
+        id: x.id,
+        title: x.title,
+        label: x.diffDays === 1 ? '明天' : x.diffDays === 2 ? '后天' : `周${WEEKDAYS[x.due.getDay()]}`,
+      }))
+  }, [tasks, today])
+
+  const weekDates = useMemo(() => {
+    const start = new Date(today)
+    start.setDate(start.getDate() - ((start.getDay() + 6) % 7))
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(start)
+      d.setDate(start.getDate() + i)
+      return d
+    })
+  }, [today])
+
+  const checkInSet = useMemo(() => {
+    const set = new Set<string>()
+    habitCheckIns.filter(c => c.completed).forEach(c => set.add(`${c.habitId}|${new Date(c.date).toDateString()}`))
+    return set
+  }, [habitCheckIns])
 
   const [dashTab, setDashTab] = useState('overview')
 
@@ -624,259 +679,364 @@ export function DashboardView() {
           'grid gap-4 flex-1 min-h-0',
           isMobile ? 'grid-cols-1' : 'lg:grid-cols-3'
         )}>
-      {/* Main Content Grid: Today's Tasks */}
-      <Card className="lg:col-span-2 border-border/40 flex flex-col min-h-0">
-          <div className="px-5 pt-5 pb-3 shrink-0 flex items-center justify-between">
-            <div>
-              <h2 className="font-semibold text-base flex items-center gap-2">
-                <ListTodo className="h-4 w-4 text-primary" />
-                今日待办
-                {todayTasks.length > 0 && (
-                  <Badge variant="secondary" className="text-2xs h-5 px-1.5 font-normal">
-                    {completedTodayCount}/{todayTasks.length}
-                  </Badge>
-                )}
-              </h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {completedTodayCount === todayTasks.length && todayTasks.length > 0
-                  ? '今日任务全部完成 🎉'
-                  : `还有 ${todayTasks.length - completedTodayCount} 项待处理`}
-              </p>
-            </div>
-            <Button variant="ghost" size="sm" onClick={() => setActiveView('tasks')} className="text-xs h-7 px-2.5">
-              全部
-              <ChevronRight className="ml-0.5 h-3.5 w-3.5" />
-            </Button>
-          </div>
-          <CardContent className="px-5 pb-4 flex-1 min-h-0 overflow-y-auto">
-            {overdueTasks.length > 0 && (
-              <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
-                  <span className="text-xs font-semibold text-amber-600">{overdueTasks.length} 个任务已过期</span>
-                </div>
-                <div className="space-y-1.5">
-                  {overdueTasks.slice(0, 2).map(task => (
-                    <div key={task.id} className="flex items-center gap-2 text-xs">
-                      <div className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
-                      <span className="truncate flex-1 text-muted-foreground">{task.title}</span>
-                      <div className="flex gap-1 shrink-0">
-                        <button
-                          className="text-2xs px-1.5 py-0.5 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium"
-                          onClick={(e) => { e.stopPropagation(); rescheduleTask(task.id, new Date()) }}
-                        >
-                          今天
-                        </button>
-                        <button
-                          className="text-2xs px-1.5 py-0.5 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            const tomorrow = new Date()
-                            tomorrow.setDate(tomorrow.getDate() + 1)
-                            rescheduleTask(task.id, tomorrow)
-                          }}
-                        >
-                          明天
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {urgentTasks.length === 0 && todayTasks.length === 0 && overdueTasks.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-10 text-center">
-                <div className="rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 p-4 mb-3">
-                  <CheckCircle2 className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
-                </div>
-                <p className="text-sm font-semibold">今天没有待办任务</p>
-                <p className="text-xs text-muted-foreground mt-1">享受一段轻松时光，或添加新任务</p>
-                <Button variant="outline" size="sm" onClick={() => setActiveView('tasks')} className="mt-4">
-                  <Plus className="h-3.5 w-3.5 mr-1" />
-                  添加任务
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-1.5">
-                {urgentTasks.slice(0, 3).map(task => (
-                  <div
-                    key={task.id}
-                    className="group flex items-center gap-2.5 rounded-xl border border-destructive/20 bg-destructive/5 px-3 py-2.5 hover:bg-destructive/10 transition-colors"
-                  >
-                    <Checkbox
-                      checked={false}
-                      onCheckedChange={() => handleCompleteTask(task.id)}
-                      className="border-destructive/50 data-[state=checked]:bg-destructive data-[state=checked]:border-destructive h-4 w-4"
-                    />
-                    <p className="text-sm font-medium truncate flex-1">{task.title}</p>
-                    <Badge variant="destructive" className="text-2xs h-4 shrink-0 px-1.5">紧急</Badge>
-                  </div>
-                ))}
-                {todayTasks.slice(0, urgentTasks.length > 0 ? 5 : 8).map((task: TodayTask) => {
-                  const isOverdue = task.isOverdue
-                  const completedToday = task.completedToday
-                  return (
-                    <div
-                      key={task.id}
-                      className={cn(
-                        "group flex items-center gap-2.5 rounded-xl border px-3 py-2.5 transition-all",
-                        completedToday
-                          ? "border-emerald-500/20 bg-emerald-500/5"
-                          : isOverdue
-                            ? "border-amber-500/30 bg-amber-500/5"
-                            : "border-border/40 hover:border-primary/30 hover:bg-muted/30"
-                      )}
-                    >
-                      <Checkbox
-                        checked={completedToday}
-                        onCheckedChange={() => { if (!completedToday) handleCompleteTask(task.id) }}
-                        className={cn(
-                          "h-4 w-4",
-                          completedToday
-                            ? "border-emerald-500/50 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
-                            : isOverdue
-                              ? "border-amber-500/50 data-[state=checked]:bg-amber-500"
-                              : ""
-                        )}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className={cn("text-sm font-medium truncate", completedToday && "line-through text-muted-foreground")}>{task.title}</p>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          {task.repeatRule && (
-                            <Badge variant="outline" className="text-3xs h-3.5 px-1 border-purple-300 text-purple-600 dark:border-purple-700 dark:text-purple-400">
-                              {task.repeatRule.type === 'daily' ? '每天' : task.repeatRule.type === 'weekly' ? '每周' : task.repeatRule.type === 'monthly' ? '每月' : '每年'}
-                            </Badge>
-                          )}
-                          {task.project && (
-                            <Badge variant="secondary" className="text-3xs h-3.5 px-1">{task.project}</Badge>
-                          )}
-                          {task.estimatedPomodoros && task.estimatedPomodoros > 0 && (
-                            <span className="text-2xs text-muted-foreground">🍅 {task.estimatedPomodoros}</span>
-                          )}
-                        </div>
-                      </div>
-                      {completedToday && (
-                        <Badge variant="outline" className="text-3xs h-4 border-emerald-500/50 text-emerald-600 shrink-0 px-1.5">
-                          已完成
-                        </Badge>
-                      )}
-                      {isOverdue && !completedToday && (
-                        <Badge variant="outline" className="text-3xs h-4 border-amber-500/50 text-amber-600 shrink-0 px-1.5">
-                          过期
-                        </Badge>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-            <div className="mt-3 sticky bottom-0 bg-card pt-2 -mx-1">
-              <SmartQuickAddTask />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Right Column: Habits + Next Up */}
-        <div className="flex flex-col gap-4 min-h-0">
-          {/* Next Up Highlight */}
-          {upcomingTask && (
-            <Card className="border-border/40 shrink-0">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <Clock className="h-3.5 w-3.5 text-primary" />
-                  <span className="text-xs font-semibold text-muted-foreground">下一个任务</span>
-                </div>
-                <p className="text-sm font-semibold line-clamp-2">{upcomingTask.title}</p>
-                <Button
-                  onClick={() => setActiveView('focus')}
-                  variant="outline"
-                  size="sm"
-                  className="w-full mt-3 h-8 text-xs gap-1.5"
-                >
-                  <Play className="h-3 w-3 fill-current" />
-                  开始专注这个任务
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-        </ViewTabsContent>
-
-        <ViewTabsContent value="habits" className="flex-1 min-h-0">
-        <div className="h-full min-h-0">
-          {/* Habits */}
-          <Card className="border-border/40 flex flex-col min-h-0 h-full">
-            <div className="px-5 pt-4 pb-3 shrink-0 flex items-center justify-between">
-              <div className="flex-1 min-w-0">
-                <h2 className="font-semibold text-sm flex items-center gap-2">
-                  <Target className="h-4 w-4 text-emerald-500" />
-                  今日习惯
+          <Card className="lg:col-span-2 border-border/40 flex flex-col min-h-0">
+            <div className="px-5 pt-5 pb-3 shrink-0 flex items-center justify-between">
+              <div>
+                <h2 className="font-semibold text-base flex items-center gap-2">
+                  <ListTodo className="h-4 w-4 text-primary" />
+                  今日待办
+                  {todayTasks.length > 0 && (
+                    <Badge variant="secondary" className="text-2xs h-5 px-1.5 font-normal">
+                      {completedTodayCount}/{todayTasks.length}
+                    </Badge>
+                  )}
                 </h2>
-                {todayHabits.length > 0 && (
-                  <div className="mt-2">
-                    <div className="flex items-center justify-between text-2xs text-muted-foreground mb-1">
-                      <span>完成进度</span>
-                      <span className="font-medium">{Math.round(habitProgress)}%</span>
-                    </div>
-                    <Progress value={habitProgress} className="h-1" />
-                  </div>
-                )}
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {urgentTasks.length + overdueTasks.length > 0
+                    ? `${urgentTasks.length + overdueTasks.length} 项需要优先处理`
+                    : completedTodayCount === todayTasks.length && todayTasks.length > 0
+                      ? '今日任务全部完成 🎉'
+                      : todayTasks.length > 0
+                        ? `还有 ${todayTasks.length - completedTodayCount} 项待处理`
+                        : '今天没有待办任务'}
+                </p>
               </div>
-              <Button variant="ghost" size="sm" onClick={() => setActiveView('habits')} className="text-xs h-7 px-2 ml-2">
-                <ChevronRight className="h-3.5 w-3.5" />
+              <Button variant="ghost" size="sm" onClick={() => setActiveView('tasks')} className="text-xs h-7 px-2.5">
+                任务管理
+                <ChevronRight className="ml-0.5 h-3.5 w-3.5" />
               </Button>
             </div>
-            <CardContent className="px-4 pb-4 flex-1 min-h-0 overflow-y-auto">
-              {todayHabits.length === 0 ? (
-                <div className="py-6 text-center">
-                  <div className="rounded-2xl bg-muted/50 p-3 w-fit mx-auto mb-2">
-                    <Target className="h-5 w-5 text-muted-foreground/60" />
+            <CardContent className="px-5 pb-4 flex-1 min-h-0 overflow-y-auto">
+              {urgentTasks.length === 0 && overdueTasks.length === 0 && todayTasks.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10 text-center">
+                  <div className="rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 p-4 mb-3">
+                    <CheckCircle2 className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
                   </div>
-                  <p className="text-xs text-muted-foreground">还没有设置习惯</p>
-                  <Button variant="link" size="sm" onClick={() => setActiveView('habits')} className="mt-1 h-6 text-2xs">
-                    添加第一个习惯
+                  <p className="text-sm font-semibold">今天没有待办任务</p>
+                  <p className="text-xs text-muted-foreground mt-1">享受一段轻松时光，或添加新任务</p>
+                  <Button variant="outline" size="sm" onClick={() => setActiveView('tasks')} className="mt-4">
+                    <Plus className="h-3.5 w-3.5 mr-1" />
+                    添加任务
                   </Button>
                 </div>
               ) : (
-                <div className="space-y-1">
-                  {todayHabits.map(habit => (
-                    <button
-                      key={habit.id}
-                      className={cn(
-                        'w-full flex items-center gap-2.5 rounded-lg px-2.5 py-2 transition-all text-left',
-                        habit.completed
-                          ? 'bg-emerald-500/8 border border-emerald-500/15'
-                          : 'bg-muted/30 hover:bg-muted/60 border border-transparent'
-                      )}
-                      onClick={() => {
-                        if (!habit.completed) {
-                          checkInHabit(habit.id, new Date(), true)
-                        }
-                      }}
-                    >
-                      <span className="text-base shrink-0">{habit.icon}</span>
-                      <span className={cn(
-                        'text-xs flex-1 truncate font-medium',
-                        habit.completed && 'line-through text-muted-foreground'
-                      )}>
-                        {habit.name}
-                      </span>
-                      {habit.completed ? (
-                        <div className="rounded-full bg-emerald-500/15 p-0.5 shrink-0">
-                          <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                <div className="space-y-1.5">
+                  {urgentTasks.length > 0 && (
+                    <>
+                      <SectionLabel>紧急优先</SectionLabel>
+                      {urgentTasks.map(task => (
+                        <TaskRow
+                          key={task.id}
+                          task={task}
+                          urgent
+                          onToggle={() => handleCompleteTask(task.id)}
+                          right={<Badge variant="destructive" className="text-2xs h-4 shrink-0 px-1.5">紧急</Badge>}
+                        />
+                      ))}
+                    </>
+                  )}
+                  {overdueTasks.length > 0 && (
+                    <>
+                      <SectionLabel className="text-amber-600 dark:text-amber-500 flex items-center gap-1">
+                        <AlertTriangle className="h-3 w-3" />
+                        已过期 {overdueTasks.length} 项
+                      </SectionLabel>
+                      {overdueTasks.map(task => (
+                        <TaskRow
+                          key={task.id}
+                          task={{ ...task, isOverdue: true }}
+                          onToggle={() => handleCompleteTask(task.id)}
+                          right={
+                            <span className="flex gap-1 shrink-0">
+                              <button
+                                className="text-2xs px-1.5 py-0.5 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium"
+                                onClick={(e) => { e.stopPropagation(); rescheduleTask(task.id, new Date()) }}
+                              >
+                                今天
+                              </button>
+                              <button
+                                className="text-2xs px-1.5 py-0.5 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors font-medium"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  const tomorrow = new Date()
+                                  tomorrow.setDate(tomorrow.getDate() + 1)
+                                  rescheduleTask(task.id, tomorrow)
+                                }}
+                              >
+                                明天
+                              </button>
+                            </span>
+                          }
+                        />
+                      ))}
+                    </>
+                  )}
+                  {pendingTodayTasks.length > 0 && (
+                    <>
+                      <SectionLabel>今天</SectionLabel>
+                      {pendingTodayTasks.map(task => (
+                        <TaskRow key={task.id} task={task} onToggle={() => handleCompleteTask(task.id)} />
+                      ))}
+                    </>
+                  )}
+                  {completedTodayTasks.length > 0 && (
+                    <div className="pt-2">
+                      <button
+                        className="w-full flex items-center gap-1.5 px-1 text-2xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                        onClick={() => setShowCompletedToday(v => !v)}
+                      >
+                        <ChevronDown className={cn('h-3 w-3 transition-transform', !showCompletedToday && '-rotate-90')} />
+                        今日已完成（{completedTodayTasks.length}）
+                      </button>
+                      {showCompletedToday && (
+                        <div className="space-y-1.5 mt-1.5">
+                          {completedTodayTasks.map(task => (
+                            <TaskRow key={task.id} task={task} onToggle={() => {}} />
+                          ))}
                         </div>
-                      ) : (
-                        <CircleDot className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
                       )}
-                    </button>
-                  ))}
+                    </div>
+                  )}
                 </div>
               )}
+              <div className="mt-3 sticky bottom-0 bg-card pt-2 -mx-1">
+                <SmartQuickAddTask />
+              </div>
             </CardContent>
           </Card>
-        </div>
+
+          <div className="flex flex-col gap-4 min-h-0 overflow-y-auto">
+            <Card className="shrink-0">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <Timer className="h-3.5 w-3.5 text-primary" />
+                  <span className="text-xs font-semibold text-muted-foreground">专注预估</span>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">待办任务</span>
+                    <span className="text-sm font-semibold tabular-nums">{urgentTasks.length + overdueTasks.length + pendingTodayTasks.length} 项</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">预估番茄</span>
+                    <span className="text-sm font-semibold tabular-nums">{pendingPomodoros > 0 ? `🍅 ${pendingPomodoros}` : '—'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">距今日目标</span>
+                    <span className="text-sm font-semibold tabular-nums">{remainingGoalMinutes > 0 ? `${remainingGoalMinutes} 分钟` : '已达成 🎉'}</span>
+                  </div>
+                </div>
+                <Button onClick={() => setActiveView('focus')} variant="outline" size="sm" className="w-full mt-3 h-8 text-xs gap-1.5">
+                  <Play className="h-3 w-3 fill-current" />
+                  开始专注
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card className="shrink-0">
+              <div className="px-4 pt-4 pb-2 flex items-center justify-between">
+                <h2 className="font-semibold text-sm flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-amber-500" />
+                  即将到期
+                </h2>
+                <span className="text-2xs text-muted-foreground">未来 3 天</span>
+              </div>
+              <CardContent className="px-4 pb-4">
+                {dueSoonTasks.length === 0 ? (
+                  <p className="text-xs text-muted-foreground py-3 text-center">未来 3 天没有到期任务</p>
+                ) : (
+                  <div className="space-y-0.5">
+                    {dueSoonTasks.map(t => (
+                      <button key={t.id} onClick={() => setActiveView('tasks')} className="w-full flex items-center gap-2 rounded-lg px-2.5 py-1.5 hover:bg-muted/40 text-left transition-colors">
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
+                        <span className="text-xs flex-1 truncate">{t.title}</span>
+                        <span className="text-2xs text-muted-foreground shrink-0">{t.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </ViewTabsContent>
+
+        <ViewTabsContent value="habits" className="flex-1 min-h-0 overflow-y-auto">
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-3">
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground font-medium">今日完成</p>
+                  <p className="text-2xl font-bold tracking-tight tabular-nums mt-0.5">
+                    {habitStats.completedToday}
+                    <span className="text-sm font-medium text-muted-foreground ml-1">/ {habitStats.totalHabits}</span>
+                  </p>
+                  <Progress value={habitStats.completionRate} className="h-1 mt-2" />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
+                    <Flame className="h-3.5 w-3.5 text-orange-500" />
+                    当前最长连续
+                  </p>
+                  <p className="text-2xl font-bold tracking-tight tabular-nums mt-0.5">
+                    {habitStats.maxStreak}
+                    <span className="text-sm font-medium text-muted-foreground ml-1">天</span>
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4">
+                  <p className="text-xs text-muted-foreground font-medium">近30天平均完成率</p>
+                  <p className="text-2xl font-bold tracking-tight tabular-nums mt-0.5">
+                    {habitStats.avgCompletionRate}
+                    <span className="text-sm font-medium text-muted-foreground ml-1">%</span>
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-5">
+              <Card className="lg:col-span-3 flex flex-col min-h-0">
+                <div className="px-5 pt-4 pb-2 shrink-0 flex items-center justify-between">
+                  <h2 className="font-semibold text-sm flex items-center gap-2">
+                    <Target className="h-4 w-4 text-emerald-500" />
+                    今日打卡
+                  </h2>
+                  <Button variant="ghost" size="sm" onClick={() => setActiveView('habits')} className="text-xs h-7 px-2.5">
+                    管理习惯
+                    <ChevronRight className="ml-0.5 h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                <CardContent className="px-4 pb-4 flex-1 min-h-0 overflow-y-auto">
+                  {todayHabits.length === 0 ? (
+                    <div className="py-6 text-center">
+                      <div className="rounded-2xl bg-muted/50 p-3 w-fit mx-auto mb-2">
+                        <Target className="h-5 w-5 text-muted-foreground/60" />
+                      </div>
+                      <p className="text-xs text-muted-foreground">还没有设置习惯</p>
+                      <Button variant="link" size="sm" onClick={() => setActiveView('habits')} className="mt-1 h-6 text-2xs">
+                        添加第一个习惯
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      {todayHabits.map(habit => {
+                        const habitStreak = habitStats.getHabitStreak(habit.id)
+                        const rate30 = habitStats.getHabitCompletionRate(habit.id)
+                        return (
+                          <button
+                            key={habit.id}
+                            className={cn(
+                              'w-full flex items-center gap-2.5 rounded-lg px-2.5 py-2 transition-all text-left',
+                              habit.completed
+                                ? 'bg-emerald-500/8 border border-emerald-500/15'
+                                : 'bg-muted/30 hover:bg-muted/60 border border-transparent'
+                            )}
+                            onClick={() => {
+                              if (!habit.completed) {
+                                checkInHabit(habit.id, new Date(), true)
+                              }
+                            }}
+                          >
+                            <span className="text-base shrink-0">{habit.icon}</span>
+                            <span className={cn(
+                              'text-sm flex-1 truncate font-medium',
+                              habit.completed && 'line-through text-muted-foreground'
+                            )}>
+                              {habit.name}
+                            </span>
+                            {habitStreak > 0 && (
+                              <span className="text-2xs text-orange-500 font-medium flex items-center gap-0.5 shrink-0 tabular-nums">
+                                <Flame className="h-3 w-3" />
+                                {habitStreak}
+                              </span>
+                            )}
+                            <span className="text-2xs text-muted-foreground tabular-nums shrink-0 w-9 text-right">{rate30}%</span>
+                            {habit.completed ? (
+                              <div className="rounded-full bg-emerald-500/15 p-0.5 shrink-0">
+                                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                              </div>
+                            ) : (
+                              <CircleDot className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card className="lg:col-span-2 flex flex-col min-h-0">
+                <div className="px-4 pt-4 pb-2 shrink-0 flex items-center justify-between">
+                  <h2 className="font-semibold text-sm flex items-center gap-2">
+                    <CalendarDays className="h-4 w-4 text-emerald-500" />
+                    本周打卡
+                  </h2>
+                  <span className="text-2xs text-muted-foreground">仅今天可打卡</span>
+                </div>
+                <CardContent className="px-4 pb-4 flex-1 min-h-0 overflow-y-auto">
+                  {todayHabits.length === 0 ? (
+                    <p className="text-xs text-muted-foreground py-6 text-center">添加习惯后，这里会显示整周打卡轨迹</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <div className="grid grid-cols-[minmax(0,1fr)_repeat(7,1.25rem)] gap-1">
+                        <span />
+                        {weekDates.map(d => (
+                          <span
+                            key={`head-${d.toDateString()}`}
+                            className={cn(
+                              'text-3xs text-center text-muted-foreground',
+                              d.toDateString() === todayStr && 'font-semibold text-foreground'
+                            )}
+                          >
+                            {d.toDateString() === todayStr ? '今' : WEEKDAYS[d.getDay()]}
+                          </span>
+                        ))}
+                      </div>
+                      {todayHabits.map(habit => (
+                        <div key={habit.id} className="grid grid-cols-[minmax(0,1fr)_repeat(7,1.25rem)] items-center gap-1">
+                          <span className="text-xs truncate flex items-center gap-1 min-w-0">
+                            <span className="shrink-0">{habit.icon}</span>
+                            <span className="truncate">{habit.name}</span>
+                          </span>
+                          {weekDates.map(d => {
+                            const isToday = d.toDateString() === todayStr
+                            const done = checkInSet.has(`${habit.id}|${d.toDateString()}`)
+                            const future = d.getTime() > today.getTime()
+                            return (
+                              <span key={`${habit.id}-${d.toDateString()}`} className="flex justify-center">
+                                <button
+                                  disabled={!isToday || done}
+                                  title={`${habit.name} · 周${WEEKDAYS[d.getDay()]}`}
+                                  onClick={() => {
+                                    if (isToday && !habit.completed) checkInHabit(habit.id, new Date(), true)
+                                  }}
+                                  className={cn(
+                                    'h-3.5 w-3.5 rounded-full border transition-colors',
+                                    done
+                                      ? 'bg-emerald-500 border-emerald-500'
+                                      : isToday
+                                        ? 'border-primary hover:bg-primary/20 cursor-pointer'
+                                        : future
+                                          ? 'border-border/40'
+                                          : 'border-border/70'
+                                  )}
+                                />
+                              </span>
+                            )
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </ViewTabsContent>
+
       </ViewTabs>
 
       <GoalCelebration
@@ -884,6 +1044,83 @@ export function DashboardView() {
         onClose={() => goalWatch.setShow(false)}
         streakDays={goalWatch.streakDays}
       />
+    </div>
+  )
+}
+
+function SectionLabel({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <p className={cn('px-1 pt-2.5 pb-1 text-2xs font-semibold text-muted-foreground', className)}>
+      {children}
+    </p>
+  )
+}
+
+function TaskRow({
+  task,
+  urgent = false,
+  onToggle,
+  right,
+}: {
+  task: TodayTask
+  urgent?: boolean
+  onToggle: () => void
+  right?: ReactNode
+}) {
+  const completed = !!task.completedToday
+  const overdue = !urgent && !!task.isOverdue
+  return (
+    <div
+      className={cn(
+        'group flex items-center gap-2.5 rounded-xl border px-3 py-2.5 transition-all',
+        urgent
+          ? 'border-destructive/20 bg-destructive/5 hover:bg-destructive/10'
+          : completed
+            ? 'border-emerald-500/20 bg-emerald-500/5'
+            : overdue
+              ? 'border-amber-500/30 bg-amber-500/5'
+              : 'border-border/40 hover:border-primary/30 hover:bg-muted/30'
+      )}
+    >
+      <Checkbox
+        checked={completed}
+        onCheckedChange={() => { if (!completed) onToggle() }}
+        className={cn(
+          'h-4 w-4',
+          urgent && 'border-destructive/50 data-[state=checked]:bg-destructive data-[state=checked]:border-destructive',
+          completed && 'border-emerald-500/50 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500',
+          overdue && 'border-amber-500/50 data-[state=checked]:bg-amber-500'
+        )}
+      />
+      <div className="flex-1 min-w-0">
+        <p className={cn('text-sm font-medium truncate', completed && 'line-through text-muted-foreground')}>
+          {task.title}
+        </p>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          {task.repeatRule && (
+            <Badge variant="outline" className="text-3xs h-3.5 px-1 border-purple-300 text-purple-600 dark:border-purple-700 dark:text-purple-400">
+              {task.repeatRule.type === 'daily' ? '每天' : task.repeatRule.type === 'weekly' ? '每周' : task.repeatRule.type === 'monthly' ? '每月' : '每年'}
+            </Badge>
+          )}
+          {task.project && (
+            <Badge variant="secondary" className="text-3xs h-3.5 px-1">{task.project}</Badge>
+          )}
+          {task.estimatedPomodoros && task.estimatedPomodoros > 0 && (
+            <span className="text-2xs text-muted-foreground">🍅 {task.estimatedPomodoros}</span>
+          )}
+        </div>
+      </div>
+      {completed && (
+        <Badge variant="outline" className="text-3xs h-4 border-emerald-500/50 text-emerald-600 shrink-0 px-1.5">
+          已完成
+        </Badge>
+      )}
+      {overdue && !completed && (
+        <Badge variant="outline" className="text-3xs h-4 border-amber-500/50 text-amber-600 shrink-0 px-1.5">
+          过期
+        </Badge>
+      )}
+      {right}
     </div>
   )
 }
