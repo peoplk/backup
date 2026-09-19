@@ -2,18 +2,19 @@
 
 import { useState } from 'react'
 import { ViewTabs, ViewTabsContent, ViewTabsList, ViewTabsTrigger } from '@/components/ui/view-tabs'
-import { Timer, Clock, Shield, Gauge } from 'lucide-react'
+import { Timer, Clock, Shield, Gauge, TreePine } from 'lucide-react'
 import { PomodoroTimer } from '@/components/focus/pomodoro-timer'
 import { StopwatchTimer } from '@/components/focus/stopwatch-timer'
 import { TimeTracker } from '@/components/focus/time-tracker'
 import { FocusShield } from '@/components/focus/focus-shield'
+import { ForestWall } from '@/components/focus/forest-wall'
 
 export function FocusView() {
-  const [activeTab, setActiveTab] = useState<'pomodoro' | 'stopwatch' | 'tracker' | 'shield'>('pomodoro')
+  const [activeTab, setActiveTab] = useState<'pomodoro' | 'stopwatch' | 'tracker' | 'shield' | 'forest'>('pomodoro')
 
   return (
     <div className="space-y-6 view-enter">
-      <p className="text-muted-foreground">番茄工作法、正计时秒表、时间追踪与专注屏蔽，提升你的效率</p>
+      <p className="text-muted-foreground">番茄工作法、正计时秒表、时间追踪、专注屏蔽与专注森林，提升你的效率</p>
 
       <ViewTabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
         <ViewTabsList>
@@ -33,6 +34,10 @@ export function FocusView() {
             <Shield className="h-4 w-4" />
             专注屏蔽
           </ViewTabsTrigger>
+          <ViewTabsTrigger value="forest">
+            <TreePine className="h-4 w-4" />
+            专注森林
+          </ViewTabsTrigger>
         </ViewTabsList>
 
         <ViewTabsContent value="pomodoro">
@@ -51,6 +56,10 @@ export function FocusView() {
           <div className="max-w-2xl mx-auto">
             <FocusShield />
           </div>
+        </ViewTabsContent>
+
+        <ViewTabsContent value="forest">
+          <ForestWall />
         </ViewTabsContent>
       </ViewTabs>
     </div>
