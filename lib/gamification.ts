@@ -225,7 +225,8 @@ export function useGamification() {
       level,
       experience,
       experienceToNextLevel,
-      coins: experience,
+      // 硬币是可消耗账本（userLevel.coins），与只增的经验 totalPoints 解耦
+      coins: userLevel.coins ?? 0,
       trees: workSessions.length,
       achievements: achievements.map(a => a.id),
       streak,

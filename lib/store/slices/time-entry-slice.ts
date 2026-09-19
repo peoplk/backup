@@ -48,4 +48,16 @@ export const createTimeEntrySlice = (
     }))
     return id
   },
+  updateTimeEntry: (id: string, patch: Partial<Omit<TimeEntry, 'id'>>) => {
+    set((state) => ({
+      timeEntries: state.timeEntries.map((e) =>
+        e.id === id ? { ...e, ...patch } : e
+      ),
+    }))
+  },
+  deleteTimeEntry: (id: string) => {
+    set((state) => ({
+      timeEntries: state.timeEntries.filter((e) => e.id !== id),
+    }))
+  },
 })

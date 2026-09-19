@@ -16,6 +16,7 @@ import type {
   Milestone,
   Achievement,
   UserLevel,
+  ShopItem,
   Tag,
   Reminder,
   ScheduleItemType,
@@ -32,6 +33,8 @@ import type {
   FocusShieldWindow,
   ActivitySettings,
   ActivityDay,
+  ActivityCategory,
+  ActivityRuntimeStatus,
   SubscribedCalendar,
   ExternalCalendarEvent,
   TaskReminder,
@@ -87,6 +90,8 @@ export interface AppState {
   startTimeEntry: (entry: Omit<TimeEntry, 'id' | 'startTime' | 'duration'>) => string
   stopTimeEntry: () => void
   addTimeEntry: (entry: Omit<TimeEntry, 'id'>) => string
+  updateTimeEntry: (id: string, patch: Partial<Omit<TimeEntry, 'id'>>) => void
+  deleteTimeEntry: (id: string) => void
 
   pomodoroSessions: PomodoroSession[]
   addPomodoroSession: (session: Omit<PomodoroSession, 'id' | 'completedAt'>) => void
@@ -170,6 +175,7 @@ export interface AppState {
   clearLevelUpCelebration: () => void
   checkAchievements: () => void
   addPoints: (points: number) => void
+  purchaseShopItem: (itemId: ShopItem['id'], habitId: string) => { ok: boolean; message: string }
 
   tags: Tag[]
   addTag: (tag: Omit<Tag, 'id' | 'createdAt' | 'usageCount'>) => void
@@ -286,7 +292,11 @@ export interface AppState {
   activitySettings: ActivitySettings
   activityDays: ActivityDay[]
   setActivityEnabled: (enabled: boolean) => void
+  updateActivitySettings: (patch: Partial<ActivitySettings>) => void
   recordActivitySample: (sample: { app: string; title?: string; seconds: number }) => void
+  setAppCategoryRule: (appName: string, category: ActivityCategory) => void
+  activityStatus: ActivityRuntimeStatus
+  setActivityStatus: (status: ActivityRuntimeStatus) => void
   clearActivityData: () => void
 
   subscribedCalendars: SubscribedCalendar[]

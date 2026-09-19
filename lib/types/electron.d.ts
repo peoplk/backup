@@ -36,6 +36,11 @@ export interface ActivitySampleData {
   intervalSec: number
 }
 
+export interface ActivityStatusData {
+  state: 'idle' | 'sampling' | 'unsupported' | 'error'
+  message?: string
+}
+
 /** 主进程可配置全局快捷键的快照项 */
 export interface GlobalShortcutInfo {
   id: string
@@ -147,6 +152,12 @@ export interface ElectronAPI {
   sendFloatControl: (action: string) => void
   onFloatControl: (callback: (action: string) => void) => (() => void) | undefined
   printToPDF?: (opts: { html: string; fileName: string }) => Promise<{ success: boolean }>
+  saveTextFile?: (opts: { content: string; fileName: string; extension?: string }) => Promise<{
+    success: boolean
+    filePath?: string
+    canceled?: boolean
+    message?: string
+  }>
 
   // 凭据安全存储（safeStorage）
   credentialVaultAvailable: () => Promise<boolean>
@@ -156,6 +167,7 @@ export interface ElectronAPI {
   // 自动时间线追踪（仅 Windows 生效，本地存储）
   setActivityTracking?: (enabled: boolean) => void
   onActivitySample?: (callback: (data: ActivitySampleData) => void) => (() => void) | undefined
+  onActivityStatus?: (callback: (data: ActivityStatusData) => void) => (() => void) | undefined
 
   // 全屏严格模式：主进程级窗口锁定（kiosk + 置顶 + 防休眠 + 拦截退出）
   setStrictLock?: (opts: {

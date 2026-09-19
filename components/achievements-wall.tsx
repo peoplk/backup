@@ -19,9 +19,21 @@ import {
   Star,
   Gift,
   TrendingUp,
+  Coins,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useGamification, type Achievement } from '@/lib/gamification'
+import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { SHOP_ITEMS } from '@/lib/store/slices/achievement-slice'
+import { toast } from 'sonner'
+import type { ShopItem } from '@/lib/types'
 
 const CATEGORY_LABELS = {
   focus: { label: '专注', icon: Target, color: 'text-blue-500', bg: 'bg-blue-500/10' },
@@ -68,7 +80,15 @@ export function AchievementsWall() {
   const tasks = useAppStore((s) => s.tasks)
   const habits = useAppStore((s) => s.habits)
   const { achievements: allAchievements, gameProgress, getLevelTitle } = useGamification()
+  const purchaseShopItem = useAppStore((s) => s.purchaseShopItem)
   const [filter, setFilter] = useState<'all' | 'unlocked' | 'locked'>('all')
+  const [shopHabitId, setShopHabitId] = useState('')
+
+  const handlePurchase = (itemId: ShopItem['id']) => {
+    const res = purchaseShopItem(itemId, shopHabitId)
+    if (res.ok) toast.success(res.message)
+    else toast.error(res.message)
+  }
 
   // 合并：优先用 store 中已解锁的
   const enriched: Achievement[] = useMemo(() => {
@@ -168,6 +188,74 @@ export function AchievementsWall() {
           <div className="mt-3">
             <Progress value={completionPct} className="h-1.5" />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* 硬币商店：经验之外的可消耗账本 */}
+      <Card>
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-semibold">
+                <Coins className="h-4 w-4 text-amber-500" />
+                硬币商店
+              </div>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                完成任务 / 专注 / 打卡获得经验时同步赚取硬币，可兑换习惯冻结道具
+              </p>
+            </div>
+            <Badge variant="outline" className="shrink-0 border-amber-500/40 text-amber-600 dark:text-amber-400 tabular-nums">
+              🪙 {gameProgress.coins}
+            </Badge>
+          </div>
+
+          {habits.length === 0 ? (
+            <p className="rounded-lg border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">
+              还没有习惯。创建习惯后，即可用硬币兑换连续冻结道具。
+            </p>
+          ) : (
+            <>
+              <Select value={shopHabitId} onValueChange={setShopHabitId}>
+                <SelectTrigger className="h-8 w-full text-xs">
+                  <SelectValue placeholder="选择目标习惯…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {habits.map((h) => (
+                    <SelectItem key={h.id} value={h.id} className="text-xs">
+                      {h.icon} {h.name}（冻结 {h.streakFreezes || 0}/{h.maxStreakFreezes || 3}）
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {SHOP_ITEMS.map((item) => {
+                  const affordable = gameProgress.coins >= item.cost
+                  return (
+                    <div
+                      key={item.id}
+                      className="flex items-center gap-3 rounded-lg border px-3 py-2"
+                    >
+                      <span className="text-xl">{item.icon}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-semibold">{item.name}</div>
+                        <div className="text-[10px] text-muted-foreground">{item.description}</div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant={affordable ? 'default' : 'outline'}
+                        className="h-7 shrink-0 gap-1 px-2 text-xs tabular-nums"
+                        disabled={!shopHabitId}
+                        onClick={() => handlePurchase(item.id)}
+                      >
+                        <Coins className="h-3 w-3" />
+                        {item.cost}
+                      </Button>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 

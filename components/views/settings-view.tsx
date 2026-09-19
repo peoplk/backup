@@ -19,13 +19,14 @@ import { SHORTCUT_LIST } from '@/lib/shortcuts'
 import { checkForUpdateFlow } from '@/components/title-bar'
 import type { GlobalShortcutInfo } from '@/lib/types/electron'
 import { generateICS, downloadICS } from '@/lib/ics-export'
-import { tasksToCSV, downloadCSV, importTasksFromCSV } from '@/lib/csv'
+import { tasksToCSV, downloadCSV, importTasksFromCSV, downloadImportTemplate } from '@/lib/csv'
 import {
   Database,
   Palette,
   Trash2,
   Keyboard,
   Download,
+  FileDown,
   Upload,
   Bell,
   Volume2,
@@ -1888,27 +1889,42 @@ export function SettingsView() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium">导入任务 CSV</p>
-                <p className="text-xs text-muted-foreground">从 CSV 文件批量导入任务（追加模式）</p>
+                <p className="text-xs text-muted-foreground">批量导入任务（追加模式），兼容 Todoist / TickTick 导出列名</p>
               </div>
-              <label className="cursor-pointer">
-                <input
-                  type="file"
-                  accept=".csv,text/csv"
-                  className="hidden"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0]
-                    e.target.value = ''
-                    if (!file) return
-                    const content = await file.text()
-                    const count = importTasksFromCSV(content, (task) => useAppStore.getState().addTask(task))
-                    toast.success(`已导入 ${count} 个任务`)
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => {
+                    downloadImportTemplate()
+                    toast.success('导入模板已下载')
                   }}
-                />
-                <Button variant="outline" size="sm" className="gap-1.5">
-                  <Upload className="h-3.5 w-3.5" />
-                  导入 CSV
+                >
+                  <FileDown className="h-3.5 w-3.5" />
+                  下载模板
                 </Button>
-              </label>
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0]
+                      e.target.value = ''
+                      if (!file) return
+                      const content = await file.text()
+                      const count = importTasksFromCSV(content, (task) => useAppStore.getState().addTask(task))
+                      if (count > 0) toast.success(`已导入 ${count} 个任务`)
+                      else toast.error('未解析到有效任务行，请参考「下载模板」整理表头')
+                    }}
+                  />
+                  <Button variant="outline" size="sm" className="gap-1.5">
+                    <Upload className="h-3.5 w-3.5" />
+                    导入 CSV
+                  </Button>
+                </label>
+              </div>
             </div>
             <Separator />
             <div className="flex items-center justify-between">
@@ -1931,9 +1947,20 @@ export function SettingsView() {
                 variant="outline"
                 size="sm"
                 className="gap-1.5"
-                onClick={() => {
+                onClick={async () => {
                   const icsContent = generateICS(tasks, anniversaries)
-                  downloadICS(icsContent)
+                  const api = typeof window !== 'undefined' ? window.electronAPI : undefined
+                  if (api?.saveTextFile) {
+                    const res = await api.saveTextFile({
+                      content: icsContent,
+                      fileName: 'focusflow-calendar',
+                      extension: 'ics',
+                    })
+                    if (res.success) toast.success(`已发布日历文件：${res.filePath}`)
+                    else if (!res.canceled) toast.error(res.message || '导出失败')
+                  } else {
+                    downloadICS(icsContent)
+                  }
                 }}
               >
                 <Download className="h-3.5 w-3.5" />

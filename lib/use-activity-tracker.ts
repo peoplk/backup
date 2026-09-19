@@ -55,9 +55,18 @@ export function useActivityTracker(): void {
     }
     sync()
 
+    // 主进程真实状态（平台不支持/采样反复失败）回写 store，UI 如实展示
+    const offStatus = api.onActivityStatus?.((data) => {
+      useAppStore.getState().setActivityStatus({
+        state: data?.state ?? 'idle',
+        message: data?.message,
+      })
+    })
+
     const unsubscribeStore = useAppStore.subscribe(sync)
     return () => {
       try { unsubscribeStore() } catch { /* 忽略 */ }
+      try { offStatus?.() } catch { /* 忽略 */ }
       stop()
     }
   }, [])

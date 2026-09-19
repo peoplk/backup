@@ -3,8 +3,10 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useAppStore } from '@/lib/store'
 import { COLOR_PALETTE } from '@/lib/palette'
-import type { Project } from '@/lib/types'
+import type { Project, TimeEntry } from '@/lib/types'
 import { useShallow } from 'zustand/react/shallow'
+import { toast } from 'sonner'
+import { downloadCSV } from '@/lib/csv'
 import { useDataLink } from '@/lib/data-link-service'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -57,6 +59,7 @@ import {
   FolderPlus,
   MoreVertical,
   FolderOpen,
+  Receipt,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDuration, formatDurationShort } from '@/lib/format'
@@ -95,6 +98,8 @@ export function TimeTracker() {
     startTimeEntry,
     stopTimeEntry,
     addTimeEntry,
+    updateTimeEntry,
+    deleteTimeEntry,
     addProject,
     updateProject,
     deleteProject,
@@ -107,6 +112,8 @@ export function TimeTracker() {
       startTimeEntry: state.startTimeEntry,
       stopTimeEntry: state.stopTimeEntry,
       addTimeEntry: state.addTimeEntry,
+      updateTimeEntry: state.updateTimeEntry,
+      deleteTimeEntry: state.deleteTimeEntry,
       addProject: state.addProject,
       updateProject: state.updateProject,
       deleteProject: state.deleteProject,
@@ -121,8 +128,9 @@ export function TimeTracker() {
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [isProjectDialogOpen, setIsProjectDialogOpen] = useState(false)
   const [isManualEntryOpen, setIsManualEntryOpen] = useState(false)
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null)
   const [editingProject, setEditingProject] = useState<Project | null>(null)
-  const [newProject, setNewProject] = useState({ name: '', color: COLOR_PALETTE[0] })
+  const [newProject, setNewProject] = useState({ name: '', color: COLOR_PALETTE[0], rate: '' })
   const [deleteConfirmProject, setDeleteConfirmProject] = useState<Project | null>(null)
   const [manualEntryError, setManualEntryError] = useState<string | null>(null)
   const [manualEntry, setManualEntry] = useState({
@@ -187,31 +195,84 @@ export function TimeTracker() {
     }
   }
 
+  const parseRate = (raw: string): number | undefined => {
+    const rate = parseFloat(raw)
+    return Number.isFinite(rate) && rate > 0 ? rate : undefined
+  }
+
   const handleAddProject = () => {
     if (!newProject.name.trim()) return
-    const created = addProject(newProject)
+    const created = addProject({ name: newProject.name, color: newProject.color, rate: parseRate(newProject.rate) })
     if (created) {
       setSelectedProjectId(created.id)
     } else {
       const matched = projects.find(p => p.name === newProject.name)
       if (matched) setSelectedProjectId(matched.id)
     }
-    setNewProject({ name: '', color: COLOR_PALETTE[0] })
+    setNewProject({ name: '', color: COLOR_PALETTE[0], rate: '' })
     setIsProjectDialogOpen(false)
   }
 
   const handleEditProject = () => {
     if (!editingProject || !newProject.name.trim()) return
-    updateProject(editingProject.id, { name: newProject.name, color: newProject.color })
+    updateProject(editingProject.id, { name: newProject.name, color: newProject.color, rate: parseRate(newProject.rate) })
     setEditingProject(null)
-    setNewProject({ name: '', color: COLOR_PALETTE[0] })
+    setNewProject({ name: '', color: COLOR_PALETTE[0], rate: '' })
     setIsProjectDialogOpen(false)
   }
 
   const openEditDialog = (project: Project) => {
     setEditingProject(project)
-    setNewProject({ name: project.name, color: project.color })
+    setNewProject({ name: project.name, color: project.color, rate: project.rate != null ? String(project.rate) : '' })
     setIsProjectDialogOpen(true)
+  }
+
+  /** 费率账单：按自然月聚合各项目工时，按项目时薪计费导出 CSV */
+  const handleExportInvoice = () => {
+    const now = new Date()
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+    const monthEntries = timeEntries.filter((e) => {
+      const s = new Date(e.startTime)
+      return s >= monthStart && s < monthEnd && e.duration > 0
+    })
+    if (monthEntries.length === 0) {
+      toast.info('本月还没有时间记录')
+      return
+    }
+    const byProject = new Map<string, { name: string; seconds: number; rate?: number }>()
+    monthEntries.forEach((e) => {
+      const proj = projects.find((p) => (e.projectId ? p.id === e.projectId : p.name === e.project))
+      const key = proj?.id || `name:${e.project || '未分类'}`
+      const cur = byProject.get(key) || { name: proj?.name || e.project || '未分类', seconds: 0, rate: proj?.rate }
+      cur.seconds += e.duration
+      byProject.set(key, cur)
+    })
+    const rows = Array.from(byProject.values())
+      .map((p) => {
+        const hours = p.seconds / 3600
+        return { ...p, hours, amount: hours * (p.rate ?? 0) }
+      })
+      .sort((a, b) => b.amount - a.amount || b.hours - a.hours)
+    const totalAmount = rows.reduce((acc, r) => acc + r.amount, 0)
+    const totalHours = rows.reduce((acc, r) => acc + r.hours, 0)
+    const q = (v: string | number) => {
+      const s = String(v)
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+    }
+    const csv = [
+      `\uFEFF账单月份,${monthStart.getFullYear()}-${String(monthStart.getMonth() + 1).padStart(2, '0')}`,
+      '项目,时长(小时),时薪(元/小时),金额(元)',
+      ...rows.map((r) => [q(r.name), r.hours.toFixed(2), r.rate ?? '', r.amount.toFixed(2)].join(',')),
+      ['合计', totalHours.toFixed(2), '', totalAmount.toFixed(2)].join(','),
+    ].join('\n')
+    const filename = `focusflow-bill-${monthStart.getFullYear()}-${String(monthStart.getMonth() + 1).padStart(2, '0')}`
+    downloadCSV(`${filename}.csv`, csv)
+    toast.success(
+      totalAmount > 0
+        ? `账单已导出：本月 ${totalHours.toFixed(1)} 小时，合计 ¥${totalAmount.toFixed(2)}`
+        : `账单已导出：本月 ${totalHours.toFixed(1)} 小时（未设置项目时薪，金额为 0）`
+    )
   }
 
   const matchesProject = (entry: { projectId?: string; project: string }, projectId: string) => {
@@ -377,20 +438,32 @@ export function TimeTracker() {
       setManualEntryError('结束时间必须晚于开始时间')
       return
     }
-    const newId = addTimeEntry({
-      project: project.name,
-      projectId: project.id,
-      description: manualEntry.description || undefined,
-      startTime: startDate,
-      endTime: endDate,
-      duration,
-      tags: [],
-    })
-    if (newId) {
-      const newEntry = useAppStore.getState().timeEntries.find(e => e.id === newId)
-      if (newEntry) dataLink.handleTimeEntryAdded(newEntry)
+    if (editingEntryId) {
+      updateTimeEntry(editingEntryId, {
+        project: project.name,
+        projectId: project.id,
+        description: manualEntry.description || undefined,
+        startTime: startDate,
+        endTime: endDate,
+        duration,
+      })
+    } else {
+      const newId = addTimeEntry({
+        project: project.name,
+        projectId: project.id,
+        description: manualEntry.description || undefined,
+        startTime: startDate,
+        endTime: endDate,
+        duration,
+        tags: [],
+      })
+      if (newId) {
+        const newEntry = useAppStore.getState().timeEntries.find(e => e.id === newId)
+        if (newEntry) dataLink.handleTimeEntryAdded(newEntry)
+      }
     }
     setIsManualEntryOpen(false)
+    setEditingEntryId(null)
     const resetDate = new Date()
     setManualEntry({
       projectId: projects[0]?.id || '',
@@ -398,6 +471,44 @@ export function TimeTracker() {
       date: `${resetDate.getFullYear()}-${String(resetDate.getMonth() + 1).padStart(2, '0')}-${String(resetDate.getDate()).padStart(2, '0')}`,
       startTime: '09:00',
       endTime: '10:00',
+    })
+  }
+
+  const openEditEntry = (entry: TimeEntry) => {
+    const s = new Date(entry.startTime)
+    const e = entry.endTime ? new Date(entry.endTime) : new Date(s.getTime() + entry.duration * 1000)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    setEditingEntryId(entry.id)
+    setManualEntryError(null)
+    setManualEntry({
+      projectId: entry.projectId || projects.find(p => p.name === entry.project)?.id || '',
+      description: entry.description || '',
+      date: `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`,
+      startTime: `${pad(s.getHours())}:${pad(s.getMinutes())}`,
+      endTime: `${pad(e.getHours())}:${pad(e.getMinutes())}`,
+    })
+    setIsManualEntryOpen(true)
+  }
+
+  const handleDeleteEntry = (entry: TimeEntry) => {
+    deleteTimeEntry(entry.id)
+    toast.success('已删除时间记录', {
+      action: {
+        label: '撤销',
+        onClick: () => {
+          addTimeEntry({
+            project: entry.project,
+            projectId: entry.projectId,
+            description: entry.description,
+            startTime: entry.startTime,
+            endTime: entry.endTime,
+            duration: entry.duration,
+            tags: entry.tags,
+            taskId: entry.taskId,
+          })
+        },
+      },
+      duration: 8000,
     })
   }
 
@@ -512,7 +623,7 @@ export function TimeTracker() {
                   className="h-12 w-12"
                   onClick={() => {
                     setEditingProject(null)
-                    setNewProject({ name: '', color: COLOR_PALETTE[0] })
+                    setNewProject({ name: '', color: COLOR_PALETTE[0], rate: '' })
                     setIsProjectDialogOpen(true)
                   }}
                   aria-label="新建项目"
@@ -665,19 +776,31 @@ export function TimeTracker() {
               <FolderOpen className="h-5 w-5" />
               项目管理
             </CardTitle>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 gap-1"
-              onClick={() => {
-                setEditingProject(null)
-                setNewProject({ name: '', color: COLOR_PALETTE[0] })
-                setIsProjectDialogOpen(true)
-              }}
-            >
-              <Plus className="h-4 w-4" />
-              新建
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1"
+                onClick={handleExportInvoice}
+                title="按自然月导出各项目工时与费率账单（CSV）"
+              >
+                <Receipt className="h-4 w-4" />
+                导出账单
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1"
+                onClick={() => {
+                  setEditingProject(null)
+                  setNewProject({ name: '', color: COLOR_PALETTE[0], rate: '' })
+                  setIsProjectDialogOpen(true)
+                }}
+              >
+                <Plus className="h-4 w-4" />
+                新建
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-2">
             {projectStats.length === 0 ? (
@@ -707,6 +830,9 @@ export function TimeTracker() {
                           <p className="font-medium truncate">{project.name}</p>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                             <span>{formatDuration(project.todayTime)} 今日</span>
+                            {!!project.rate && (
+                              <span>· ¥{project.rate}/时</span>
+                            )}
                             {stats.taskCount > 0 && (
                               <span>· {stats.taskCount} 任务</span>
                             )}
@@ -805,7 +931,7 @@ export function TimeTracker() {
                 return (
                   <div
                     key={entry.id}
-                    className="flex items-center gap-4 rounded-xl border p-4 transition-all hover:border-primary/30"
+                    className="group flex items-center gap-4 rounded-xl border p-4 transition-all hover:border-primary/30"
                   >
                     <div
                       className="h-10 w-1 rounded-full"
@@ -835,6 +961,26 @@ export function TimeTracker() {
                     <div className="text-right">
                       <p className="text-lg font-semibold">{formatDuration(entry.duration)}</p>
                     </div>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8"
+                        onClick={() => openEditEntry(entry)}
+                        aria-label="编辑记录"
+                      >
+                        <Edit className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        onClick={() => handleDeleteEntry(entry)}
+                        aria-label="删除记录"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
                   </div>
                 )
               })}
@@ -847,7 +993,7 @@ export function TimeTracker() {
         setIsProjectDialogOpen(open)
         if (!open) {
           setEditingProject(null)
-          setNewProject({ name: '', color: COLOR_PALETTE[0] })
+          setNewProject({ name: '', color: COLOR_PALETTE[0], rate: '' })
         }
       }}>
         <DialogContent>
@@ -861,6 +1007,17 @@ export function TimeTracker() {
                 placeholder="输入项目名称..."
                 value={newProject.name}
                 onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">时薪（元/小时，可选）</label>
+              <Input
+                type="number"
+                min="0"
+                step="10"
+                placeholder="如 200，用于「导出账单」按工时计费"
+                value={newProject.rate}
+                onChange={(e) => setNewProject({ ...newProject, rate: e.target.value })}
               />
             </div>
             <div className="space-y-2">
@@ -927,11 +1084,14 @@ export function TimeTracker() {
 
       <Dialog open={isManualEntryOpen} onOpenChange={(open) => {
         setIsManualEntryOpen(open)
-        if (!open) setManualEntryError(null)
+        if (!open) {
+          setManualEntryError(null)
+          setEditingEntryId(null)
+        }
       }}>
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
-            <DialogTitle>手动添加时间记录</DialogTitle>
+            <DialogTitle>{editingEntryId ? '编辑时间记录' : '手动添加时间记录'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -994,7 +1154,7 @@ export function TimeTracker() {
               <p className="text-sm text-destructive">{manualEntryError}</p>
             )}
             <Button onClick={handleManualEntry} className="w-full" disabled={!manualEntry.projectId}>
-              添加记录
+              {editingEntryId ? '保存修改' : '添加记录'}
             </Button>
           </div>
         </DialogContent>

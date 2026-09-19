@@ -2,8 +2,9 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useAppStore } from '@/lib/store'
-import type { TimeBlock } from '@/lib/types'
+import type { TimeBlock, ExternalCalendarEvent } from '@/lib/types'
 import { useShallow } from 'zustand/react/shallow'
+import { toast } from 'sonner'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -33,6 +34,7 @@ import {
   Timer,
   Plus,
   CalendarClock,
+  Import,
   ListTodo,
   LayoutGrid,
   Columns3,
@@ -69,7 +71,7 @@ const categoryConfig: Record<string, { label: string; icon: typeof Brain; colorC
 export function CalendarView() {
   const {
     tasks, timeEntries, pomodoroSessions, habits, habitCheckIns, anniversaries,
-    completeTask, uncompleteTask,
+    completeTask, uncompleteTask, addTask,
     timeBlocks, addTimeBlock, updateTimeBlock, deleteTimeBlock,
     subscribedCalendars, externalEvents,
   } = useAppStore(useShallow((s) => ({
@@ -81,6 +83,7 @@ export function CalendarView() {
     anniversaries: s.anniversaries,
     completeTask: s.completeTask,
     uncompleteTask: s.uncompleteTask,
+    addTask: s.addTask,
     timeBlocks: s.timeBlocks,
     addTimeBlock: s.addTimeBlock,
     updateTimeBlock: s.updateTimeBlock,
@@ -173,6 +176,39 @@ export function CalendarView() {
     }
   }
 
+  /** 双向桥（导入方向）：把订阅日历中的外部事件落为本地日程/任务 */
+  const handleImportExternalEvent = (ev: ExternalCalendarEvent) => {
+    const start = new Date(ev.start)
+    const dup = tasks.find(
+      (t) => t.title === ev.title && t.dueDate && new Date(t.dueDate).toDateString() === start.toDateString()
+    )
+    if (dup) {
+      toast.info(`「${ev.title}」已存在于本地日程`)
+      return
+    }
+    const calName = subscribedCalendars.find((c) => c.id === ev.calendarId)?.name || '订阅日历'
+    const pad = (n: number) => String(n).padStart(2, '0')
+    addTask({
+      title: ev.title,
+      type: ev.allDay ? 'task' : 'event',
+      priority: 'medium',
+      status: 'todo',
+      tags: [],
+      dueDate: start,
+      ...(ev.allDay
+        ? { isAllDay: true }
+        : {
+            startTime: `${pad(start.getHours())}:${pad(start.getMinutes())}`,
+            endTime: (() => {
+              const end = new Date(ev.end)
+              return `${pad(end.getHours())}:${pad(end.getMinutes())}`
+            })(),
+          }),
+      description: `来自「${calName}」`,
+    })
+    toast.success(`已导入为${ev.allDay ? '任务' : '日程'}：${ev.title}`)
+  }
+
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear()
     const month = date.getMonth()
@@ -200,7 +236,7 @@ export function CalendarView() {
 
   const getEventsForDate = (date: Date) => {
     const dateStr = date.toDateString()
-    const events: { type: string; title: string; colorClass: string; bgClass: string; time?: string; id?: string; status?: string; priority?: string }[] = []
+    const events: { type: string; title: string; colorClass: string; bgClass: string; time?: string; id?: string; status?: string; priority?: string; extEvent?: ExternalCalendarEvent }[] = []
 
     tasks.forEach((task) => {
       if (task.dueDate && new Date(task.dueDate).toDateString() === dateStr) {
@@ -270,6 +306,7 @@ export function CalendarView() {
             ? undefined
             : new Date(ev.start).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
           id: `ext:${ev.calendarId}:${ev.id}`,
+          extEvent: ev,
         })
         void cal // 配色由日历管理面板维护，列表内统一紫色系以区分本地事件
       })
@@ -542,12 +579,23 @@ export function CalendarView() {
             ) : (
               <div className="space-y-1.5">
                 {selectedDateEvents.map((event, i) => (
-                  <div key={i} className={cn('flex items-center gap-2.5 rounded-lg border border-border/40 p-2.5')}>
+                  <div key={i} className={cn('group flex items-center gap-2.5 rounded-lg border border-border/40 p-2.5')}>
                     <div className={cn('h-1.5 w-1.5 rounded-full shrink-0', event.bgClass)} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{event.title}</p>
                       {event.time && <p className="text-[11px] text-muted-foreground">{event.time}</p>}
                     </div>
+                    {event.extEvent && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-[10px] shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => handleImportExternalEvent(event.extEvent!)}
+                      >
+                        <Import className="h-3 w-3 mr-1" />
+                        导入
+                      </Button>
+                    )}
                     <Badge variant="outline" className="text-[10px] shrink-0 h-5">
                       {event.type === 'task' ? '任务' : event.type === 'event' ? '日程' : '提醒'}
                     </Badge>

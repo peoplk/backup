@@ -93,6 +93,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   closeTimerFloat: () => ipcRenderer.send('close-timer-float'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   printToPDF: (options) => ipcRenderer.invoke('print-to-pdf', options),
+  saveTextFile: (options) => ipcRenderer.invoke('save-text-file', options),
   onTrayTogglePomodoro: (callback) => {
     const listener = () => callback()
     ipcRenderer.on('tray-toggle-pomodoro', listener)
@@ -152,5 +153,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const listener = (_event, data) => callback(data)
     ipcRenderer.on('activity-sample', listener)
     return () => ipcRenderer.removeListener('activity-sample', listener)
+  },
+  onActivityStatus: (callback) => {
+    const listener = (_event, data) => callback(data)
+    ipcRenderer.on('activity-status', listener)
+    return () => ipcRenderer.removeListener('activity-status', listener)
   },
 })

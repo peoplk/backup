@@ -7,10 +7,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Switch } from '@/components/ui/switch'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Activity, Trash2, Monitor } from 'lucide-react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Activity, Trash2, Monitor, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
-import type { ActivityCategory } from '@/lib/types'
+import type { ActivityCategory, ActivityAppUsage } from '@/lib/types'
 
 const CATEGORY_META: Record<ActivityCategory, { label: string; className: string; bar: string }> = {
   work: { label: '工作', className: 'text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10', bar: 'bg-emerald-500' },
@@ -25,11 +32,15 @@ function formatDuration(seconds: number): string {
 }
 
 export function ActivityTimelineCard() {
-  const { activitySettings, activityDays, setActivityEnabled, clearActivityData } = useAppStore(
+  const { activitySettings, activityDays, activityStatus, setActivityEnabled, updateActivitySettings, setAppCategoryRule, addTimeEntry, clearActivityData } = useAppStore(
     useShallow((s) => ({
       activitySettings: s.activitySettings,
       activityDays: s.activityDays,
+      activityStatus: s.activityStatus,
       setActivityEnabled: s.setActivityEnabled,
+      updateActivitySettings: s.updateActivitySettings,
+      setAppCategoryRule: s.setAppCategoryRule,
+      addTimeEntry: s.addTimeEntry,
       clearActivityData: s.clearActivityData,
     }))
   )
@@ -51,6 +62,23 @@ export function ActivityTimelineCard() {
   const handleClear = async () => {
     clearActivityData()
     toast.success('已清除本地应用使用记录')
+  }
+
+  /** 一键把某应用今日用量转为可编辑的时间记录（在时间追踪页可改项目/时长） */
+  const handleConvert = (app: ActivityAppUsage) => {
+    const start = app.firstAt ? new Date(app.firstAt) : new Date(Date.now() - app.seconds * 1000)
+    const end = app.lastAt ? new Date(app.lastAt) : new Date()
+    addTimeEntry({
+      project: '应用追踪',
+      description: `自动追踪 · ${app.title || app.name}`,
+      tags: [],
+      startTime: start,
+      endTime: end,
+      duration: app.seconds,
+    })
+    toast.success(`已转为时间记录（${formatDuration(app.seconds)}）`, {
+      description: '在「时间追踪」页可修改项目与时长',
+    })
   }
 
   const notElectron = typeof window !== 'undefined' && !window.electronAPI?.setActivityTracking
@@ -83,6 +111,13 @@ export function ActivityTimelineCard() {
           </p>
         )}
 
+        {!notElectron && (activityStatus.state === 'unsupported' || activityStatus.state === 'error') && (
+          <p className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+            {activityStatus.message || '自动追踪不可用'}
+          </p>
+        )}
+
         {!activitySettings.enabled && !notElectron && (
           <p className="py-6 text-center text-sm text-muted-foreground">
             追踪未开启。打开右上角开关后自动在后台统计前台应用时长。
@@ -101,17 +136,35 @@ export function ActivityTimelineCard() {
                   分心占比 {distractionPct}%
                 </Badge>
               )}
-              {activityDays.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="ml-auto h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
-                  onClick={handleClear}
+              <div className="ml-auto flex items-center gap-1.5">
+                <span className="text-[10px]">保留</span>
+                <Select
+                  value={String(activitySettings.retentionDays ?? 14)}
+                  onValueChange={(v) => updateActivitySettings({ retentionDays: Number(v) })}
                 >
-                  <Trash2 className="h-3 w-3 mr-1" />
-                  清除记录
-                </Button>
-              )}
+                  <SelectTrigger className="h-7 w-[86px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[7, 14, 30, 60, 90].map((d) => (
+                      <SelectItem key={d} value={String(d)} className="text-xs">
+                        {d} 天
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {activityDays.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+                    onClick={handleClear}
+                  >
+                    <Trash2 className="h-3 w-3 mr-1" />
+                    清除记录
+                  </Button>
+                )}
+              </div>
             </div>
 
             {topApps.length === 0 ? (
@@ -124,13 +177,39 @@ export function ActivityTimelineCard() {
                   const meta = CATEGORY_META[app.category]
                   const pct = totalSeconds > 0 ? Math.round((app.seconds / totalSeconds) * 100) : 0
                   return (
-                    <div key={app.name} className="space-y-1">
+                    <div key={app.name} className="group/app space-y-1">
                       <div className="flex items-center justify-between gap-2 text-xs">
                         <span className="truncate font-medium">{app.title || app.name}</span>
                         <span className="flex shrink-0 items-center gap-2">
-                          <span className={cn('rounded border px-1.5 py-0.5 text-[10px]', meta.className)}>
-                            {meta.label}
-                          </span>
+                          <Select
+                            value={app.category}
+                            onValueChange={(v) => setAppCategoryRule(app.name, v as ActivityCategory)}
+                          >
+                            <SelectTrigger
+                              className={cn(
+                                'h-5 w-[68px] border-0 bg-transparent px-1 text-[10px] shadow-none focus:ring-0',
+                                meta.className
+                              )}
+                              aria-label="修改归类"
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {(Object.keys(CATEGORY_META) as ActivityCategory[]).map((c) => (
+                                <SelectItem key={c} value={c} className="text-xs">
+                                  {CATEGORY_META[c].label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-5 px-1.5 text-[10px] opacity-0 group-hover/app:opacity-100 transition-opacity"
+                            onClick={() => handleConvert(app)}
+                          >
+                            转记录
+                          </Button>
                           <span className="tabular-nums text-muted-foreground">
                             {formatDuration(app.seconds)}
                           </span>

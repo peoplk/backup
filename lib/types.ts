@@ -158,6 +158,8 @@ export interface Project {
   parentId?: string
   /** 每周预算（分钟） */
   budgetMinutes?: number
+  /** 时薪（元/小时），用于账单导出计费 */
+  rate?: number
 }
 
 export interface Habit {
@@ -307,6 +309,17 @@ export interface UserLevel {
   currentLevelPoints: number
   nextLevelPoints: number
   title: string
+  /** 硬币余额：随经验发放但可被商店消耗，与 totalPoints（只增经验账本）解耦；旧数据缺省视为 0 */
+  coins?: number
+}
+
+/** 硬币商店的消耗型道具定义 */
+export interface ShopItem {
+  id: 'freeze-slot' | 'freeze-reset'
+  name: string
+  description: string
+  icon: string
+  cost: number
 }
 
 export interface Tag {
@@ -461,6 +474,9 @@ export interface ActivityAppUsage {
   title?: string
   seconds: number
   category: ActivityCategory
+  /** 今日首次/末次采样时刻（epoch ms），用于转时间条目 */
+  firstAt?: number
+  lastAt?: number
 }
 
 export interface ActivityDay {
@@ -471,6 +487,18 @@ export interface ActivityDay {
 
 export interface ActivitySettings {
   enabled: boolean
+  /** 数据保留天数，默认 14（有效范围 7-90） */
+  retentionDays?: number
+  /** 每日记录的 distinct 应用上限，默认 64 */
+  maxAppsPerDay?: number
+  /** 用户手动归类规则：应用名 → 类别，优先于内置分类 */
+  categoryRules?: Record<string, ActivityCategory>
+}
+
+/** 追踪器运行时的真实状态（不持久化），由主进程回传 */
+export interface ActivityRuntimeStatus {
+  state: 'idle' | 'sampling' | 'unsupported' | 'error'
+  message?: string
 }
 
 // ─── 日历订阅（ICS 只读聚合） ───

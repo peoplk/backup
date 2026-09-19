@@ -664,8 +664,19 @@ function stopActivitySampling() {
   }
 }
 
+// 连续 spawn 失败计数：PowerShell 被禁用/删除时避免无限静默空转，3 次后播报错误并停止
+let activityFailures = 0
+const ACTIVITY_MAX_FAILURES = 3
+
+function broadcastActivityStatus(status) {
+  for (const win of BrowserWindow.getAllWindows()) {
+    try { win.webContents.send('activity-status', status) } catch { /* 忽略 */ }
+  }
+}
+
 function startActivitySampling() {
   if (activityTimer || !isWindowsPlatform) return
+  activityFailures = 0
   const broadcast = (app, title) => {
     for (const win of BrowserWindow.getAllWindows()) {
       try { win.webContents.send('activity-sample', { app, title, intervalSec: Math.round(ACTIVITY_INTERVAL_MS / 1000) }) } catch { /* 忽略 */ }
@@ -681,29 +692,58 @@ function startActivitySampling() {
       let out = ''
       const proc = activityPsProc
       proc.stdout.on('data', (d) => { out += d.toString() })
-      proc.on('close', () => {
+      proc.on('close', (code) => {
         if (activityPsProc === proc) activityPsProc = null
         const line = out.trim().split(/\r?\n/).filter(Boolean).pop()
-        if (!line) return
+        if (!line) {
+          if (code !== 0) noteActivityFailure(`采样进程退出码 ${code}`)
+          return
+        }
         const sep = line.indexOf('|')
         if (sep <= 0) return
+        activityFailures = 0
         const app = line.slice(0, sep).trim().slice(0, 64)
         const title = line.slice(sep + 1).trim().slice(0, 120)
         if (app) broadcast(app, title)
       })
-      proc.on('error', () => {
+      proc.on('error', (err) => {
         if (activityPsProc === proc) activityPsProc = null
+        noteActivityFailure(err?.message || '进程启动失败')
       })
-    } catch {
-      // spawn 失败忽略本轮
+    } catch (err) {
+      noteActivityFailure(err?.message || 'spawn 异常')
     }
   }, ACTIVITY_INTERVAL_MS)
 }
 
+function noteActivityFailure(message) {
+  activityFailures += 1
+  console.error(`[activity] 采样失败(${activityFailures}/${ACTIVITY_MAX_FAILURES}): ${message}`)
+  if (activityFailures >= ACTIVITY_MAX_FAILURES) {
+    stopActivitySampling()
+    broadcastActivityStatus({
+      state: 'error',
+      message: `自动追踪连续 ${ACTIVITY_MAX_FAILURES} 次采样失败已停止（${message}）。Windows 需要可用的 powershell.exe。`,
+    })
+  }
+}
+
 ipcMain.on('activity-set-enabled', (event, enabled) => {
   if (!isTrustedSender(event)) return
-  if (enabled) startActivitySampling()
-  else stopActivitySampling()
+  if (!enabled) {
+    stopActivitySampling()
+    broadcastActivityStatus({ state: 'idle' })
+    return
+  }
+  if (!isWindowsPlatform) {
+    broadcastActivityStatus({
+      state: 'unsupported',
+      message: `当前平台（${process.platform}）暂不支持前台应用采样，自动追踪仅在 Windows 桌面端可用。`,
+    })
+    return
+  }
+  startActivitySampling()
+  broadcastActivityStatus({ state: 'sampling' })
 })
 
 // ─── 可配置全局快捷键：注册结果必须校验，冲突时静默失败会让用户以为功能坏了 ───
@@ -1130,6 +1170,33 @@ ipcMain.handle('print-to-pdf', async (event, { html, fileName } = {}) => {
   } finally {
     // 无论成功失败都销毁隐藏窗口，避免累积泄漏
     if (printWin && !printWin.isDestroyed()) printWin.destroy()
+  }
+})
+
+// 通用文本文件落盘（如发布日历 ICS 到本地目录供 Outlook/导入使用）
+ipcMain.handle('save-text-file', async (event, payload) => {
+  const { content, fileName, extension } = payload && typeof payload === 'object' ? payload : {}
+  if (!isTrustedSender(event)) return { success: false, message: '非法调用' }
+  if (typeof content !== 'string' || content.length === 0) return { success: false, message: '内容为空' }
+  if (content.length > 2_000_000) return { success: false, message: '内容过大' }
+  if (typeof fileName !== 'string' || !fileName) return { success: false, message: '缺少文件名' }
+  // 扩展名白名单式收敛：仅允许短字母数字，避免拼接 RegExp 时被注入
+  const rawExt = typeof extension === 'string' ? extension.replace(/^\./, '').toLowerCase() : ''
+  const ext = /^[a-z0-9]{1,8}$/.test(rawExt) ? rawExt : 'txt'
+  const safeName = fileName.replace(/[\\/:*?"<>|]/g, '_').replace(new RegExp(`\\.${ext}$`, 'i'), '') + `.${ext}`
+  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+    title: '保存文件',
+    defaultPath: safeName,
+    filters: [{ name: ext.toUpperCase(), extensions: [ext] }],
+  })
+  if (canceled || !filePath) return { success: false, canceled: true }
+  try {
+    const fs = require('fs')
+    await fs.promises.writeFile(filePath, content, 'utf8')
+    return { success: true, filePath }
+  } catch (err) {
+    console.error('save-text-file failed', err)
+    return { success: false, message: err instanceof Error ? err.message : '写入失败' }
   }
 })
 
