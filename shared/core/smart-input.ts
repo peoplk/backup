@@ -39,8 +39,8 @@ const DATE_PATTERNS = [
   { pattern: /今天|today/i, days: 0 },
   { pattern: /明天|tomorrow/i, days: 1 },
   { pattern: /明早|明晨/i, days: 1 },
-  { pattern: /后天/i, days: 2 },
   { pattern: /大后天/i, days: 3 },
+  { pattern: /后天/i, days: 2 },
   { pattern: /下周[一二三四五六日天]|next week/i, days: 7 },
 ]
 
@@ -294,8 +294,8 @@ export function parseDate(text: string): { date: Date; remainingText: string } |
     }
   }
 
-  // 解析具体日期 (MM月DD日 或 MM-DD 或 MM/DD)
-  const dateMatch = text.match(/(\d{1,2})[月\/\-](\d{1,2})[日号]?/)
+  // 解析具体日期 (MM月DD日 或 MM-DD 或 MM/DD)；前后 lookaround 防止吃掉时间段 "14:00-15:30" 中的 "00-15"
+  const dateMatch = text.match(/(?<![\d:])(\d{1,2})[月\/\-](\d{1,2})(?![\d:])(?:[日号])?/)
   if (dateMatch) {
     const month = parseInt(dateMatch[1]) - 1
     const day = parseInt(dateMatch[2])

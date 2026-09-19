@@ -177,18 +177,41 @@ function unescapeText(text: string): string {
 export function parseICS(text: string, calendarId: string): ExternalCalendarEvent[] {
   const lines = unfold(text)
   const events: ExternalCalendarEvent[] = []
-  let cur: Partial<{ uid: string; summary: string; start: Date; end: Date; allDay: boolean }> | null = null
+  let cur: Partial<{ uid: string; summary: string; start: Date; end: Date; allDay: boolean; rrule: RRule }> | null = null
 
   const push = () => {
     if (!cur?.start || !cur.summary) return
     const end = cur.end ?? cur.start
+    const allDay = cur.allDay ?? false
+    if (cur.rrule) {
+      const now = Date.now()
+      const instances = expandRecurring(
+        { start: cur.start, end, allDay },
+        cur.rrule,
+        now - 90 * 86400000,
+        now + 90 * 86400000,
+      )
+      const duration = end.getTime() - cur.start.getTime()
+      const baseId = cur.uid || `${calendarId}-${cur.start.getTime()}`
+      instances.forEach((d) => {
+        events.push({
+          id: `${baseId}-${d.getTime()}`,
+          calendarId,
+          title: cur!.summary!.slice(0, 200),
+          start: d,
+          end: new Date(d.getTime() + duration),
+          allDay,
+        })
+      })
+      return
+    }
     events.push({
       id: cur.uid || `${calendarId}-${cur.start.getTime()}`,
       calendarId,
       title: cur.summary.slice(0, 200),
       start: cur.start,
       end,
-      allDay: cur.allDay ?? false,
+      allDay,
     })
   }
 
@@ -224,6 +247,9 @@ export function parseICS(text: string, calendarId: string): ExternalCalendarEven
     } else if (prop === 'DTEND') {
       const parsed = parseIcsDate(value)
       if (parsed) cur.end = parsed.date
+    } else if (prop === 'RRULE') {
+      const rule = parseRRule(value)
+      if (rule) cur.rrule = rule
     }
   }
 
