@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ViewTabs, ViewTabsContent, ViewTabsList, ViewTabsTrigger } from '@/components/ui/view-tabs'
 import { Timer, Clock, Shield } from 'lucide-react'
 import { PomodoroTimer } from '@/components/focus/pomodoro-timer'
 import { TimeTracker } from '@/components/focus/time-tracker'
@@ -14,36 +14,36 @@ export function FocusView() {
     <div className="space-y-6 view-enter">
       <p className="text-muted-foreground">番茄工作法、时间追踪与专注屏蔽，提升你的效率</p>
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="space-y-4">
-        <TabsList className="grid w-full max-w-md grid-cols-3">
-          <TabsTrigger value="pomodoro" className="gap-2">
+      <ViewTabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
+        <ViewTabsList>
+          <ViewTabsTrigger value="pomodoro">
             <Timer className="h-4 w-4" />
             番茄钟
-          </TabsTrigger>
-          <TabsTrigger value="tracker" className="gap-2">
+          </ViewTabsTrigger>
+          <ViewTabsTrigger value="tracker">
             <Clock className="h-4 w-4" />
             时间追踪
-          </TabsTrigger>
-          <TabsTrigger value="shield" className="gap-2">
+          </ViewTabsTrigger>
+          <ViewTabsTrigger value="shield">
             <Shield className="h-4 w-4" />
             专注屏蔽
-          </TabsTrigger>
-        </TabsList>
+          </ViewTabsTrigger>
+        </ViewTabsList>
 
-        <TabsContent value="pomodoro" className="mt-0">
+        <ViewTabsContent value="pomodoro">
           <PomodoroTimer />
-        </TabsContent>
+        </ViewTabsContent>
 
-        <TabsContent value="tracker" className="mt-0">
+        <ViewTabsContent value="tracker">
           <TimeTracker />
-        </TabsContent>
+        </ViewTabsContent>
 
-        <TabsContent value="shield" className="mt-0">
+        <ViewTabsContent value="shield">
           <div className="max-w-2xl mx-auto">
             <FocusShield />
           </div>
-        </TabsContent>
-      </Tabs>
+        </ViewTabsContent>
+      </ViewTabs>
     </div>
   )
 }

@@ -34,6 +34,8 @@ import {
   Bell,
   MoreVertical,
 } from 'lucide-react'
+import { ViewTabs, ViewTabsList, ViewTabsTrigger, ViewTabsContent } from '@/components/ui/view-tabs'
+import { EmptyState } from '@/components/ui/empty-state'
 import { cn } from '@/lib/utils'
 import {
   DropdownMenu,
@@ -68,6 +70,7 @@ export function AnniversariesView() {
   const updateAnniversary = useAppStore((s) => s.updateAnniversary)
   const deleteAnniversary = useAppStore((s) => s.deleteAnniversary)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [anniTab, setAnniTab] = useState('upcoming')
   const [editingAnniversary, setEditingAnniversary] = useState<Anniversary | null>(null)
   const [newAnniversary, setNewAnniversary] = useState({
     title: '',
@@ -389,19 +392,31 @@ export function AnniversariesView() {
         </Card>
       </div>
 
-      {anniversaries.length === 0 && (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            <Heart className="mx-auto h-12 w-12 opacity-50 mb-3" />
-            <p className="text-sm">暂无纪念日</p>
-            <p className="text-xs mt-1">点击上方"添加纪念日"记录重要日期</p>
-          </CardContent>
-        </Card>
+      <ViewTabs value={anniTab} onValueChange={setAnniTab}>
+        <ViewTabsList>
+          <ViewTabsTrigger value="upcoming">
+            <Calendar className="h-4 w-4" />
+            即将到来
+            <Badge variant="secondary" className="ml-0.5 text-2xs">{upcomingAnniversaries.length}</Badge>
+          </ViewTabsTrigger>
+          <ViewTabsTrigger value="past">
+            <Clock className="h-4 w-4" />
+            已过期
+            <Badge variant="secondary" className="ml-0.5 text-2xs">{pastAnniversaries.length}</Badge>
+          </ViewTabsTrigger>
+        </ViewTabsList>
+
+        <ViewTabsContent value="upcoming">
+      {upcomingAnniversaries.length === 0 && (
+        <EmptyState
+          icon={<Heart />}
+          title={anniversaries.length === 0 ? '暂无纪念日' : '暂无即将到来的纪念日'}
+          description="点击上方“添加纪念日”记录重要日期"
+        />
       )}
 
       {upcomingAnniversaries.length > 0 && (
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold">即将到来</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {upcomingAnniversaries.map((anniversary) => {
               const daysRemaining = getDaysRemaining(anniversary.date, anniversary.repeat)
@@ -486,10 +501,15 @@ export function AnniversariesView() {
           </div>
         </div>
       )}
+        </ViewTabsContent>
+
+        <ViewTabsContent value="past">
+      {pastAnniversaries.length === 0 && (
+        <EmptyState icon={<Clock />} title="暂无已过期的纪念日" />
+      )}
 
       {pastAnniversaries.length > 0 && (
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-muted-foreground">已过期</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {pastAnniversaries.map((anniversary) => {
               const daysRemaining = getDaysRemaining(anniversary.date, anniversary.repeat)
@@ -558,6 +578,8 @@ export function AnniversariesView() {
           </div>
         </div>
       )}
+        </ViewTabsContent>
+      </ViewTabs>
     </div>
   )
 }

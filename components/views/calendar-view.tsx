@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ViewTabs, ViewTabsContent, ViewTabsList, ViewTabsTrigger } from '@/components/ui/view-tabs'
 import {
   Dialog,
   DialogContent,
@@ -1602,36 +1602,34 @@ export function CalendarView() {
         </div>
       </div>
 
-      <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as typeof viewMode)}>
-        <div className="flex items-center justify-between">
-          <TabsList>
-            <TabsTrigger value="month" className="gap-1.5 text-xs">
-              <LayoutGrid className="h-3.5 w-3.5" />
-              月
-            </TabsTrigger>
-            <TabsTrigger value="week" className="gap-1.5 text-xs">
-              <Columns3 className="h-3.5 w-3.5" />
-              周
-            </TabsTrigger>
-            <TabsTrigger value="day" className="gap-1.5 text-xs">
-              <Clock className="h-3.5 w-3.5" />
-              日
-            </TabsTrigger>
-          </TabsList>
-        </div>
+      <ViewTabs value={viewMode} onValueChange={(v) => setViewMode(v as typeof viewMode)}>
+        <ViewTabsList>
+          <ViewTabsTrigger value="month">
+            <LayoutGrid className="h-4 w-4" />
+            月视图
+          </ViewTabsTrigger>
+          <ViewTabsTrigger value="week">
+            <Columns3 className="h-4 w-4" />
+            周视图
+          </ViewTabsTrigger>
+          <ViewTabsTrigger value="day">
+            <Clock className="h-4 w-4" />
+            日视图
+          </ViewTabsTrigger>
+        </ViewTabsList>
 
-        <TabsContent value="month" className="mt-4">
+        <ViewTabsContent value="month" className="mt-4">
           {renderMonthView()}
-        </TabsContent>
+        </ViewTabsContent>
 
-        <TabsContent value="week" className="mt-4">
+        <ViewTabsContent value="week" className="mt-4">
           {renderWeekView()}
-        </TabsContent>
+        </ViewTabsContent>
 
-        <TabsContent value="day" className="mt-4">
+        <ViewTabsContent value="day" className="mt-4">
           {renderDayView()}
-        </TabsContent>
-      </Tabs>
+        </ViewTabsContent>
+      </ViewTabs>
     </div>
   )
 }

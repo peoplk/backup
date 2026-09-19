@@ -5,6 +5,7 @@ import { useAppStore } from '@/lib/store'
 import type { TimeBlock } from '@/lib/types'
 import { useShallow } from 'zustand/react/shallow'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ViewTabs, ViewTabsList, ViewTabsTrigger, ViewTabsContent } from '@/components/ui/view-tabs'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -39,6 +40,7 @@ import {
   Calendar,
   GripVertical,
   X,
+  PieChart,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Textarea } from '@/components/ui/textarea'
@@ -78,6 +80,7 @@ export function TimeBlockView() {
   })))
 
   const [currentDate, setCurrentDate] = useState(new Date())
+  const [tbTab, setTbTab] = useState('timeline')
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [editingBlock, setEditingBlock] = useState<TimeBlock | null>(null)
   const [selectedSlot, setSelectedSlot] = useState<{ hour: number; minute: number } | null>(null)
@@ -360,8 +363,24 @@ export function TimeBlockView() {
         </div>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-3">
-        <Card className="lg:col-span-2 overflow-hidden">
+      <ViewTabs value={tbTab} onValueChange={setTbTab}>
+        <ViewTabsList>
+          <ViewTabsTrigger value="timeline">
+            <Clock className="h-4 w-4" />
+            时间轴
+          </ViewTabsTrigger>
+          <ViewTabsTrigger value="blocks">
+            <Calendar className="h-4 w-4" />
+            时间块
+          </ViewTabsTrigger>
+          <ViewTabsTrigger value="stats">
+            <PieChart className="h-4 w-4" />
+            统计
+          </ViewTabsTrigger>
+        </ViewTabsList>
+
+        <ViewTabsContent value="timeline">
+        <Card className="overflow-hidden">
           <CardHeader className="pb-2 px-5 pt-5">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base font-semibold flex items-center gap-2">
@@ -498,31 +517,10 @@ export function TimeBlockView() {
             </div>
           </CardContent>
         </Card>
+        </ViewTabsContent>
 
-        <div className="space-y-4">
-          <Card className="overflow-hidden">
-            <div className="bg-gradient-to-br from-primary/5 to-transparent p-5">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-xl bg-background/60 p-3">
-                  <p className="text-2xl font-bold">{dayBlocks.length}</p>
-                  <p className="text-2xs text-muted-foreground mt-0.5">时间块</p>
-                </div>
-                <div className="rounded-xl bg-background/60 p-3">
-                  <p className="text-2xl font-bold">{completedBlocks}</p>
-                  <p className="text-2xs text-muted-foreground mt-0.5">已完成</p>
-                </div>
-                <div className="rounded-xl bg-background/60 p-3">
-                  <p className="text-2xl font-bold">{Math.round(totalPlannedMinutes / 60 * 10) / 10}h</p>
-                  <p className="text-2xs text-muted-foreground mt-0.5">已规划</p>
-                </div>
-                <div className="rounded-xl bg-background/60 p-3">
-                  <p className="text-2xl font-bold">{dayBlocks.filter(b => !b.completed).length}</p>
-                  <p className="text-2xs text-muted-foreground mt-0.5">待完成</p>
-                </div>
-              </div>
-            </div>
-          </Card>
-
+        <ViewTabsContent value="blocks" className="grid gap-5 lg:grid-cols-3">
+        <div className="lg:col-span-2 space-y-4">
           {dayBlocks.length > 0 && (
             <Card>
               <CardHeader className="pb-2 px-5 pt-4">
@@ -575,40 +573,9 @@ export function TimeBlockView() {
               </CardContent>
             </Card>
           )}
+        </div>
 
-          {Object.keys(categoryBreakdown).length > 0 && (
-            <Card>
-              <CardHeader className="pb-2 px-5 pt-4">
-                <CardTitle className="text-sm font-semibold">时间分布</CardTitle>
-              </CardHeader>
-              <CardContent className="px-5 pb-4">
-                <div className="space-y-2">
-                  {Object.entries(categoryBreakdown).map(([key, minutes]) => {
-                    const config = categoryConfig[key]
-                    const percentage = (minutes / totalPlannedMinutes) * 100
-                    return (
-                      <div key={key} className="space-y-1">
-                        <div className="flex items-center justify-between text-xs">
-                          <div className="flex items-center gap-1.5">
-                            <config.icon className={cn('h-3 w-3', config.colorClass)} />
-                            <span>{config.label}</span>
-                          </div>
-                          <span className="text-muted-foreground">{Math.round(minutes / 60 * 10) / 10}h ({Math.round(percentage)}%)</span>
-                        </div>
-                        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                          <div
-                            className={cn('h-full rounded-full transition-all', config.bgClass.replace('/12', ''))}
-                            style={{ width: `${percentage}%` }}
-                          />
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
+        <div className="space-y-4">
           {activeTasks.length > 0 && (
             <Card>
               <CardHeader className="pb-2 px-5 pt-4">
@@ -642,7 +609,66 @@ export function TimeBlockView() {
             </Card>
           )}
         </div>
-      </div>
+        </ViewTabsContent>
+
+        <ViewTabsContent value="stats" className="grid gap-5 lg:grid-cols-2">
+          <Card className="overflow-hidden h-fit">
+            <div className="bg-gradient-to-br from-primary/5 to-transparent p-5">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-background/60 p-3">
+                  <p className="text-2xl font-bold">{dayBlocks.length}</p>
+                  <p className="text-2xs text-muted-foreground mt-0.5">时间块</p>
+                </div>
+                <div className="rounded-xl bg-background/60 p-3">
+                  <p className="text-2xl font-bold">{completedBlocks}</p>
+                  <p className="text-2xs text-muted-foreground mt-0.5">已完成</p>
+                </div>
+                <div className="rounded-xl bg-background/60 p-3">
+                  <p className="text-2xl font-bold">{Math.round(totalPlannedMinutes / 60 * 10) / 10}h</p>
+                  <p className="text-2xs text-muted-foreground mt-0.5">已规划</p>
+                </div>
+                <div className="rounded-xl bg-background/60 p-3">
+                  <p className="text-2xl font-bold">{dayBlocks.filter(b => !b.completed).length}</p>
+                  <p className="text-2xs text-muted-foreground mt-0.5">待完成</p>
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {Object.keys(categoryBreakdown).length > 0 && (
+            <Card>
+              <CardHeader className="pb-2 px-5 pt-4">
+                <CardTitle className="text-sm font-semibold">时间分布</CardTitle>
+              </CardHeader>
+              <CardContent className="px-5 pb-4">
+                <div className="space-y-2">
+                  {Object.entries(categoryBreakdown).map(([key, minutes]) => {
+                    const config = categoryConfig[key]
+                    const percentage = (minutes / totalPlannedMinutes) * 100
+                    return (
+                      <div key={key} className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-1.5">
+                            <config.icon className={cn('h-3 w-3', config.colorClass)} />
+                            <span>{config.label}</span>
+                          </div>
+                          <span className="text-muted-foreground">{Math.round(minutes / 60 * 10) / 10}h ({Math.round(percentage)}%)</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                          <div
+                            className={cn('h-full rounded-full transition-all', config.bgClass.replace('/12', ''))}
+                            style={{ width: `${percentage}%` }}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </ViewTabsContent>
+      </ViewTabs>
 
       <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
         setIsAddDialogOpen(open)

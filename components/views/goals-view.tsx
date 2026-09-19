@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ViewTabs, ViewTabsContent, ViewTabsList, ViewTabsTrigger } from '@/components/ui/view-tabs'
 import {
   SortableContext,
   verticalListSortingStrategy,
@@ -686,19 +687,19 @@ export function GoalsView() {
         </div>
       </div>
 
-      <Tabs defaultValue="goals" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="goals" className="gap-2">
+      <ViewTabs defaultValue="goals">
+        <ViewTabsList>
+          <ViewTabsTrigger value="goals">
             <Target className="h-4 w-4" />
             我的目标
-          </TabsTrigger>
-          <TabsTrigger value="achievements" className="gap-2">
+          </ViewTabsTrigger>
+          <ViewTabsTrigger value="achievements">
             <Award className="h-4 w-4" />
             成就墙
-          </TabsTrigger>
-        </TabsList>
+          </ViewTabsTrigger>
+        </ViewTabsList>
 
-        <TabsContent value="goals" className="space-y-6">
+        <ViewTabsContent value="goals" className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
           setIsAddDialogOpen(open)
@@ -905,12 +906,12 @@ export function GoalsView() {
           </TabsContent>
         ))}
       </Tabs>
-        </TabsContent>
+        </ViewTabsContent>
 
-        <TabsContent value="achievements" className="space-y-4">
+        <ViewTabsContent value="achievements" className="space-y-4">
           <AchievementsWall />
-        </TabsContent>
-      </Tabs>
+        </ViewTabsContent>
+      </ViewTabs>
 
       {stats.completed > 0 && stats.completed === stats.total && (
         <Card className="border-chart-2 bg-chart-2/10">

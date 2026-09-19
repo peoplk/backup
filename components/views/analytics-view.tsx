@@ -6,6 +6,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
+import { ViewTabs, ViewTabsList, ViewTabsTrigger } from '@/components/ui/view-tabs'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/empty-state'
 import { FocusReport } from '@/components/focus-report'
@@ -556,19 +557,19 @@ export function AnalyticsView() {
         </div>
         <div className="flex items-center gap-3">
           <ReportExportDialog />
-          <div className="flex items-center rounded-xl border bg-background p-1 shadow-sm">
-            {tabs.map(tab => {
-              const Icon = tab.icon
-              return (
-                <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-                  className={cn('flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-lg transition-all',
-                    activeTab === tab.key ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-muted/50')}>
-                  <Icon className="h-4 w-4" />
-                  <span className="hidden sm:inline">{tab.label}</span>
-                </button>
-              )
-            })}
-          </div>
+          <ViewTabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabKey)} className="gap-0">
+            <ViewTabsList>
+              {tabs.map(tab => {
+                const Icon = tab.icon
+                return (
+                  <ViewTabsTrigger key={tab.key} value={tab.key}>
+                    <Icon className="h-4 w-4" />
+                    <span className="hidden sm:inline">{tab.label}</span>
+                  </ViewTabsTrigger>
+                )
+              })}
+            </ViewTabsList>
+          </ViewTabs>
         </div>
       </div>
 

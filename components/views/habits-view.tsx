@@ -15,7 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { ViewTabs, ViewTabsContent, ViewTabsList, ViewTabsTrigger } from '@/components/ui/view-tabs'
 import {
   Dialog,
   DialogContent,
@@ -584,23 +584,23 @@ export function HabitsView() {
         </Card>
       </div>
 
-      <Tabs defaultValue="habits" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="habits" className="gap-2">
+      <ViewTabs defaultValue="habits">
+        <ViewTabsList>
+          <ViewTabsTrigger value="habits">
             <Target className="h-4 w-4" />
             习惯列表
-          </TabsTrigger>
-          <TabsTrigger value="calendar" className="gap-2">
+          </ViewTabsTrigger>
+          <ViewTabsTrigger value="calendar">
             <Calendar className="h-4 w-4" />
             日历视图
-          </TabsTrigger>
-          <TabsTrigger value="stats" className="gap-2">
+          </ViewTabsTrigger>
+          <ViewTabsTrigger value="stats">
             <BarChart3 className="h-4 w-4" />
             统计分析
-          </TabsTrigger>
-        </TabsList>
+          </ViewTabsTrigger>
+        </ViewTabsList>
 
-        <TabsContent value="habits" className="space-y-4">
+        <ViewTabsContent value="habits" className="space-y-4">
           <div className="flex gap-2 overflow-x-auto pb-2">
             <Button
               variant={selectedCategory === 'all' ? 'default' : 'outline'}
@@ -677,9 +677,9 @@ export function HabitsView() {
               ))}
             </div>
           )}
-        </TabsContent>
+        </ViewTabsContent>
 
-        <TabsContent value="calendar" className="space-y-4">
+        <ViewTabsContent value="calendar" className="space-y-4">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-lg">习惯日历</CardTitle>
@@ -752,9 +752,9 @@ export function HabitsView() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
+        </ViewTabsContent>
 
-        <TabsContent value="stats" className="space-y-4">
+        <ViewTabsContent value="stats" className="space-y-4">
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-lg flex items-center gap-2">
@@ -888,8 +888,8 @@ export function HabitsView() {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
-      </Tabs>
+        </ViewTabsContent>
+      </ViewTabs>
     </div>
   )
 }

@@ -58,6 +58,7 @@ Sparkles,
 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
+import { ViewTabs, ViewTabsList, ViewTabsTrigger, ViewTabsContent } from '@/components/ui/view-tabs'
 import { getStoredTheme, setTheme, type ThemeMode } from '@/lib/theme'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { toast } from 'sonner'
@@ -604,6 +605,8 @@ export function SettingsView() {
   const totalFocusTime = pomodoroSessions.reduce((acc, s) => acc + s.duration, 0)
   const totalTrackedTime = timeEntries.reduce((acc, e) => acc + e.duration, 0)
 
+  const [settingsTab, setSettingsTab] = useState('ai')
+
   return (
     <div className="space-y-6 view-enter">
       <div>
@@ -611,7 +614,17 @@ export function SettingsView() {
         <p className="text-muted-foreground mt-0.5">管理你的应用偏好</p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <ViewTabs value={settingsTab} onValueChange={setSettingsTab}>
+        <ViewTabsList>
+          <ViewTabsTrigger value="ai"><Sparkles className="h-4 w-4" />智能</ViewTabsTrigger>
+          <ViewTabsTrigger value="behavior"><Target className="h-4 w-4" />行为</ViewTabsTrigger>
+          <ViewTabsTrigger value="data"><Database className="h-4 w-4" />数据</ViewTabsTrigger>
+          <ViewTabsTrigger value="general"><Palette className="h-4 w-4" />外观</ViewTabsTrigger>
+          <ViewTabsTrigger value="sync"><Cloud className="h-4 w-4" />同步</ViewTabsTrigger>
+          <ViewTabsTrigger value="about"><Info className="h-4 w-4" />其他</ViewTabsTrigger>
+        </ViewTabsList>
+
+        <ViewTabsContent value="ai" className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -685,7 +698,9 @@ export function SettingsView() {
             </Button>
           </CardContent>
         </Card>
+        </ViewTabsContent>
 
+        <ViewTabsContent value="behavior" className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -938,7 +953,9 @@ export function SettingsView() {
             )}
           </CardContent>
         </Card>
+        </ViewTabsContent>
 
+        <ViewTabsContent value="data" className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -1130,7 +1147,9 @@ export function SettingsView() {
             </div>
           </CardContent>
         </Card>
+        </ViewTabsContent>
 
+        <ViewTabsContent value="general" className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -1334,7 +1353,9 @@ export function SettingsView() {
         </Card>
 
         <GlobalShortcutsCard />
+        </ViewTabsContent>
 
+        <ViewTabsContent value="sync" className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -1969,7 +1990,9 @@ export function SettingsView() {
             </div>
           </CardContent>
         </Card>
-      </div>
+        </ViewTabsContent>
+
+        <ViewTabsContent value="about" className="space-y-6">
 
       <Card>
         <CardHeader>
@@ -2049,6 +2072,8 @@ export function SettingsView() {
           </div>
         </CardContent>
       </Card>
+        </ViewTabsContent>
+      </ViewTabs>
       
       {ConfirmDialog}
     </div>

@@ -98,6 +98,7 @@ import { TaskDependencyManager, TaskDependencyBadge } from '@/components/task-de
 import { QuickAddTask } from '@/components/quick-add-task'
 import { TaskQuickActions } from '@/components/task-quick-actions'
 import { TaskDetailDrawer } from '@/components/task-detail-drawer'
+import { ViewTabs, ViewTabsList, ViewTabsTrigger } from '@/components/ui/view-tabs'
 import { parseEnhancedInput } from '@/lib/smart-input-enhanced'
 import { DndContext, DragOverlay, closestCorners, PointerSensor, useSensor, useSensors, DragStartEvent, DragEndEvent, DragOverEvent } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable'
@@ -2087,35 +2088,26 @@ export function TasksView() {
                 <Archive className="h-4 w-4" />
                 <span className="hidden sm:inline">归档</span>
               </Button>
-              <div className="flex rounded-lg border p-1">
-                <Button
-                  variant={viewMode === 'list' ? 'default' : 'ghost'}
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                  onClick={() => setViewMode('list')}
-                  title="列表视图"
-                >
-                  <List className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant={viewMode === 'kanban' ? 'default' : 'ghost'}
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                  onClick={() => setViewMode('kanban')}
-                  title="看板视图"
-                >
-                  <LayoutGrid className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant={viewMode === 'matrix' ? 'default' : 'ghost'}
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                  onClick={() => setViewMode('matrix')}
-                  title="四象限视图"
-                >
-                  <LayoutList className="h-4 w-4" />
-                </Button>
-              </div>
+              <ViewTabs
+                value={viewMode}
+                onValueChange={(v) => setViewMode(v as 'list' | 'kanban' | 'matrix')}
+                className="gap-0"
+              >
+                <ViewTabsList className="h-9">
+                  <ViewTabsTrigger value="list" className="px-2.5" title="列表视图">
+                    <List className="h-4 w-4" />
+                    <span className="hidden md:inline">列表</span>
+                  </ViewTabsTrigger>
+                  <ViewTabsTrigger value="kanban" className="px-2.5" title="看板视图">
+                    <LayoutGrid className="h-4 w-4" />
+                    <span className="hidden md:inline">看板</span>
+                  </ViewTabsTrigger>
+                  <ViewTabsTrigger value="matrix" className="px-2.5" title="四象限视图">
+                    <LayoutList className="h-4 w-4" />
+                    <span className="hidden md:inline">四象限</span>
+                  </ViewTabsTrigger>
+                </ViewTabsList>
+              </ViewTabs>
             </CardContent>
           </Card>
 

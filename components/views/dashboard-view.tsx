@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Progress } from '@/components/ui/progress'
+import { ViewTabs, ViewTabsList, ViewTabsTrigger, ViewTabsContent } from '@/components/ui/view-tabs'
 import {
   CheckCircle2,
   Timer,
@@ -39,6 +40,7 @@ import {
   ArrowUpRight,
   Sparkle,
   TrendingDown,
+  LayoutDashboard,
 } from 'lucide-react'
 import { SmartQuickAddTask } from '@/components/smart-quick-add-task'
 import { GoalCelebration } from '@/components/goal-celebration'
@@ -170,6 +172,8 @@ export function DashboardView() {
     return now.toLocaleDateString('zh-CN', { weekday: 'long', month: 'long', day: 'numeric' })
   }, [now])
 
+  const [dashTab, setDashTab] = useState('overview')
+
   return (
     <div className="h-full flex flex-col gap-4 view-enter pb-4">
       {isFirstTime && (
@@ -207,6 +211,23 @@ export function DashboardView() {
         </Card>
       )}
 
+      <ViewTabs value={dashTab} onValueChange={setDashTab} className="flex-1 min-h-0">
+        <ViewTabsList className="shrink-0">
+          <ViewTabsTrigger value="overview">
+            <LayoutDashboard className="h-4 w-4" />
+            概览
+          </ViewTabsTrigger>
+          <ViewTabsTrigger value="tasks">
+            <ListTodo className="h-4 w-4" />
+            今日待办
+          </ViewTabsTrigger>
+          <ViewTabsTrigger value="habits">
+            <Target className="h-4 w-4" />
+            习惯打卡
+          </ViewTabsTrigger>
+        </ViewTabsList>
+
+        <ViewTabsContent value="overview" className="flex flex-col gap-4 min-h-0 overflow-y-auto">
       {/* Hero Section（黑板报：与自习室同一套教室语言） */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 shrink-0">
         <Card className="lg:col-span-2 overflow-hidden relative border-border">
@@ -346,14 +367,14 @@ export function DashboardView() {
           )
         })}
       </div>
+        </ViewTabsContent>
 
-      {/* Main Content Grid */}
-      <div className={cn(
-        'grid gap-4 flex-1 min-h-0',
-        isMobile ? 'grid-cols-1' : 'lg:grid-cols-3'
-      )}>
-        {/* Today's Tasks */}
-        <Card className="lg:col-span-2 border-border/40 flex flex-col min-h-0">
+        <ViewTabsContent value="tasks" className={cn(
+          'grid gap-4 flex-1 min-h-0',
+          isMobile ? 'grid-cols-1' : 'lg:grid-cols-3'
+        )}>
+      {/* Main Content Grid: Today's Tasks */}
+      <Card className="lg:col-span-2 border-border/40 flex flex-col min-h-0">
           <div className="px-5 pt-5 pb-3 shrink-0 flex items-center justify-between">
             <div>
               <h2 className="font-semibold text-base flex items-center gap-2">
@@ -528,9 +549,13 @@ export function DashboardView() {
               </CardContent>
             </Card>
           )}
+        </div>
+        </ViewTabsContent>
 
+        <ViewTabsContent value="habits" className="flex-1 min-h-0">
+        <div className="h-full min-h-0">
           {/* Habits */}
-          <Card className="border-border/40 flex flex-col min-h-0 flex-1">
+          <Card className="border-border/40 flex flex-col min-h-0 h-full">
             <div className="px-5 pt-4 pb-3 shrink-0 flex items-center justify-between">
               <div className="flex-1 min-w-0">
                 <h2 className="font-semibold text-sm flex items-center gap-2">
@@ -600,7 +625,8 @@ export function DashboardView() {
             </CardContent>
           </Card>
         </div>
-      </div>
+        </ViewTabsContent>
+      </ViewTabs>
 
       <GoalCelebration
         open={goalWatch.show}
