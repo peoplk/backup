@@ -115,6 +115,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('system-resume', listener)
   },
   sendPomodoroState: (state) => ipcRenderer.send('pomodoro-state', state),
+  remindersSync: (jobs) => ipcRenderer.send('reminders-sync', jobs),
+  onReminderFired: (callback) => {
+    const listener = (_event, job) => callback(job)
+    ipcRenderer.on('reminder-fired', listener)
+    return () => ipcRenderer.removeListener('reminder-fired', listener)
+  },
   onPomodoroSync: (callback) => {
     const listener = (_event, data) => callback(data)
     ipcRenderer.on('pomodoro-sync', listener)

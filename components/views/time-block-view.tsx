@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
 import { useAppStore } from '@/lib/store'
+import { toast } from 'sonner'
 import type { TimeBlock } from '@/lib/types'
 import { useShallow } from 'zustand/react/shallow'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -41,7 +42,10 @@ import {
   GripVertical,
   X,
   PieChart,
+  AlertTriangle,
+  Wand2,
 } from 'lucide-react'
+import { computeAutoSchedule, fromMinutes, toMinutes } from '@/lib/auto-schedule'
 import { cn } from '@/lib/utils'
 import { Textarea } from '@/components/ui/textarea'
 import { TIME_SLOTS, TIME_BLOCK_CATEGORY_CONFIG } from '@/lib/config'
@@ -66,6 +70,8 @@ export function TimeBlockView() {
   const {
     tasks,
     timeBlocks,
+    externalEvents,
+    workingHours,
     addTimeBlock,
     updateTimeBlock,
     deleteTimeBlock,
@@ -73,6 +79,8 @@ export function TimeBlockView() {
   } = useAppStore(useShallow((s) => ({
     tasks: s.tasks,
     timeBlocks: s.timeBlocks,
+    externalEvents: s.externalEvents,
+    workingHours: s.workingHours,
     addTimeBlock: s.addTimeBlock,
     updateTimeBlock: s.updateTimeBlock,
     deleteTimeBlock: s.deleteTimeBlock,
@@ -233,16 +241,170 @@ export function TimeBlockView() {
 
   const HOUR_HEIGHT = 64
 
-  const getBlockStyle = (startTime: string, endTime: string) => {
-    const startHour = parseInt(startTime.split(':')[0])
-    const startMinute = parseInt(startTime.split(':')[1])
-    const endHour = parseInt(endTime.split(':')[0])
-    const endMinute = parseInt(endTime.split(':')[1])
-    const startOffset = startHour - dynamicStartHour + startMinute / 60
-    const duration = (endHour - startHour) + (endMinute - startMinute) / 60
-    return {
-      top: `${startOffset * HOUR_HEIGHT}px`,
-      height: `${Math.max(duration * HOUR_HEIGHT - 2, 32)}px`,
+  const toMin = (t: string) => parseInt(t.split(':')[0]) * 60 + parseInt(t.split(':')[1])
+  const toHM = (m: number) => {
+    const mm = Math.max(0, Math.min(24 * 60 - 1, m))
+    return `${String(Math.floor(mm / 60) % 24).padStart(2, '0')}:${String(mm % 60).padStart(2, '0')}`
+  }
+  const SNAP = 15
+
+  const conflictIds = useMemo(() => {
+    const set = new Set<string>()
+    const items = dayBlocks.map(b => ({ id: b.id, s: toMin(b.startTime), e: toMin(b.endTime) }))
+    for (let i = 0; i < items.length; i++) {
+      for (let j = i + 1; j < items.length; j++) {
+        if (items[i].s < items[j].e && items[j].s < items[i].e) {
+          set.add(items[i].id)
+          set.add(items[j].id)
+        }
+      }
+    }
+    return set
+  }, [dayBlocks])
+
+  const [blockDrag, setBlockDrag] = useState<{
+    id: string
+    mode: 'move' | 'resize'
+    startY: number
+    origStart: number
+    origEnd: number
+  } | null>(null)
+  const [dragPreview, setDragPreview] = useState<{ id: string; start: number; end: number } | null>(null)
+  const suppressClickRef = useRef(false)
+
+  const beginBlockDrag = (e: React.PointerEvent, block: TimeBlock, container: HTMLElement | null, mode: 'move' | 'resize') => {
+    if (e.button !== 0) return
+    if (mode === 'move' && (e.target as HTMLElement).closest('button')) return
+    container?.setPointerCapture(e.pointerId)
+    setBlockDrag({ id: block.id, mode, startY: e.clientY, origStart: toMin(block.startTime), origEnd: toMin(block.endTime) })
+  }
+
+  const onBlockPointerMove = (e: React.PointerEvent, block: TimeBlock) => {
+    if (!blockDrag || blockDrag.id !== block.id) return
+    const delta = Math.round(((e.clientY - blockDrag.startY) / HOUR_HEIGHT) * 60 / SNAP) * SNAP
+    if (blockDrag.mode === 'move') {
+      const dur = blockDrag.origEnd - blockDrag.origStart
+      const start = Math.max(0, Math.min(24 * 60 - dur, blockDrag.origStart + delta))
+      setDragPreview({ id: block.id, start, end: start + dur })
+    } else {
+      const end = Math.min(24 * 60, Math.max(blockDrag.origStart + SNAP, blockDrag.origEnd + delta))
+      setDragPreview({ id: block.id, start: blockDrag.origStart, end })
+    }
+  }
+
+  const endBlockDrag = () => {
+    if (blockDrag && dragPreview && dragPreview.id === blockDrag.id) {
+      if (dragPreview.start !== blockDrag.origStart || dragPreview.end !== blockDrag.origEnd) {
+        updateTimeBlock(blockDrag.id, { startTime: toHM(dragPreview.start), endTime: toHM(dragPreview.end) })
+        suppressClickRef.current = true
+      }
+    }
+    setBlockDrag(null)
+    setDragPreview(null)
+  }
+
+  const handleBlockClick = (block: TimeBlock) => {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false
+      return
+    }
+    openEditDialog(block)
+  }
+
+  const styleFromMin = (startMin: number, endMin: number) => ({
+    top: `${(startMin / 60 - dynamicStartHour) * HOUR_HEIGHT}px`,
+    height: `${Math.max(((endMin - startMin) / 60) * HOUR_HEIGHT - 2, 32)}px`,
+  })
+
+  const getBlockStyle = (startTime: string, endTime: string) =>
+    styleFromMin(toMin(startTime), toMin(endTime))
+
+  const timelineRef = useRef<HTMLDivElement>(null)
+  const [dropIndicator, setDropIndicator] = useState<number | null>(null)
+
+  const minuteFromPointerY = (clientY: number, snapTo: number) => {
+    const rect = timelineRef.current?.getBoundingClientRect()
+    if (!rect) return null
+    const raw = dynamicStartHour * 60 + ((clientY - rect.top) / HOUR_HEIGHT) * 60
+    return Math.max(0, Math.min(24 * 60 - 30, Math.round(raw / snapTo) * snapTo))
+  }
+
+  const onTaskDragOver = (e: React.DragEvent) => {
+    if (!e.dataTransfer.types.includes('application/x-focusflow-task')) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+    const min = minuteFromPointerY(e.clientY, 30)
+    if (min !== null) setDropIndicator(min)
+  }
+
+  const onTaskDrop = (e: React.DragEvent) => {
+    setDropIndicator(null)
+    const raw = e.dataTransfer.getData('application/x-focusflow-task')
+    if (!raw) return
+    e.preventDefault()
+    let payload: { taskId: string; title: string; pomodoros?: number }
+    try {
+      payload = JSON.parse(raw)
+    } catch {
+      return
+    }
+    const startMin = minuteFromPointerY(e.clientY, 30)
+    if (startMin === null) return
+    const duration = Math.min(Math.max((payload.pomodoros || 0) * 25, 30), 240)
+    const endMin = Math.min(24 * 60, startMin + duration)
+    addTimeBlock({
+      title: payload.title,
+      description: '',
+      date: currentDate,
+      startTime: toHM(startMin),
+      endTime: toHM(endMin),
+      category: 'focus',
+      color: '',
+      taskId: payload.taskId,
+    })
+    toast.success(`已将「${payload.title}」排入 ${toHM(startMin)}`)
+  }
+
+  const handleAutoSchedule = () => {
+    const dateStr = currentDate.toDateString()
+    const scheduledTaskIds = new Set(dayBlocks.map(b => b.taskId).filter(Boolean))
+    const pending = tasks.filter(t =>
+      t.status !== 'done' &&
+      t.dueDate &&
+      new Date(t.dueDate).toDateString() === dateStr &&
+      !scheduledTaskIds.has(t.id)
+    )
+    if (pending.length === 0) {
+      toast.info('当前日期没有待安排的任务')
+      return
+    }
+    const dayEvents = externalEvents.filter(ev => new Date(ev.start).toDateString() === dateStr)
+    const wh = workingHours?.enabled ? workingHours : null
+    const nowD = new Date()
+    const res = computeAutoSchedule({
+      tasks: pending,
+      blocks: dayBlocks,
+      events: dayEvents,
+      dayStartMin: wh ? toMinutes(wh.workStartTime) : 9 * 60,
+      dayEndMin: wh ? toMinutes(wh.workEndTime) : 18 * 60,
+      earliestMin: isToday ? Math.ceil((nowD.getHours() * 60 + nowD.getMinutes() + 10) / 15) * 15 : 0,
+    })
+    res.slots.forEach(s => {
+      addTimeBlock({
+        title: s.title,
+        description: '自动排程',
+        date: currentDate,
+        startTime: fromMinutes(s.startMin),
+        endTime: fromMinutes(s.endMin),
+        category: 'focus',
+        color: '',
+        taskId: s.taskId,
+      })
+    })
+    if (res.slots.length > 0) {
+      toast.success(`已自动排入 ${res.slots.length} 个时间块${res.unplaced.length ? `，${res.unplaced.length} 个当日放不下` : ''}`)
+    } else {
+      toast.info('没有找到可用空档，试试调整工作时段')
     }
   }
 
@@ -387,9 +549,20 @@ export function TimeBlockView() {
                 <Clock className="h-4 w-4 text-chart-1" />
                 日程时间线
               </CardTitle>
+              <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" onClick={handleAutoSchedule} title="把当天待办按预估时长自动填入空档">
+                <Wand2 className="h-3.5 w-3.5" />
+                自动排程
+              </Button>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 <span>已规划 {Math.round(totalPlannedMinutes / 60 * 10) / 10} 小时</span>
                 <span className="text-chart-2">{completedBlocks}/{dayBlocks.length} 完成</span>
+                {conflictIds.size > 0 && (
+                  <span className="flex items-center gap-1 text-amber-600">
+                    <AlertTriangle className="h-3 w-3" />
+                    {conflictIds.size} 个时间块重叠
+                  </span>
+                )}
+                <span className="hidden lg:inline text-muted-foreground/60">拖动块调整时间 · 下缘拉伸改时长 · 任务可拖入排程</span>
               </div>
             </div>
           </CardHeader>
@@ -407,27 +580,59 @@ export function TimeBlockView() {
                 </div>
               )}
 
-              <div className="relative">
+              <div
+                className="relative"
+                ref={timelineRef}
+                onDragOver={onTaskDragOver}
+                onDragLeave={() => setDropIndicator(null)}
+                onDrop={onTaskDrop}
+              >
+                {dropIndicator !== null && (
+                  <div
+                    className="absolute left-16 right-3 z-30 pointer-events-none border-t-2 border-dashed border-primary"
+                    style={{ top: `${(dropIndicator / 60 - dynamicStartHour) * HOUR_HEIGHT}px` }}
+                  >
+                    <span className="absolute -top-2.5 left-1 rounded bg-primary px-1 text-3xs text-primary-foreground tabular-nums">
+                      {toHM(dropIndicator)}
+                    </span>
+                  </div>
+                )}
                 {dayBlocks.map(block => {
                   const config = categoryConfig[block.category]
                   const Icon = config.icon
-                  const style = getBlockStyle(block.startTime, block.endTime)
+                  const preview = dragPreview && dragPreview.id === block.id ? dragPreview : null
+                  const style = preview
+                    ? styleFromMin(preview.start, preview.end)
+                    : getBlockStyle(block.startTime, block.endTime)
+                  const showStart = preview ? toHM(preview.start) : block.startTime
+                  const showEnd = preview ? toHM(preview.end) : block.endTime
+                  const isDragging = blockDrag?.id === block.id
+                  const isConflict = conflictIds.has(block.id) && !block.completed
                   const linkedTask = block.taskId ? tasks.find(t => t.id === block.taskId) : null
 
                   return (
                     <div
                       key={block.id}
+                      data-block-id={block.id}
                       className={cn(
-                        'absolute left-16 right-3 rounded-xl border px-3 py-2 transition-all cursor-pointer z-10 hover:shadow-md group',
+                        'absolute left-16 right-3 rounded-xl border px-3 py-2 z-10 group touch-none',
+                        !isDragging && 'transition-all cursor-pointer hover:shadow-md',
+                        isDragging && 'cursor-grabbing shadow-lg z-20',
                         config.bgClass,
                         config.borderClass,
+                        isConflict && 'ring-1 ring-amber-500/70 border-amber-500/40',
                         block.completed && 'opacity-50'
                       )}
                       style={style}
-                      onClick={() => openEditDialog(block)}
+                      onPointerDown={(e) => beginBlockDrag(e, block, e.currentTarget, 'move')}
+                      onPointerMove={(e) => onBlockPointerMove(e, block)}
+                      onPointerUp={endBlockDrag}
+                      onPointerCancel={endBlockDrag}
+                      onClick={() => handleBlockClick(block)}
                     >
                       <div className="flex items-center justify-between gap-2 h-full">
                         <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <GripVertical className="h-3.5 w-3.5 shrink-0 text-muted-foreground/0 group-hover:text-muted-foreground/50 transition-colors cursor-grab" />
                           <button
                             onClick={(e) => {
                               e.stopPropagation()
@@ -454,8 +659,11 @@ export function TimeBlockView() {
                           </div>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
+                          {isConflict && (
+                            <AlertTriangle className="h-3 w-3 text-amber-500" aria-label="与其他时间块重叠" />
+                          )}
                           <span className="text-2xs text-muted-foreground tabular-nums">
-                            {block.startTime}-{block.endTime}
+                            {showStart}-{showEnd}
                           </span>
                           <button
                             onClick={(e) => {
@@ -476,6 +684,15 @@ export function TimeBlockView() {
                             <Trash2 className="h-3 w-3 text-destructive" />
                           </button>
                         </div>
+                      </div>
+                      <div
+                        className="absolute bottom-0 left-3 right-3 h-2 cursor-ns-resize opacity-0 group-hover:opacity-100 transition-opacity"
+                        onPointerDown={(e) => {
+                          e.stopPropagation()
+                          beginBlockDrag(e, block, e.currentTarget.parentElement, 'resize')
+                        }}
+                      >
+                        <div className="mx-auto h-1 w-8 rounded-full bg-muted-foreground/40" />
                       </div>
                     </div>
                   )
@@ -583,16 +800,25 @@ export function TimeBlockView() {
               </CardHeader>
               <CardContent className="px-5 pb-4">
                 <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
-                  {activeTasks.slice(0, 5).map(task => (
+                  {activeTasks.slice(0, 8).map(task => (
                     <button
                       key={task.id}
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('application/x-focusflow-task', JSON.stringify({
+                          taskId: task.id,
+                          title: task.title,
+                          pomodoros: task.estimatedPomodoros,
+                        }))
+                        e.dataTransfer.effectAllowed = 'copy'
+                      }}
                       onClick={() => {
                         setNewBlock(prev => ({ ...prev, taskId: task.id, title: task.title }))
                         openAddDialog()
                       }}
-                      className="w-full text-left flex items-center gap-2 rounded-lg border border-border/40 px-2.5 py-2 hover:bg-muted/30 transition-colors"
+                      className="w-full text-left flex items-center gap-2 rounded-lg border border-border/40 px-2.5 py-2 hover:bg-muted/30 transition-colors cursor-grab active:cursor-grabbing"
                     >
-                      <Plus className="h-3 w-3 text-muted-foreground shrink-0" />
+                      <GripVertical className="h-3 w-3 text-muted-foreground/50 shrink-0" />
                       <span className="text-sm truncate">{task.title}</span>
                       {task.priority && (
                         <Badge variant="outline" className={cn('text-2xs shrink-0 h-5 ml-auto',

@@ -59,6 +59,14 @@ export interface UpdateCheckResult {
   message?: string
 }
 
+export interface ReminderJobPayload {
+  key: string
+  fireAt: number
+  title: string
+  body?: string
+  meta?: { kind?: 'task' | 'habit' | 'review'; taskId?: string; reminderId?: string; habitId?: string }
+}
+
 export interface ElectronAPI {
   minimizeWindow: () => void
   maximizeWindow: () => void
@@ -148,6 +156,8 @@ export interface ElectronAPI {
   onSystemSuspend: (callback: () => void) => (() => void) | undefined
   onSystemResume: (callback: () => void) => (() => void) | undefined
   sendPomodoroState: (state?: PomodoroSyncState) => void
+  remindersSync?: (jobs: ReminderJobPayload[]) => void
+  onReminderFired?: (callback: (job: ReminderJobPayload) => void) => (() => void) | undefined
   onPomodoroSync: (callback: (state: PomodoroSyncState) => void) => (() => void) | undefined
   sendFloatControl: (action: string) => void
   onFloatControl: (callback: (action: string) => void) => (() => void) | undefined

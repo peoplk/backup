@@ -6,6 +6,8 @@ const { spawn } = require('child_process')
 const { registerSystemShieldIPC, cleanupShield, startSystemShield, stopSystemShield, getShieldStatus } = require('./system-shield')
 const { createShieldScheduler } = require('./shield-scheduler')
 let shieldScheduler = null
+const { createReminderScheduler } = require('./reminder-scheduler')
+let reminderScheduler = null
 
 let mainWindow = null
 let widgetWindow = null
@@ -1263,11 +1265,33 @@ function initShieldScheduler() {
   })
 }
 
+// 系统级提醒调度：渲染层同步未来触发点，主进程定时弹原生通知（窗口隐藏/关闭亦可触发，重启自动恢复）
+function initReminderScheduler() {
+  try {
+    reminderScheduler = createReminderScheduler({
+      userDataPath: app.getPath('userData'),
+      showNotification: (job) => sendNativeNotification(job.title, job.body || '', `reminder-${job.key}`),
+      onFired: (job) => {
+        const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : BrowserWindow.getAllWindows()[0]
+        if (win && !win.isDestroyed()) win.webContents.send('reminder-fired', job)
+      },
+    })
+    reminderScheduler.start()
+  } catch (err) {
+    console.error('[reminder-scheduler] init failed:', err)
+  }
+  ipcMain.on('reminders-sync', (event, jobs) => {
+    if (!isTrustedSender(event)) return
+    if (reminderScheduler) reminderScheduler.sync(Array.isArray(jobs) ? jobs : [])
+  })
+}
+
 app.whenReady().then(async () => {
   try {
     Menu.setApplicationMenu(null)
     if (!isDev) PORT = await pickAvailablePort()
     initShieldScheduler()
+    initReminderScheduler()
     registerSystemShieldIPC(isTrustedSender, {
       onSessionStart: (session) => shieldScheduler ? shieldScheduler.startSession(session) : Promise.resolve(),
       onSessionStop: () => shieldScheduler ? shieldScheduler.stopSession() : Promise.resolve(),
@@ -1312,4 +1336,5 @@ app.on('will-quit', () => {
   stopNextServer()
   cleanupShield()
   stopClipboardWatcher()
+  if (reminderScheduler) reminderScheduler.stop()
 })
